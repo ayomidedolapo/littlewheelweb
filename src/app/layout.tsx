@@ -5,6 +5,7 @@ import localFont from "next/font/local";
 import { ThemeProvider } from "@littlewheel-landing/components";
 import { Toaster } from "@littlewheel-landing/components/ui/toaster";
 import { cn } from "@littlewheel-landing/lib/utils";
+import NextTopLoader from "nextjs-toploader";
 
 const mtn = localFont({
   src: [
@@ -23,7 +24,10 @@ const mtn = localFont({
 
 export const metadata: Metadata = {
   title: "littlewheel-landing",
-  description: "learn, earn and master your money",
+  description: "Build Financial Freedom with the Little Wheel",
+  icons: {
+    icon: '/uploads/favicon.png',
+  },
 };
 
 export default function RootLayout({
@@ -49,6 +53,7 @@ export default function RootLayout({
             enableSystem={true}
             disableTransitionOnChange
           >
+            <NextTopLoader color="#000" />
             {children}
             <Toaster />
           </ThemeProvider>
