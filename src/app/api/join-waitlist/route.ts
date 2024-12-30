@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import nodemailer from "nodemailer";
-import apiClient from "../server-utils/utils"; // Import the apiClient
+import apiClient from "../server-utils/utils";
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,7 +14,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Use the reusable apiClient for the API request
+    // Check if the email already exists in the waitlist
+    const existingEntry = await apiClient.get(`/waitlists?email=${email}`);
+    if (existingEntry.data && existingEntry.data.length > 0) {
+      return NextResponse.json(
+        { error: "This email is already subscribed to the waitlist." },
+        { status: 409 } // Conflict status code
+      );
+    }
+
+    // Add the email to the waitlist
     await apiClient.post("/waitlists", { email });
 
     // Safely parse admin emails

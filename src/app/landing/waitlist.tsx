@@ -25,7 +25,9 @@ export default function Waitlist() {
         body: JSON.stringify({ email }),
       });
 
-      if (response.ok) {
+      if (response.status === 409) {
+        toast.error("This email is already subscribed to the waitlist.");
+      } else if (response.ok) {
         toast.success("You have successfully joined the waitlist.");
         setEmail("");
       } else {
