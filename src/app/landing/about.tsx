@@ -18,19 +18,19 @@ export default function About() {
               <ul className="space-y-2">
                 <li className="flex items-center">
                   <span className="mr-2">
-                    <img src="uploads/checkmark.svg" />
+                    <img alt="" src="uploads/checkmark.svg" />
                   </span>
                   Community Driven
                 </li>
                 <li className="flex items-center">
                   <span className="mr-2">
-                    <img src="uploads/checkmark.svg" />
+                    <img alt="" src="uploads/checkmark.svg" />
                   </span>
                   Transparency
                 </li>
                 <li className="flex items-center">
                   <span className="mr-2">
-                    <img src="uploads/checkmark.svg" />
+                    <img alt="" src="uploads/checkmark.svg" />
                   </span>
                   Security and Secured
                 </li>
@@ -38,9 +38,10 @@ export default function About() {
             </div>
 
             <div className="flex flex-col items-end">
-              <img src="uploads/arrow-right.svg" />
+              <img alt="" src="uploads/arrow-right.svg" />
               <div className="w-[60%] md:w-[40%] aspect-video p-1 bg-white rounded-xl transform rotate-[18deg] overflow-hidden">
                 <img
+                  alt=""
                   src="/uploads/keke.jpeg"
                   className="w-full h-full object-cover rounded-xl"
                 />
@@ -50,9 +51,9 @@ export default function About() {
 
           <div className="lg:w-[45%] space-y-10 md:space-y-20">
             <div className="relative flex flex-col items-start">
-              <img src="uploads/arrow-left.svg" />
+              <img alt="" src="uploads/arrow-left.svg" />
               <div className="w-[70%] md:w-full p-1 bg-white rounded-xl z-10">
-                <img src="/uploads/man.svg" className="rounded-xl" />
+                <img alt="" src="/uploads/man.svg" className="rounded-xl" />
               </div>
             </div>
 

@@ -1,27 +1,22 @@
-import { useToast } from "@littlewheel-landing/hooks/use-toast";
 import { useState } from "react";
 import { MdMail } from "react-icons/md";
 import { PiArrowRight } from "react-icons/pi";
 import { cn } from "@littlewheel-landing/lib/utils";
+import { toast } from "sonner";
+
 export default function Waitlist() {
-  const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const handleJoinWaitlist = async () => {
     if (!email || !/\S+@\S+\.\S+/.test(email)) {
-      toast({
-        title: "Invalid Email",
-        description: "Please enter a valid email address.",
-        variant: "destructive",
-      });
+      toast.error("Please enter a valid email address.");
       return;
     }
 
     setIsLoading(true);
 
     try {
-      // Replace with your API endpoint
       const response = await fetch("/api/join-waitlist", {
         method: "POST",
         headers: {
@@ -31,24 +26,13 @@ export default function Waitlist() {
       });
 
       if (response.ok) {
-        toast({
-          title: "Success",
-          description: "You have successfully joined the waitlist.",
-        });
+        toast.success("You have successfully joined the waitlist.");
         setEmail("");
       } else {
-        toast({
-          title: "Error",
-          description: "Something went wrong. Please try again later.",
-          variant: "destructive",
-        });
+        toast.error("Something went wrong. Please try again later.");
       }
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "Unable to process your request. Please try again later.",
-        variant: "destructive",
-      });
+      toast.error("Unable to process your request. Please try again later.");
     } finally {
       setIsLoading(false);
     }
@@ -61,6 +45,7 @@ export default function Waitlist() {
     >
       <div className="bg-black w-full h-full rounded-lg overflow-hidden relative flex flex-col items-center px-6 sm:px-10 md:px-20 lg:px-40 py-10 md:py-20">
         <img
+          alt=""
           src="uploads/multiCircle.png"
           className="absolute inset-0 w-4/5 md:h-auto mx-auto my-auto object-contain z-0 blur-[2px]"
         />

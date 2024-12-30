@@ -10,14 +10,17 @@ export default function Vault2() {
       </p>
       <div className="relative h-40 flex items-center justify-center gap-20">
         <img
+          alt=""
           src="/uploads/buddies1.jpeg"
           className="rounded-md w-[25%] aspect-square object-cover -rotate-12 "
         />
         <img
+          alt=""
           src="/uploads/buddies2.jpeg"
           className="rounded-md w-[25%] aspect-square object-cover z-10 absolute top-3"
         />
         <img
+          alt=""
           src="/uploads/buddies3.jpeg"
           className="rounded-md w-[25%] aspect-square object-cover rotate-12 "
         />

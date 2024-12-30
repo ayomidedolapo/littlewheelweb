@@ -37,30 +37,30 @@ export async function POST(req: NextRequest) {
 
     // Send confirmation email to subscriber
     const subscriberMailOptions = {
-      from: `"littlewheel-landing Team" <${process.env.EMAIL_USER}>`,
+      from: `"Littlewheel Team" <${process.env.EMAIL_USER}>`,
       to: email,
-      subject: "Welcome to littlewheel-landing!",
+      subject: "Welcome to Littlewheel!",
       text: `Dear Valued Subscriber,
     
-    Thank you for joining the littlewheel-landing waitlist! We’re delighted to have you with us as we prepare to share exciting updates and developments.
+    Thank you for joining the Littlewheel waitlist! We’re delighted to have you with us as we prepare to share exciting updates and developments.
     
     Stay tuned for more information coming your way!
     
     Warm regards,
-    The littlewheel-landing Team`,
+    The Littlewheel Team`,
       html: `
-        <h1 style="font-size: 24px; color: #333;">Welcome to littlewheel-landing!</h1>
+        <h1 style="font-size: 24px; color: #333;">Welcome to Littlewheel!</h1>
         <p style="font-size: 16px; color: #555;">Dear Valued Subscriber,</p>
-        <p style="font-size: 16px; color: #555;">Thank you for joining the littlewheel-landing waitlist! We’re delighted to have you with us as we prepare to share exciting updates and developments.</p>
+        <p style="font-size: 16px; color: #555;">Thank you for joining the Littlewheel waitlist! We’re delighted to have you with us as we prepare to share exciting updates and developments.</p>
         <p style="font-size: 16px; color: #555;">Stay tuned for more information coming your way!</p>
         <p style="font-size: 16px; color: #555;">Warm regards,</p>
-        <p style="font-size: 16px; color: #555;"><strong>The littlewheel-landing Team</strong></p>
+        <p style="font-size: 16px; color: #555;"><strong>The Littlewheel Team</strong></p>
       `,
     };
 
     // Send notification email to admins
     const adminMailOptions = {
-      from: `"littlewheel-landing Team" <${process.env.EMAIL_USER}>`,
+      from: `"Littlewheel Team" <${process.env.EMAIL_USER}>`,
       to: adminEmails.join(", "),
       subject: "Notification: New Waitlist Subscription",
       text: `Hello Team,
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
     - Date: ${new Date().toLocaleString()}
     
     Best regards,
-    The littlewheel-landing System`,
+    The Littlewheel System`,
       html: `
         <h1 style="font-size: 20px; color: #333;">New Waitlist Subscription Notification</h1>
         <p style="font-size: 16px; color: #555;">Hello Team,</p>
@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
           <li><strong>Date:</strong> ${new Date().toLocaleString()}</li>
         </ul>
         <p style="font-size: 16px; color: #555;">Best regards,</p>
-        <p style="font-size: 16px; color: #555;"><strong>The littlewheel-landing System</strong></p>
+        <p style="font-size: 16px; color: #555;"><strong>The Littlewheel System</strong></p>
       `,
     };
 

@@ -11,6 +11,7 @@ export default function Vault3() {
       </p>
       <div className="flex gap-4 p-2 rounded-lg border border-[#F0F2F5] shadow-sm">
         <img
+          alt=""
           src="/uploads/donation-image.jpeg"
           className="rounded-md md:w-[30%] w-16 aspect-square object-cover"
         />

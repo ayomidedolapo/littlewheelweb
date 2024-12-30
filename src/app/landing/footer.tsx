@@ -68,7 +68,7 @@ export default function Footer() {
           {/* Quick Links */}
           <div>
             <h3 className="font-semibold mb-4">Quick Links</h3>
-            <ul className="space-y-2">
+            <motion.ul className="space-y-2">
               {quickLinks.map((link, index) => (
                 <motion.li
                   key={index}
@@ -85,13 +85,13 @@ export default function Footer() {
                   </button>
                 </motion.li>
               ))}
-            </ul>
+            </motion.ul>
           </div>
 
           {/* Legal Links */}
           <div>
             <h3 className="font-semibold mb-4">Legal</h3>
-            <ul className="space-y-2">
+            <motion.ul className="space-y-2">
               {legalLinks.map((link, index) => (
                 <motion.li
                   key={index}
@@ -105,13 +105,13 @@ export default function Footer() {
                   </a>
                 </motion.li>
               ))}
-            </ul>
+            </motion.ul>
           </div>
 
           {/* Contact Section */}
           <div>
             <h3 className="font-semibold mb-4">Contact</h3>
-            <ul className="space-y-2">
+            <motion.ul className="space-y-2">
               {contactDetails.map((contact, index) => (
                 <motion.li
                   key={index}
@@ -132,7 +132,7 @@ export default function Footer() {
                   )}
                 </motion.li>
               ))}
-            </ul>
+            </motion.ul>
           </div>
         </div>
       </div>
