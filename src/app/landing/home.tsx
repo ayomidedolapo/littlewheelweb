@@ -13,7 +13,7 @@ export default function HomeScreen() {
   return (
     <motion.div
       id="home"
-      className="bg-family bg-cover bg-center h-[90vh] text-white flex flex-col relative justify-end items-center"
+      className="bg-family bg-cover bg-center h-[92vh] text-white flex flex-col relative justify-end items-center"
       initial={{ opacity: 0, y: 50 }}
       whileInView={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6 }}

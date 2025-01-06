@@ -17,24 +17,38 @@ export default function Waitlist() {
     setIsLoading(true);
 
     try {
+      // Generate reCAPTCHA token
+      const token = await grecaptcha.execute(
+        process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY,
+        { action: "join_waitlist" }
+      );
+
       const response = await fetch("/api/join-waitlist", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, token }),
       });
 
-      if (response.status === 409) {
+      const data = await response.json();
+
+      if (response.status === 400) {
+        toast.error(data.error || "Invalid email format.");
+      } else if (response.status === 409) {
         toast.error("This email is already subscribed to the waitlist.");
-      } else if (response.ok) {
-        toast.success("You have successfully joined the waitlist.");
+      } else if (response.status === 201) {
+        toast.success("You have successfully joined the waitlist!");
         setEmail("");
       } else {
-        toast.error("Something went wrong. Please try again later.");
+        throw new Error(data.error || "Failed to join waitlist");
       }
     } catch (error) {
-      toast.error("Unable to process your request. Please try again later.");
+      console.error("Waitlist error:", error);
+      toast.error(
+        error.message ||
+          "Unable to process your request. Please try again later."
+      );
     } finally {
       setIsLoading(false);
     }

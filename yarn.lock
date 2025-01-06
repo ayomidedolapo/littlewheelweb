@@ -3320,6 +3320,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/grecaptcha@npm:^3.0.9":
+  version: 3.0.9
+  resolution: "@types/grecaptcha@npm:3.0.9"
+  checksum: 10c0/65986cd1d060309ca0eaa1ab5a758ba0203f09c20941534d05b5dfe0fb6fd258ea0e20fa77980d5abf741ba98846e874fd7d2f883aead65dedfa56b278a811e9
+  languageName: node
+  linkType: hard
+
 "@types/http-errors@npm:*":
   version: 2.0.4
   resolution: "@types/http-errors@npm:2.0.4"
@@ -6855,6 +6862,7 @@ __metadata:
     "@tailwindcss/typography": "npm:^0.5.15"
     "@tanstack/react-query": "npm:4"
     "@tanstack/react-table": "npm:^8.20.5"
+    "@types/grecaptcha": "npm:^3.0.9"
     "@types/node": "npm:^20"
     "@types/nodemailer": "npm:^6"
     "@types/react": "npm:^18"

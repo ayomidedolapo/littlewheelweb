@@ -5,6 +5,7 @@ import { ThemeProvider } from "@littlewheel-landing/components";
 import { Toaster } from "sonner";
 import { cn } from "@littlewheel-landing/lib/utils";
 import NextTopLoader from "nextjs-toploader";
+import Script from "next/script";
 
 const mtn = localFont({
   src: [
@@ -38,6 +39,10 @@ export default function RootLayout({
     <html lang="en">
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <Script
+          src={`https://www.google.com/recaptcha/api.js?render=${process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY}`}
+          strategy="beforeInteractive"
+        />
       </head>
       <body
         className={cn(
