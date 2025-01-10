@@ -6,21 +6,9 @@ import { Toaster } from "sonner";
 import { cn } from "@littlewheel-landing/lib/utils";
 import NextTopLoader from "nextjs-toploader";
 import Script from "next/script";
+import { Inter } from "next/font/google";
 
-const mtn = localFont({
-  src: [
-    {
-      path: "../assets/mtn/MTNBrighterSans-Bold.ttf",
-      weight: "700",
-      style: "normal",
-    },
-    {
-      path: "../assets/mtn/MTNBrighterSans-Regular.ttf",
-      weight: "400",
-      style: "normal",
-    },
-  ],
-});
+const inter = Inter();
 
 export const metadata: Metadata = {
   title: "littlewheel-landing",
@@ -36,7 +24,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className={inter.className}>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <Script
@@ -46,7 +34,7 @@ export default function RootLayout({
       </head>
       <body
         className={cn(
-          `${mtn.className} ${mtn.style}`,
+          inter.className,
           "antialiased bg-background text-foreground"
         )}
       >
