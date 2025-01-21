@@ -80,15 +80,11 @@ export default function Page() {
           className="md:-ml-36 ml-0"
         />
 
-        <div className="md:hidden">
-          <button onClick={toggleNav} className="focus:outline-none">
-            {isNavOpen ? (
-              <FaTimes size={24} color="black" />
-            ) : (
-              <FaBars size={24} color="black" />
-            )}
-          </button>
-        </div>
+        <FaBars
+          size={24}
+          onClick={toggleNav}
+          className="hover:text-[#D42620] md:hidden"
+        />
         <Button
           onClick={() => scrollToSection("waitlist")}
           className="hidden md:flex items-center gap-2 bg-black px-4 py-5 text-white hover:bg-[#474747] hover:font-bold"
@@ -113,29 +109,36 @@ export default function Page() {
       </div>
 
       {isNavOpen && (
-        <nav className="md:hidden absolute top-16 right-0 w-1/2 h-2/5 bg-white/80 flex flex-col items-center justify-center shadow-2xl rounded-b-lg z-50">
-          {navigationList.map((nav, id) => (
-            <button
-              key={id}
+        <nav className="md:hidden absolute top-0 right-0 w-full h-full bg-white flex justify-center shadow-2xl rounded-b-lg z-50">
+          <span className="h-1/2 w-3/4 flex flex-col items-center justify-around my-10">
+            {navigationList.map((nav, id) => (
+              <button
+                key={id}
+                onClick={() => {
+                  scrollToSection(nav.to);
+                  toggleNav();
+                }}
+                className="text-sm hover:font-bold hover:underline my-2"
+              >
+                {nav.title}
+              </button>
+            ))}
+            <Button
               onClick={() => {
-                scrollToSection(nav.to);
+                scrollToSection("waitlist");
                 toggleNav();
               }}
-              className="text-sm hover:font-bold hover:underline my-2"
+              className="flex items-center gap-2 bg-black px-4 py-5 text-white hover:bg-[#474747] hover:font-bold mt-4"
             >
-              {nav.title}
-            </button>
-          ))}
-          <Button
-            onClick={() => {
-              scrollToSection("waitlist");
-              toggleNav();
-            }}
-            className="flex items-center gap-2 bg-black px-4 py-5 text-white hover:bg-[#474747] hover:font-bold mt-4"
-          >
-            <HiUserGroup size={24} />
-            Join the waitlist
-          </Button>
+              <HiUserGroup size={24} />
+              Join the waitlist
+            </Button>
+          </span>
+          <FaTimes
+            size={24}
+            className="absolute top-4 right-8 cursor-pointer hover:text-[#D42620]"
+            onClick={toggleNav}
+          />
         </nav>
       )}
     </div>
