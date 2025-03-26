@@ -11,34 +11,24 @@ import { useInView } from "react-intersection-observer";
 
 const faqs = [
   {
-    question: "What makes your financial services different?",
+    question: "What is Little Wheel, and how does it work?",
     answer:
-      "We provide unique, tailored services to meet your financial needs with cutting-edge technology.",
+      "Little Wheel is a software platform that helps individuals access savings, investments, and high-cost products from trusted organizations. It also helps businesses streamline payments, membership management, and customer engagement.",
   },
   {
-    question: "How do I know if I am eligible for your services?",
+    question: "What types of organizations can benefit from Little Wheel?",
     answer:
-      "Eligibility depends on various factors such as credit score, income level, and financial history. Contact us for a personalized assessment.",
+      "Little Wheel is for individuals looking to build wealth and organizations (businesses, nonprofits, etc.) seeking tools to manage payments, memberships, and customer engagement more effectively.",
   },
   {
-    question: "Can I access my financial records online?",
+    question: "How does Little Wheel help individuals build wealth?",
     answer:
-      "Yes, we provide a secure online platform where you can access your financial records anytime, anywhere.",
+      "It provides access to savings services, investment opportunities, and tools like smart installments and progress trackers to help users grow their wealth over time.",
   },
   {
-    question: "What kind of customer support do you offer?",
+    question: "WWhat tools does Little Wheel offer for organizations?",
     answer:
-      "We offer 24/7 customer support through phone, email, and live chat to ensure you receive prompt assistance.",
-  },
-  {
-    question: "Are your financial solutions customizable?",
-    answer:
-      "Absolutely. We understand that every client has unique needs, and we offer customizable solutions tailored to your specific requirements.",
-  },
-  {
-    question: "What fees do I need to be aware of?",
-    answer:
-      "We are transparent about all fees, which vary based on the service package chosen. Contact us for detailed fee structures.",
+      "Little Wheel offers smart installments, payment links, progress trackers, and customizable tools to simplify operations, improve engagement, and grow customer or member bases.",
   },
 ];
 
@@ -85,7 +75,6 @@ export default function Faq() {
               transition={{ duration: 0.6 }}
             >
               <CollapsibleTrigger className="flex justify-between items-center bg-white border p-4 rounded-t-md w-full focus:outline-none">
-                {/* -8 border-[#e7edf7] */}
                 <span>{faq.question}</span>
                 <PiCaretDown
                   size={20}
@@ -100,7 +89,7 @@ export default function Faq() {
                 animate={{ height: openFaqIndex === index ? "auto" : 0 }}
                 transition={{ duration: 0.3 }}
               >
-                <CollapsibleContent className="bg-[#e7edf7] py-4 px-6 rounded-b-md">
+                <CollapsibleContent className="bg- py-4 px-6 rounded-b-md">
                   {faq.answer}
                 </CollapsibleContent>
               </motion.div>

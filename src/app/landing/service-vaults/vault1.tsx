@@ -5,21 +5,21 @@ const groupVaultItems = [
     id: 1,
     title: "New Shoe for Christmas",
     description: "₦21,200 funds raised from ₦100,000",
-    imageSrc: "/uploads/bookdoor.jpeg",
+    imageSrc: "/uploads/personal.svg",
     progress: "15%",
   },
   {
     id: 2,
     title: "Vacation Trip",
     description: "₦50,000 funds raised from ₦200,000",
-    imageSrc: "/uploads/bookdoor.jpeg",
+    imageSrc: "/uploads/personal.svg",
     progress: "25%",
   },
   {
     id: 3,
     title: "Wedding Gift",
     description: "₦70,000 funds raised from ₦150,000",
-    imageSrc: "/uploads/bookdoor.jpeg",
+    imageSrc: "/uploads/personal.svg",
     progress: "47%",
   },
 ];
@@ -28,11 +28,11 @@ export default function Vault1() {
   return (
     <div className="w-[90%] sm:w-[45%] lg:w-[32%] aspect-video bg-white border border-[#E4E7EC] shadow-sm rounded-lg p-4 space-y-2">
       <p>
-        <strong>Create Group Vault</strong>
+        <strong>Start a Personal Vault</strong>
       </p>
       <p className="text-xs md:text-sm leading-relaxed">
-        Group savings allows you to invite your buddies to save together towards
-        a common goal in a single account.
+        Save first, flex later. Start small, stack the cash and wheel towards
+        your financial goals.
       </p>
 
       <ScrollArea className="h-40 px-4">

@@ -41,16 +41,6 @@ export default function Services() {
         <Vault2 />
         <Vault3 />
       </motion.div>
-      <motion.div
-        ref={servicesRef}
-        initial={{ opacity: 0, x: 300 }}
-        whileInView={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.6 }}
-        className="flex flex-wrap items-center justify-center gap-4"
-      >
-        <Vault4 />
-        <Vault5 />
-      </motion.div>
 
       <DownloadVault />
     </motion.div>

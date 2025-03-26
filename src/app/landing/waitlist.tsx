@@ -59,18 +59,23 @@ export default function Waitlist() {
       id="waitlist"
       className="h-auto p-6 md:p-12 flex justify-center items-center bg-white"
     >
-      <div className="bg-black w-full h-full rounded-lg overflow-hidden relative flex flex-col items-center px-6 sm:px-10 md:px-20 lg:px-40 py-10 md:py-20">
-        <img
-          alt=""
-          src="uploads/multiCircle.png"
-          className="absolute inset-0 w-4/5 md:h-auto mx-auto my-auto object-contain z-0 blur-[2px]"
-        />
+      <div
+        className="bg-black w-full h-full rounded-lg overflow-hidden relative flex flex-col items-center px-6 sm:px-10 md:px-20 lg:px-40 py-10 md:py-40"
+        style={{
+          backgroundImage: "url('/uploads/ellipse.svg')",
+          backgroundSize: "contain",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+        }}
+      >
         <h2 className="text-white text-2xl sm:text-3xl md:text-4xl font-bold text-center mb-4 z-10">
-          Join Our Waitlist
+          Want to be the next (Mr/Ms) Money?
         </h2>
-        <p className="text-white text-center mb-8 max-w-md z-10">
-          Unlock your financial potential with tools and services designed for
-          every journey and dream.
+        <p className="text-white text-center mb-8 z-10">
+          Hop on the Wheel and join the waitlist. Let’s spin you into your money
+          era!
+          <br className="hidden md:block" /> Prepare to cash in, because this
+          ride’s about to pay off
         </p>
 
         <form

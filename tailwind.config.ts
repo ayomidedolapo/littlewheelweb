@@ -10,6 +10,10 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["Inter", "sans-serif"],
+        calsans: ["var(--font-calsans)", "sans-serif"],
+      },
       backgroundImage: {
         family: "url('/uploads/family.jpeg')",
         imagecard: "url('/uploads/imagecard.jpeg')",

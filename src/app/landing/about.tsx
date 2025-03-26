@@ -1,19 +1,20 @@
 export default function About() {
   return (
     <div id="about" className="h-auto bg-black text-white">
-      <div className="bg-vector h-full flex flex-col items-center px-6 sm:px-10 md:px-20 lg:px-40 py-10 md:py-20">
+      <div className="bg-vector bg-cover h-full flex flex-col items-center px-6 sm:px-10 md:px-20 lg:px-40 py-10 md:py-20">
         <div className="flex flex-col lg:flex-row justify-between space-y-10 lg:space-y-0 lg:space-x-10">
           <div className="lg:w-1/2 space-y-12">
             <div className="space-y-4">
-              <p className="text-xl sm:text-2xl md:text-3xl font-bold">
-                Reshaping Finance for Everyone
+              <p className="text-xl sm:text-2xl md:text-3xl font-bold font-sans">
+                Everyone deserves to be a baller,
+                <br />
+                Our mission is to make you one
               </p>
               <p className="text-sm md:text-base leading-relaxed">
-                Our platform breaks down traditional barriers to financial
-                services, providing intuitive tools and resources that work for
-                everyone. By combining cutting-edge technology with
-                human-centered design, we’ve created a financial ecosystem that
-                understands and adapts to diverse needs.
+                No be who hustle pass dey carry first, na who use Little Wheel.
+                Your rich uncle/aunty dreams are valid. We are redefining
+                finance by creating a financial ecosystem that provides you with
+                every tool you need to reach your financial goals.
               </p>
               <ul className="space-y-2">
                 <li className="flex items-center">
@@ -39,12 +40,8 @@ export default function About() {
 
             <div className="flex flex-col items-end">
               <img alt="" src="uploads/arrow-right.svg" />
-              <div className="w-[60%] md:w-[40%] aspect-video p-1 bg-white rounded-xl transform rotate-[18deg] overflow-hidden">
-                <img
-                  alt=""
-                  src="/uploads/keke.jpeg"
-                  className="w-full h-full object-cover rounded-xl"
-                />
+              <div className="w-[60%] md:w-[70%] transform overflow-hidden">
+                <img alt="" src="/uploads/manned-car.svg" />
               </div>
             </div>
           </div>
@@ -52,17 +49,16 @@ export default function About() {
           <div className="lg:w-[45%] space-y-10 md:space-y-20">
             <div className="relative flex flex-col items-start">
               <img alt="" src="uploads/arrow-left.svg" />
-              <div className="w-[70%] md:w-full p-1 bg-white rounded-xl z-10">
-                <img alt="" src="/uploads/man.svg" className="rounded-xl" />
+              <div className="w-[70%] md:w-full p-1 z-10">
+                <img alt="" src="/uploads/bicycle.svg" />
               </div>
             </div>
 
             <p className="text-sm md:text-base leading-relaxed px-4 md:px-8">
-              Our platform breaks down traditional barriers to financial
-              services, providing intuitive tools and resources that work for
-              everyone. By combining cutting-edge technology with human-centered
-              design, we’ve created a financial ecosystem that understands and
-              adapts to diverse needs.
+              We redefine wealth management through Alum and Vault. For us,
+              wealth means more than growing account balances—it’s about
+              building diverse portfolios, making connections and having a
+              community that has your back.
             </p>
           </div>
         </div>

@@ -3,11 +3,11 @@ export default function Vault3() {
   return (
     <div className="w-[90%] sm:w-[45%] lg:w-[32%] aspect-video bg-white border border-[#E4E7EC] shadow-sm rounded-lg p-4 space-y-2">
       <p>
-        <strong>Create Group Vault</strong>
+        <strong>Commit to an Alum</strong>
       </p>
       <p className="text-xs md:text-sm leading-relaxed">
-        Group savings allows you to invite your buddies to save together towards
-        a common goal in a single account.
+        Alum lets you access a variety of services from different organizations
+        through smart instalment plans.
       </p>
       <div className="flex gap-4 p-2 rounded-lg border border-[#F0F2F5] shadow-sm">
         <img

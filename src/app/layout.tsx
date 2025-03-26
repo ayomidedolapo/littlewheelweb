@@ -8,7 +8,15 @@ import NextTopLoader from "nextjs-toploader";
 import Script from "next/script";
 import { Inter } from "next/font/google";
 
-const inter = Inter({preload: false,});
+// Load Google Font (Inter)
+const inter = Inter({ preload: false });
+
+// Load Local Font (Cal Sans)
+const calSans = localFont({
+  src: "../../public/fonts/CalSans-SemiBold.otf", // Adjust the path
+  display: "swap",
+  variable: "--font-calsans", // Optional for custom CSS variable
+});
 
 export const metadata: Metadata = {
   title: "littlewheel-landing",
@@ -20,11 +28,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={inter.className}>
+    <html lang="en" className={`${inter.className} ${calSans.variable}`}>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <Script

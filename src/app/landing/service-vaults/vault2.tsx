@@ -2,11 +2,11 @@ export default function Vault2() {
   return (
     <div className="w-[90%] sm:w-[45%] lg:w-[32%] aspect-video bg-white border border-[#E4E7EC] shadow-sm rounded-lg p-4 space-y-2">
       <p>
-        <strong>Create Group Vault</strong>
+        <strong>Create/Join Group Vaults</strong>
       </p>
       <p className="text-xs md:text-sm leading-relaxed">
-        Group savings allows you to invite your buddies to save together towards
-        a common goal in a single account.
+        Save together, ball together. Team up with your friends to save for a
+        shared goal.
       </p>
       <div className="relative h-40 flex items-center justify-center gap-20">
         <img

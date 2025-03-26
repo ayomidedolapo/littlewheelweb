@@ -1,3 +1,8 @@
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@littlewheel-landing/components/ui/avatar";
 import { motion } from "framer-motion";
 import { useInView } from "react-intersection-observer";
 
@@ -5,34 +10,34 @@ const reviews = [
   {
     id: 1,
     feedback:
-      "Being a first-generation college student, I had no idea where to start with financial planning. The step-by-step guidance made everything clear",
-    image: "/uploads/reviewer1.jpeg",
-    name: "Omolayo Fikayo",
-    position: "CEO Meeral",
+      "“I have been Saving with Little Wheel for the past 2 months and they allow you to withdraw your Money anytime you choose, without any excuse or complaint.”",
+    image: "/uploads/odinaka.jpg",
+    name: "Odinaka",
+    occupation: "Cloth Seller",
   },
   {
     id: 2,
     feedback:
-      "Being a first-generation college student, I had no idea where to start with financial planning. The step-by-step guidance made everything clear",
-    image: "/uploads/reviewer2.jpeg",
-    name: "Omolayo Fikayo",
-    position: "CEO Meeral",
+      "“As an hustler, Little Wheel allows daily payment options and it also allows me to choose the amount I am comfortable paying everyday. This is very encouraging as it helps me not to overspend.”",
+    image: "/uploads/ishola.jpg",
+    name: "Ishola",
+    occupation: "Bikeman",
   },
   {
     id: 3,
     feedback:
-      "Being a first-generation college student, I had no idea where to start with financial planning. The step-by-step guidance made everything clear",
-    image: "/uploads/reviewer3.jpeg",
-    name: "Omolayo Fikayo",
-    position: "CEO Meeral",
+      "“What makes Little Wheel unique is the ability to ensure that saving is made easy at any point in time, this has encouraged me to save more”",
+    image: "/uploads/saheed.jpg",
+    name: "Saheed",
+    occupation: "Okada Rider",
   },
   {
     id: 4,
     feedback:
-      "Being a first-generation college student, I had no idea where to start with financial planning. The step-by-step guidance made everything clear",
-    image: "/uploads/reviewer1.jpeg",
-    name: "Omolayo Fikayo",
-    position: "CEO Meeral",
+      "“Little wheel didn't give me any unnecessary stress when it was time to refund my money unlike most savings companies that stress their users when payment is due.”",
+    image: "/uploads/mrs-adewale.jpg",
+    name: "Mrs Adewale",
+    occupation: "Trader",
   },
 ];
 
@@ -70,7 +75,7 @@ export default function Testimonials() {
           </span>
         </div>
         <p className="text-white text-sm md:text-base">
-          Over 250 Satisfied customers
+          Thousands of satisfied Little Wheeler savers!
         </p>
       </div>
 
@@ -82,16 +87,21 @@ export default function Testimonials() {
             initial={{ opacity: 0, y: id % 2 === 0 ? -50 : 50 }}
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
-            className="border border-[#F0F2F5] p-4 rounded-lg shadow-lg flex flex-col items-center text-center space-y-3 bg-white"
+            className="border border-[#F0F2F5] p-4 rounded-lg shadow-lg flex flex-col text-left space-y-4 bg-white"
           >
-            <p className="text-sm text-gray-700">{review.feedback}</p>
-            <img
-              src={review.image}
-              alt={`${review.name}'s picture`}
-              className="w-12 aspect-square rounded-full"
-            />
-            <p className="font-semibold">{review.name}</p>
-            <p className="text-xs text-gray-500">{review.position}</p>
+            <p className="text-sm font-sans font-medium h-32">
+              <i>{review.feedback}</i>
+            </p>
+            <div className="flex gap-2">
+              <Avatar className="w-10 rounded-full">
+                <AvatarImage src={review.image} />
+                <AvatarFallback>{review.name[0]}</AvatarFallback>
+              </Avatar>
+              <div>
+                <p className="font-semibold">{review.name}</p>
+                <p className="text-xs text-gray-500">{review.occupation}</p>
+              </div>
+            </div>
           </motion.div>
         ))}
       </div>
