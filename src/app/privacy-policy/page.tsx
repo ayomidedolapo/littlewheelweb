@@ -6,19 +6,16 @@ import { cn } from "@littlewheel-landing/lib/utils";
 import { useEffect, useRef, useState } from "react";
 
 const policySections = [
-  { id: "acceptance", title: "Acceptance of Terms" },
-  { id: "eligibility", title: "Eligibility" },
-  { id: "wait-reg", title: "Waitlist Registration" },
-  { id: "user-conduct", title: "User Conduct" },
-  { id: "intel", title: "Intellectual Property Rights" },
-  { id: "limit", title: "Limitation of Liability" },
-  { id: "privacy", title: "Privacy Policy" },
-  { id: "modification", title: "Modifications to Terms" },
-  { id: "termination", title: "Termination" },
-  { id: "governing", title: "Governing Law" },
+  { id: "info", title: "Information We Collect" },
+  { id: "info-use", title: "How We Use Your Information" },
+  { id: "data-sharing", title: "Data Sharing and Disclosure" },
+  { id: "data-security", title: "Data Security" },
+  { id: "cookies-tech", title: "Cookies and Tracking Technologies" },
+  { id: "privacy", title: "Your Privacy Rights" },
+  { id: "update", title: "Updates to This Privacy Policy" },
   { id: "contact", title: "Contact Us" },
 ];
-export default function Terms() {
+export default function PivacyPolicy() {
   const sectionRefs = useRef<{ [key: string]: HTMLElement | null }>({});
   const [activeSection, setActiveSection] = useState<string | null>(null);
 
@@ -62,7 +59,7 @@ export default function Terms() {
           >
             <div className="flex flex-col items-center justify-center h-full text-white space-y-3 text-center">
               <h1 className="text-4xl md:text-5xl lg:text-7xl font-bold">
-                Terms and Condition
+                Privacy Policy
               </h1>
               <p className="text-sm">Effective Date: Mar 9th, 2025</p>
               <p className="text-sm">Last Updated: Mar 9th, 2025</p>
@@ -93,125 +90,146 @@ export default function Terms() {
 
               <div className="space-y-8">
                 <p>
-                  Welcome to Little Wheel! These Terms and Conditions govern
-                  your use of our website and services. By accessing or using
-                  our platform, you agree to comply with these terms.
+                  Welcome to Little Wheel! Your privacy is important to us. This
+                  Privacy Policy explains how we collect, use, disclose, and
+                  safeguard your information when you visit our website and use
+                  our services.
                 </p>
                 <div
-                  id="acceptance"
+                  id="info"
                   ref={(el) => {
-                    sectionRefs.current.acceptance = el;
+                    sectionRefs.current.info = el;
                   }}
                 >
                   <h2 className="text-2xl font-bold text-[#202020] mb-4">
-                    Acceptance of Terms
+                    Information We Collect
                   </h2>
-                  <p>
-                    By using Little Wheel’s website and services, you agree to
-                    these Terms and Conditions. If you do not agree, please do
-                    not use our platform.
-                  </p>
-                </div>
+                  <div className="space-y-4">
+                    <p>
+                      At this stage, we only collect the following information
+                      from users:
+                    </p>
 
-                <div
-                  id="eligibility
-"
-                  ref={(el) => {
-                    sectionRefs.current["eligibility"] = el;
-                  }}
-                >
-                  <h2 className="text-2xl font-bold text-[#202020] mb-4">
-                    Eligibility
-                  </h2>
-                  <p>
-                    To use our services, you must be at least 18 years old or
-                    the legal age in your jurisdiction. By signing up for our
-                    waitlist, you confirm that you meet these eligibility
-                    requirements.
-                  </p>
-                </div>
-
-                <div
-                  id="wait-reg
-"
-                  ref={(el) => {
-                    sectionRefs.current["wait-reg"] = el;
-                  }}
-                >
-                  <h2 className="text-2xl font-bold text-[#202020] mb-4">
-                    Waitlist Registration
-                  </h2>
-                  <p>
-                    To use our services, you must be at least 18 years old or
-                    the legal age in your jurisdiction. By signing up for our
-                    waitlist, you confirm that you meet these eligibility
-                    requirements.
-                  </p>
-                </div>
-
-                <div
-                  id="user-conduct
-"
-                  ref={(el) => {
-                    sectionRefs.current["user-conduct"] = el;
-                  }}
-                >
-                  <h2 className="text-2xl font-bold text-[#202020] mb-4">
-                    User Conduct
-                  </h2>
-                  <p>
-                    You agree not to:
                     <ul className="list-disc pl-8">
                       <li>
-                        Use our platform for any illegal or unauthorized
-                        purpose.
+                        <strong>Email Address:</strong> When you join our
+                        waitlist.
                       </li>
                       <li>
-                        Attempt to hack, disrupt, or interfere with our
-                        services.
-                      </li>
-                      <li>
-                        Impersonate another person or misrepresent your
-                        identity.
+                        <strong>Geolocation Data:</strong> To understand where
+                        our waitlist members are signing up from.
                       </li>
                     </ul>
+                    <p>
+                      Once we officially launch, we will update this Privacy
+                      Policy to include any additional data we may collect and
+                      how we use it
+                    </p>
+                  </div>
+                </div>
+
+                <div
+                  id="info-use
+"
+                  ref={(el) => {
+                    sectionRefs.current["info-use"] = el;
+                  }}
+                >
+                  <h2 className="text-2xl font-bold text-[#202020] mb-4">
+                    How We Use Your Information
+                  </h2>
+                  <div className="space-y-4">
+                    <p>
+                      The information we currently collect is used solely for
+                      the following purposes:
+                      <ul className="list-disc pl-8">
+                        <li>
+                          To send email updates about the progress of our
+                          product and upcoming app features.
+                        </li>
+                        <li>
+                          To analyze geographic interest in our platform and
+                          enhance our services
+                        </li>
+                      </ul>
+                    </p>
+                    <p>Your email will never be shared with third parties.</p>
+                    <p>
+                      Once we launch our full suite of services, this policy
+                      will be updated to reflect any additional data we collect
+                      and how it will be processed.
+                    </p>
+                  </div>
+                </div>
+
+                <div
+                  id="data-sharing
+"
+                  ref={(el) => {
+                    sectionRefs.current["data-sharing"] = el;
+                  }}
+                >
+                  <h2 className="text-2xl font-bold text-[#202020] mb-4">
+                    Data Sharing and Disclosure
+                  </h2>
+                  <div className="space-y-4">
+                    <p>
+                      We do not sell, trade, or rent users’ personal information
+                      to third parties. Your data is only used for internal
+                      purposes to improve our services and keep you updated.
+                    </p>
+                    <p>
+                      However, we may disclose your information:
+                      <ul className="list-disc pl-8">
+                        <li>
+                          To comply with legal obligations or respond to lawful
+                          requests.
+                        </li>
+                        <li>
+                          To protect and defend the rights or property of Little
+                          Wheel.
+                        </li>
+                        <li>
+                          In case of a business merger, acquisition, or asset
+                          sale (users will be notified if such changes occur).
+                        </li>
+                      </ul>
+                    </p>
+                  </div>
+                </div>
+
+                <div
+                  id="data-security
+"
+                  ref={(el) => {
+                    sectionRefs.current["data-security"] = el;
+                  }}
+                >
+                  <h2 className="text-2xl font-bold text-[#202020] mb-4">
+                    Data Security
+                  </h2>
+                  <p>
+                    We implement industry-standard security measures to
+                    safeguard your information. However, no online data
+                    transmission is 100% secure. While we strive to protect your
+                    information, we cannot guarantee absolute security.
                   </p>
                 </div>
 
                 <div
-                  id="intel
+                  id="cookies-tech
 "
                   ref={(el) => {
-                    sectionRefs.current["intel"] = el;
+                    sectionRefs.current["cookies-tech"] = el;
                   }}
                 >
                   <h2 className="text-2xl font-bold text-[#202020] mb-4">
-                    Intellectual Property Rights
+                    Cookies and Tracking Technologies
                   </h2>
                   <p>
-                    All content on Little Wheel, including logos, text, and
-                    graphics, is owned by or licensed to us and protected under
-                    intellectual property laws. You may not copy, reproduce, or
-                    distribute our content without written permission.
-                  </p>
-                </div>
-
-                <div
-                  id="limit
-"
-                  ref={(el) => {
-                    sectionRefs.current["limit"] = el;
-                  }}
-                >
-                  <h2 className="text-2xl font-bold text-[#202020] mb-4">
-                    Limitation of Liability
-                  </h2>
-                  <p>
-                    Little Wheel provides its services on an "as-is" and
-                    "as-available" basis. We do not guarantee that our services
-                    will be uninterrupted or error-free. To the fullest extent
-                    permitted by law, we are not liable for any damages arising
-                    from your use of our platform.
+                    At the moment, we do not use cookies or other tracking
+                    technologies. If we introduce these in the future, this
+                    policy will be updated accordingly.
                   </p>
                 </div>
 
@@ -223,65 +241,44 @@ export default function Terms() {
                   }}
                 >
                   <h2 className="text-2xl font-bold text-[#202020] mb-4">
-                    Privacy Policy
+                    Your Privacy Rights
                   </h2>
-                  <p>
-                    Your use of our services is also governed by our Privacy
-                    Policy, which outlines how we collect and handle your data.
-                    Please review our Privacy Policy for more details.
-                  </p>
+                  <div className="space-y-4">
+                    <p>
+                      Depending on your location, you may have the right to:
+                    </p>
+
+                    <ul className="list-disc pl-8">
+                      <li>Request access to your personal data.</li>
+                      <li>Request correction or deletion of your data.</li>
+                      <li>Opt-out of receiving future emails.</li>
+                    </ul>
+                    <p>
+                      To exercise these rights, contact us at{" "}
+                      <a
+                        href="mailto:info@littlewheel.io"
+                        className="hover:underline hover:font-bold"
+                      >
+                        info@littlewheel.io
+                      </a>
+                    </p>
+                  </div>
                 </div>
 
                 <div
-                  id="modification
+                  id="update
 "
                   ref={(el) => {
-                    sectionRefs.current["modification"] = el;
+                    sectionRefs.current["update"] = el;
                   }}
                 >
                   <h2 className="text-2xl font-bold text-[#202020] mb-4">
-                    Modifications to Terms
+                    Updates to This Privacy Policy
                   </h2>
                   <p>
-                    We may update these Terms and Conditions from time to time.
-                    If we make changes, we will notify users by updating the
-                    "Last Updated" date. Your continued use of our services
-                    constitutes acceptance of the revised terms.
-                  </p>
-                </div>
-
-                <div
-                  id="termination
-"
-                  ref={(el) => {
-                    sectionRefs.current["termination"] = el;
-                  }}
-                >
-                  <h2 className="text-2xl font-bold text-[#202020] mb-4">
-                    Termination
-                  </h2>
-                  <p>
-                    We reserve the right to terminate or suspend your access to
-                    our platform if you violate these Terms and Conditions or
-                    engage in activities that harm our services or other users.
-                  </p>
-                </div>
-
-                <div
-                  id="governing
-"
-                  ref={(el) => {
-                    sectionRefs.current["governing"] = el;
-                  }}
-                >
-                  <h2 className="text-2xl font-bold text-[#202020] mb-4">
-                    Governing Law
-                  </h2>
-                  <p>
-                    These Terms and Conditions shall be governed by and
-                    interpreted in accordance with the laws of Nigeria. Any
-                    disputes shall be resolved in the courts of [Insert
-                    Jurisdiction].
+                    As our services grow, we may update this Privacy Policy.
+                    When we make changes, we will update the "Last Updated" date
+                    and notify users where applicable.
                   </p>
                 </div>
 

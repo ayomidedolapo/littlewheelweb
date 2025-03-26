@@ -62,7 +62,7 @@ export default function Footer() {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-6 md:gap-8">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
           <div>
             <h3 className="font-semibold mb-4">Quick Links</h3>
             <motion.ul className="space-y-2">
@@ -76,7 +76,7 @@ export default function Footer() {
                 >
                   <button
                     onClick={() => scrollToSection(link.to)}
-                    className="hover:text-[#3b7ced] text-sm"
+                    className="hover:font-bold hover:underline text-sm"
                   >
                     {link.name}
                   </button>
@@ -96,7 +96,10 @@ export default function Footer() {
                   whileInView={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.6 }}
                 >
-                  <a href={link.href} className="hover:text-[#3b7ced] text-sm">
+                  <a
+                    href={link.href}
+                    className="hover:font-bold hover:underline text-sm"
+                  >
                     {link.name}
                   </a>
                 </motion.li>
@@ -106,7 +109,7 @@ export default function Footer() {
 
           <div>
             <h3 className="font-semibold mb-4">Contact</h3>
-            <motion.ul className="space-y-2">
+            <motion.ul className="space-y-2 block">
               {contactDetails.map((contact, index) => (
                 <motion.li
                   key={index}
@@ -114,22 +117,12 @@ export default function Footer() {
                   initial={{ opacity: 0, x: -300 }}
                   whileInView={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.6 }}
-                  className="block" // Ensure visibility
+                  className="hover:font-bold hover:underline text-sm"
                 >
                   {contact.type === "Email" ? (
-                    <a
-                      href={`mailto:${contact.value}`}
-                      className="hover:text-[#3b7ced] text-sm block w-full"
-                    >
-                      {contact.value}
-                    </a>
+                    <a href={`mailto:${contact.value}`}>{contact.value}</a>
                   ) : (
-                    <a
-                      href={`tel:${contact.value}`}
-                      className="hover:text-[#3b7ced] text-sm block w-full"
-                    >
-                      {contact.value}
-                    </a>
+                    <a href={`tel:${contact.value}`}>{contact.value}</a>
                   )}
                 </motion.li>
               ))}
@@ -177,7 +170,7 @@ export default function Footer() {
               transition={{ duration: 0.6 }}
               href={social.href}
               aria-label={social.label}
-              className="hover:text-[#3b7ced]"
+              className="hover:text-[#014239]"
             >
               <social.icon size={24} />
             </motion.a>
