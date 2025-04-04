@@ -1,4 +1,4 @@
-import { Separator } from "@littlewheel-landing/components/ui/separator";
+import { Separator } from "@littlewheel/components/ui/separator";
 
 import { FaLinkedin, FaInstagram, FaFacebook } from "react-icons/fa";
 import { FaXTwitter } from "react-icons/fa6";
@@ -52,7 +52,7 @@ export default function Footer() {
         <div>
           <img
             src="uploads/logo.svg"
-            alt="littlewheel-landing"
+            alt="litt"
             width={340}
             height={90}
             className="max-w-full"
@@ -152,9 +152,10 @@ export default function Footer() {
               hand, can build wealth little by little.
             </p>
             <p>
-              While we process our involvement in the CBN's Regulatory Sandbox,
-              we currently operate with both a lender licence and a cooperative
-              licence. Read our legal documents to understand more about us
+              While we process our involvement in the CBN&apos;s Regulatory
+              Sandbox, we currently operate with both a lender licence and a
+              cooperative licence. Read our legal documents to understand more
+              about us
             </p>
           </div>
           <p>All Rights Reserved, 2025 || Little Wheel.</p>

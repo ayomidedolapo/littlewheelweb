@@ -2,8 +2,8 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@littlewheel-landing/components/ui/collapsible";
-import { cn } from "@littlewheel-landing/lib/utils";
+} from "@littlewheel/components/ui/collapsible";
+import { cn } from "@littlewheel/lib/utils";
 import { useState } from "react";
 import { PiCaretDown } from "react-icons/pi";
 import { motion } from "framer-motion";
@@ -33,9 +33,9 @@ const faqs = [
 ];
 
 export default function Faq() {
-  const [openFaqIndex, setOpenFaqIndex] = useState(null);
+  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
 
-  const toggleFaq = (index) => {
+  const toggleFaq = (index: number) => {
     setOpenFaqIndex(openFaqIndex === index ? null : index);
   };
 

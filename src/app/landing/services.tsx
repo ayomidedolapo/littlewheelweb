@@ -2,8 +2,6 @@ import DownloadVault from "./service-vaults/download-vault";
 import Vault1 from "./service-vaults/vault1";
 import Vault2 from "./service-vaults/vault2";
 import Vault3 from "./service-vaults/vault3";
-import Vault4 from "./service-vaults/vault4";
-import Vault5 from "./service-vaults/vault5";
 import { motion } from "framer-motion";
 import { useInView } from "react-intersection-observer";
 export default function Services() {

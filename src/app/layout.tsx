@@ -1,9 +1,9 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import { ThemeProvider } from "@littlewheel-landing/components";
+import { ThemeProvider } from "@littlewheel/components";
 import { Toaster } from "sonner";
-import { cn } from "@littlewheel-landing/lib/utils";
+import { cn } from "@littlewheel/lib/utils";
 import NextTopLoader from "nextjs-toploader";
 import Script from "next/script";
 import { Inter } from "next/font/google";
@@ -19,7 +19,7 @@ const calSans = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "littlewheel-landing",
+  title: "littlewheel",
   description: "Build Financial Freedom with the Little Wheel",
   icons: {
     icon: "/uploads/favicon.png",
@@ -35,7 +35,7 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <Script
           src={`https://www.google.com/recaptcha/api.js?render=${process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY}`}
-          strategy="afterInteractive"
+          strategy="beforeInteractive"
         />
       </head>
       <body

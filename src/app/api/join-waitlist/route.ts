@@ -66,7 +66,14 @@ export async function POST(req: NextRequest) {
     console.error("Error in POST /api/join-waitlist:", error);
 
     // Check if the error response contains our duplicate message
-    if (error.response?.data?.message?.includes("already")) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "response" in error &&
+      typeof (error as { response?: { data?: { message?: string } } }).response
+        ?.data?.message === "string" &&
+      (error as any).response.data.message.includes("already")
+    ) {
       return NextResponse.json(
         { error: "This email is already subscribed" },
         { status: 409 }

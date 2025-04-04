@@ -2,7 +2,7 @@ import {
   Avatar,
   AvatarFallback,
   AvatarImage,
-} from "@littlewheel-landing/components/ui/avatar";
+} from "@littlewheel/components/ui/avatar";
 import { motion } from "framer-motion";
 import { useInView } from "react-intersection-observer";
 

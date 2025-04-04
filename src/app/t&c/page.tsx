@@ -1,8 +1,8 @@
 "use client";
-import Footer from "@littlewheel-landing/components/footer";
-import Header from "@littlewheel-landing/components/header";
-import { ScrollArea } from "@littlewheel-landing/components/ui/scroll-area";
-import { cn } from "@littlewheel-landing/lib/utils";
+import Footer from "@littlewheel/components/footer";
+import Header from "@littlewheel/components/header";
+import { ScrollArea } from "@littlewheel/components/ui/scroll-area";
+import { cn } from "@littlewheel/lib/utils";
 import { useEffect, useRef, useState } from "react";
 
 const policySections = [
@@ -22,7 +22,7 @@ export default function Terms() {
   const sectionRefs = useRef<{ [key: string]: HTMLElement | null }>({});
   const [activeSection, setActiveSection] = useState<string | null>(null);
 
-  const scrollToSection = (sectionId: any) => {
+  const scrollToSection = (sectionId: string) => {
     sectionRefs.current[sectionId]?.scrollIntoView({ behavior: "smooth" });
   };
   useEffect(() => {
@@ -207,11 +207,11 @@ export default function Terms() {
                     Limitation of Liability
                   </h2>
                   <p>
-                    Little Wheel provides its services on an "as-is" and
-                    "as-available" basis. We do not guarantee that our services
-                    will be uninterrupted or error-free. To the fullest extent
-                    permitted by law, we are not liable for any damages arising
-                    from your use of our platform.
+                    Little Wheel provides its services on an &quot;as-is&quot;
+                    and &quot;as-available&quot; basis. We do not guarantee that
+                    our services will be uninterrupted or error-free. To the
+                    fullest extent permitted by law, we are not liable for any
+                    damages arising from your use of our platform.
                   </p>
                 </div>
 
@@ -245,8 +245,8 @@ export default function Terms() {
                   <p>
                     We may update these Terms and Conditions from time to time.
                     If we make changes, we will notify users by updating the
-                    "Last Updated" date. Your continued use of our services
-                    constitutes acceptance of the revised terms.
+                    &quot;Last Updated&quot; date. Your continued use of our
+                    services constitutes acceptance of the revised terms.
                   </p>
                 </div>
 

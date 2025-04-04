@@ -1,8 +1,8 @@
 "use client";
-import Footer from "@littlewheel-landing/components/footer";
-import Header from "@littlewheel-landing/components/header";
-import { ScrollArea } from "@littlewheel-landing/components/ui/scroll-area";
-import { cn } from "@littlewheel-landing/lib/utils";
+import Footer from "@littlewheel/components/footer";
+import Header from "@littlewheel/components/header";
+import { ScrollArea } from "@littlewheel/components/ui/scroll-area";
+import { cn } from "@littlewheel/lib/utils";
 import { useEffect, useRef, useState } from "react";
 
 const policySections = [
@@ -19,7 +19,7 @@ export default function PivacyPolicy() {
   const sectionRefs = useRef<{ [key: string]: HTMLElement | null }>({});
   const [activeSection, setActiveSection] = useState<string | null>(null);
 
-  const scrollToSection = (sectionId: any) => {
+  const scrollToSection = (sectionId: string) => {
     sectionRefs.current[sectionId]?.scrollIntoView({ behavior: "smooth" });
   };
   useEffect(() => {
@@ -277,8 +277,8 @@ export default function PivacyPolicy() {
                   </h2>
                   <p>
                     As our services grow, we may update this Privacy Policy.
-                    When we make changes, we will update the "Last Updated" date
-                    and notify users where applicable.
+                    When we make changes, we will update the &quot;Last
+                    Updated&quot; date and notify users where applicable.
                   </p>
                 </div>
 

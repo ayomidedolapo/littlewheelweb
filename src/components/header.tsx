@@ -1,5 +1,6 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
-import { cn } from "@littlewheel-landing/lib/utils";
+import { cn } from "@littlewheel/lib/utils";
 import { useEffect, useState } from "react";
 import { FaBars, FaTimes } from "react-icons/fa";
 import { HiUserGroup } from "react-icons/hi2";

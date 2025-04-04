@@ -1,4 +1,4 @@
-import { ScrollArea } from "@littlewheel-landing/components/ui/scroll-area";
+import { ScrollArea } from "@littlewheel/components/ui/scroll-area";
 
 const groupVaultItems = [
   {

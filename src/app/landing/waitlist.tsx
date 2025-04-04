@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { MdMail } from "react-icons/md";
 import { PiArrowRight } from "react-icons/pi";
-import { cn } from "@littlewheel-landing/lib/utils";
+import { cn } from "@littlewheel/lib/utils";
 import { toast } from "sonner";
 
+// export declare const grecaptcha: {
+//   execute(siteKey: string, options: { action: string }): Promise<string>;
+// };
 export default function Waitlist() {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -17,11 +20,25 @@ export default function Waitlist() {
     setIsLoading(true);
 
     try {
-      // Generate reCAPTCHA token
-      const token = await grecaptcha.execute(
-        process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY,
-        { action: "join_waitlist" }
-      );
+      // Wait for grecaptcha to load
+      if (typeof window !== "undefined" && window.grecaptcha) {
+        await new Promise<void>((resolve) =>
+          window.grecaptcha.ready(() => resolve())
+        );
+      } else {
+        toast.error("reCAPTCHA failed to load. Refresh and try again.");
+        setIsLoading(false);
+        return;
+      }
+
+      const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
+      if (!siteKey) {
+        throw new Error("NEXT_PUBLIC_RECAPTCHA_SITE_KEY is not defined");
+      }
+
+      const token = await window.grecaptcha.execute(siteKey, {
+        action: "join_waitlist",
+      });
 
       const response = await fetch("/api/join-waitlist", {
         method: "POST",
@@ -45,10 +62,11 @@ export default function Waitlist() {
       }
     } catch (error) {
       console.error("Waitlist error:", error);
-      toast.error(
-        error.message ||
-          "Unable to process your request. Please try again later."
-      );
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Unable to process your request. Please try again later.";
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
