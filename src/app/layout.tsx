@@ -13,9 +13,9 @@ const inter = Inter({ preload: false });
 
 // Load Local Font (Cal Sans)
 const calSans = localFont({
-  src: "../../public/fonts/CalSans-SemiBold.otf", // Adjust the path
+  src: "../fonts/CalSans-SemiBold.otf",
   display: "swap",
-  variable: "--font-calsans", // Optional for custom CSS variable
+  variable: "--font-calsans",
 });
 
 export const metadata: Metadata = {
@@ -41,6 +41,8 @@ export default function RootLayout({
       <body
         className={cn(
           inter.className,
+          // `${calSans.className} ${calSans.style}`,
+          calSans.variable,
           "antialiased bg-background text-foreground"
         )}
       >

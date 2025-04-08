@@ -1,7 +1,9 @@
+import Image from "next/image";
+
 export default function About() {
   return (
     <div id="about" className="h-auto bg-black text-white">
-      <div className="bg-vector bg-cover h-full flex flex-col items-center px-6 sm:px-10 md:px-20 lg:px-40 py-10 md:py-20">
+      <div className="bg-[url('/uploads/vector.svg')] bg-cover bg-center h-full flex flex-col items-center px-6 sm:px-10 md:px-20 lg:px-40 py-10 md:py-20">
         <div className="flex flex-col lg:flex-row justify-between space-y-10 lg:space-y-0 lg:space-x-10">
           <div className="lg:w-1/2 space-y-12">
             <div className="space-y-4">
@@ -19,19 +21,34 @@ export default function About() {
               <ul className="space-y-2">
                 <li className="flex items-center">
                   <span className="mr-2">
-                    <img alt="" src="uploads/checkmark.svg" />
+                    <Image
+                      src="/uploads/checkmark.svg"
+                      alt=""
+                      width={20}
+                      height={20}
+                    />
                   </span>
                   Community Driven
                 </li>
                 <li className="flex items-center">
                   <span className="mr-2">
-                    <img alt="" src="uploads/checkmark.svg" />
+                    <Image
+                      src="/uploads/checkmark.svg"
+                      alt=""
+                      width={20}
+                      height={20}
+                    />
                   </span>
                   Transparency
                 </li>
                 <li className="flex items-center">
                   <span className="mr-2">
-                    <img alt="" src="uploads/checkmark.svg" />
+                    <Image
+                      src="/uploads/checkmark.svg"
+                      alt=""
+                      width={20}
+                      height={20}
+                    />
                   </span>
                   Security and Secured
                 </li>
@@ -39,18 +56,40 @@ export default function About() {
             </div>
 
             <div className="flex flex-col items-end">
-              <img alt="" src="uploads/arrow-right.svg" />
+              <Image
+                src="/uploads/arrow-right.svg"
+                alt=""
+                width={40}
+                height={40}
+              />
               <div className="w-[60%] md:w-[70%] transform overflow-hidden">
-                <img alt="" src="/uploads/manned-car.svg" />
+                <Image
+                  src="/uploads/manned-car.svg"
+                  alt=""
+                  width={500}
+                  height={400}
+                  className="w-full h-auto"
+                />
               </div>
             </div>
           </div>
 
           <div className="lg:w-[45%] space-y-10 md:space-y-20">
             <div className="relative flex flex-col items-start">
-              <img alt="" src="uploads/arrow-left.svg" />
+              <Image
+                src="/uploads/arrow-left.svg"
+                alt=""
+                width={40}
+                height={40}
+              />
               <div className="w-[70%] md:w-full p-1 z-10">
-                <img alt="" src="/uploads/bicycle.svg" />
+                <Image
+                  src="/uploads/bicycle.svg"
+                  alt=""
+                  width={500}
+                  height={400}
+                  className="w-full h-auto"
+                />
               </div>
             </div>
 

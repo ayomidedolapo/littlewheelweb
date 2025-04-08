@@ -48,7 +48,6 @@ export default function Testimonials() {
   });
   return (
     <motion.div
-      id="services"
       initial={{ opacity: 0, x: 300 }}
       whileInView={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.6 }}
@@ -61,18 +60,19 @@ export default function Testimonials() {
             "/uploads/avatar2.png",
             "/uploads/avatar3.png",
           ].map((profileImage, index) => (
-            <img
+            <Avatar
               key={index}
-              src={profileImage}
-              alt={`Donor ${index + 1}`}
-              className={`w-8 h-8 rounded-full -ml-2 ${
+              className={`w-8 h-8 border border-white -ml-2 ${
                 index === 0 ? "ml-0" : ""
               }`}
-            />
+            >
+              <AvatarImage src={profileImage} />
+              <AvatarFallback>D{index + 1}</AvatarFallback>
+            </Avatar>
           ))}
-          <span className="text-xs w-8 h-8 rounded-full bg-[#ffece5] flex items-center justify-center -ml-2">
-            +10
-          </span>
+          <Avatar className="w-8 h-8 bg-[#ffece5] text-xs border border-white -ml-2">
+            <AvatarFallback>+10</AvatarFallback>
+          </Avatar>
         </div>
         <p className="text-white text-sm md:text-base">
           Thousands of satisfied Little Wheeler savers!

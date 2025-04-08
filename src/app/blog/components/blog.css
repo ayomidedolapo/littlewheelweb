@@ -1,0 +1,159 @@
+/* src/app/globals.css - Add these styles */
+
+/* Base styles for blog content */
+.blog-content {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #374151;
+  line-height: 1.75;
+}
+
+/* Main headings - for sections like "Inspiration" */
+.blog-content h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-top: 2.5rem;
+  margin-bottom: 1.25rem;
+  color: #111827;
+}
+
+/* Sub headings - for sections like "Using AI to Convert..." */
+.blog-content h2 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+  color: #111827;
+}
+
+/* Smaller headings */
+.blog-content h3, 
+.blog-content h4, 
+.blog-content h5, 
+.blog-content h6 {
+  font-weight: 600;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  color: #111827;
+}
+
+/* Paragraphs */
+.blog-content p {
+  margin-bottom: 1.25rem;
+}
+
+/* Base list styles */
+.blog-content ul,
+.blog-content ol {
+  margin-bottom: 1.5rem;
+  padding-left: 1.5rem;
+}
+
+/* Numbered lists (ol) */
+.blog-content ol {
+  list-style-type: decimal;
+  counter-reset: item;
+}
+
+.blog-content ol > li {
+  position: relative;
+  margin-bottom: 0.75rem;
+  padding-left: 0.5rem;
+}
+
+/* First-level numbered items - more prominent */
+.blog-content h2 + ol > li {
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+/* Bullet lists (ul) */
+.blog-content ul {
+  list-style-type: disc;
+}
+
+.blog-content ul > li {
+  margin-bottom: 0.5rem;
+}
+
+/* Nested bullet points under numbered items */
+.blog-content ol > li > ul {
+  margin-top: 0.5rem;
+  margin-bottom: 0.75rem;
+  font-weight: normal;
+}
+
+.blog-content ol > li > ul > li {
+  margin-bottom: 0.375rem;
+}
+
+/* Nested numbered lists */
+.blog-content ol ol {
+  margin-top: 0.5rem;
+  margin-left: 1rem;
+}
+
+/* Links */
+.blog-content a {
+  color: #0D5EBA;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.blog-content a:hover {
+  text-decoration: none;
+}
+
+/* Specific styling for the "Current Capabilities" section */
+.blog-content h2:nth-of-type(2) + ol > li {
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+/* The bullet points in the deeper nested lists */
+.blog-content li > ul > li {
+  position: relative;
+  list-style-type: disc;
+}
+
+/* Third level lists */
+.blog-content li > ul > li > ul > li {
+  list-style-type: circle;
+}
+
+/* Make sure the list items line up well */
+.blog-content li {
+  padding-left: 0.25rem;
+}
+
+/* Code blocks */
+.blog-content pre {
+  background-color: #f3f4f6;
+  padding: 1rem;
+  border-radius: 0.375rem;
+  overflow-x: auto;
+  margin-bottom: 1.5rem;
+}
+
+.blog-content code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.875rem;
+}
+
+/* Specific styling for Mathematical Coverage section */
+.blog-content ol li ul li {
+  margin-bottom: 0.25rem; 
+}
+
+/* Fix some spacing issues */
+.blog-content h2 + p {
+  margin-top: -0.5rem;
+}
+
+/* Better indentation for deeply nested lists */
+.blog-content ul ul,
+.blog-content ol ul,
+.blog-content ul ol,
+.blog-content ol ol {
+  margin-left: 1.25rem;
+}

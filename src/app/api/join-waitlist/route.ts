@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import apiClient from "../server-utils/utils";
+import { AxiosError } from "axios";
 
 const validateRecaptcha = async (token: string) => {
   const secret = process.env.RECAPTCHA_SECRET_KEY;
@@ -67,12 +68,8 @@ export async function POST(req: NextRequest) {
 
     // Check if the error response contains our duplicate message
     if (
-      typeof error === "object" &&
-      error !== null &&
-      "response" in error &&
-      typeof (error as { response?: { data?: { message?: string } } }).response
-        ?.data?.message === "string" &&
-      (error as any).response.data.message.includes("already")
+      error instanceof AxiosError &&
+      error.response?.data?.message?.includes("already")
     ) {
       return NextResponse.json(
         { error: "This email is already subscribed" },

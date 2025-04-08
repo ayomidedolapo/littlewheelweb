@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { ScrollArea } from "@littlewheel/components/ui/scroll-area";
 
 const groupVaultItems = [
@@ -42,10 +43,12 @@ export default function Vault1() {
               key={item.id}
               className="flex gap-4 p-2 rounded-lg border border-[#F0F2F5] shadow-sm"
             >
-              <img
+              <Image
                 src={item.imageSrc}
-                className="rounded-md w-[15%] object-cover"
                 alt={item.title}
+                width={40}
+                height={40}
+                className="rounded-md w-[15%] object-cover"
               />
               <div className="space-y-1 flex-1">
                 <h2 className="text-sm font-semibold">{item.title}</h2>

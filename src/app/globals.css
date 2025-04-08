@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "../app/blog/components/blog.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -81,6 +82,8 @@
 .dark {
   --background: oklch(0.141 0.005 285.823);
   --foreground: oklch(0.985 0 0);
+  --font-sans: "Inter", sans-serif; /* Ensure Inter is still the fallback */
+  --font-calsans: "var(--font-calsans)"; /* Add Cal Sans for dark theme */
   --card: oklch(0.21 0.006 285.885);
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.21 0.006 285.885);

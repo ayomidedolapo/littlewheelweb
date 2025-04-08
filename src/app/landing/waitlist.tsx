@@ -1,12 +1,11 @@
+"use client";
 import { useState } from "react";
 import { MdMail } from "react-icons/md";
 import { PiArrowRight } from "react-icons/pi";
 import { cn } from "@littlewheel/lib/utils";
 import { toast } from "sonner";
+import Image from "next/image";
 
-// export declare const grecaptcha: {
-//   execute(siteKey: string, options: { action: string }): Promise<string>;
-// };
 export default function Waitlist() {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -136,21 +135,21 @@ export default function Waitlist() {
           </button>
         </form>
 
-        <img
+        <Image
           src="/uploads/rounded-little.svg"
           alt=""
           width={30}
           height={30}
           className="absolute top-[25%] md:top-[35%] left-[5%] transform -translate-y-1/2 z-20"
         />
-        <img
+        <Image
           src="/uploads/rounded-little.svg"
           alt=""
           width={30}
           height={30}
           className="absolute top-[20%] md:top-[25%] right-[5%] transform -translate-y-1/2 z-20"
         />
-        <img
+        <Image
           src="/uploads/rounded-little.svg"
           alt=""
           width={30}

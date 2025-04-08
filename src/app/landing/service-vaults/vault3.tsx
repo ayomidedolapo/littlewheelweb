@@ -1,3 +1,9 @@
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@littlewheel/components/ui/avatar";
+import Image from "next/image";
 import { PiCalendarBlank } from "react-icons/pi";
 export default function Vault3() {
   return (
@@ -10,14 +16,16 @@ export default function Vault3() {
         through smart instalment plans.
       </p>
       <div className="flex gap-4 p-2 rounded-lg border border-[#F0F2F5] shadow-sm">
-        <img
-          alt=""
+        <Image
+          alt="Donation image"
           src="/uploads/donation-image.jpeg"
+          width={300}
+          height={300}
           className="rounded-md md:w-[30%] w-16 aspect-square object-cover"
         />
         <div className="space-y-1 ">
           <div className="w-1/2 rounded-lg p-3 bg-[#E3EFFC] flex items-center gap-2">
-            <img src="/uploads/charity.svg" alt="" width={20} height={20} />
+            <Image src="/uploads/charity.svg" alt="" width={20} height={20} />
             <span className="text-xs">Charity</span>
           </div>
           <h2 className="text-sm font-semibold">
@@ -39,18 +47,19 @@ export default function Vault3() {
                 "/uploads/avatar2.png",
                 "/uploads/avatar3.png",
               ].map((profileImage, index) => (
-                <img
+                <Avatar
                   key={index}
-                  src={profileImage}
-                  alt={`Donor ${index + 1}`}
-                  className={`md:w-8 md:h-8 w-6 h-6 rounded-full -ml-2 ${
+                  className={`md:w-8 md:h-8 w-6 h-6 border border-white -ml-2 ${
                     index === 0 ? "ml-0" : ""
                   }`}
-                />
+                >
+                  <AvatarImage src={profileImage} />
+                  <AvatarFallback>D{index + 1}</AvatarFallback>
+                </Avatar>
               ))}
-              <span className="text-[8px] md:w-8 md:h-8 w-6 h-6 rounded-full bg-[#ffece5] flex items-center justify-center -ml-2">
-                +10
-              </span>
+              <Avatar className="md:w-8 md:h-8 w-6 h-6 bg-[#ffece5] text-[8px] border border-white -ml-2">
+                <AvatarFallback>+10</AvatarFallback>
+              </Avatar>
             </div>
             <div className="flex items-center gap-1 text-[10px] md:text-xs">
               <PiCalendarBlank size={22} />

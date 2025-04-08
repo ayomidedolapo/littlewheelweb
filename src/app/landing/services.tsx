@@ -13,7 +13,6 @@ export default function Services() {
     <motion.div
       id="services"
       className="h-auto p-6 md:p-12 space-y-6 my-10"
-      initial={{ opacity: 0, x: 300 }}
       whileInView={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.6 }}
     >

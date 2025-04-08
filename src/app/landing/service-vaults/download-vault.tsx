@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import Image from "next/image";
 import { useInView } from "react-intersection-observer";
 
 export default function DownloadVault() {
@@ -27,11 +28,20 @@ export default function DownloadVault() {
           transition={{ duration: 0.6 }}
         >
           <div className="flex flex-col items-center space-y-4 bg-black px-4 pt-4 rounded-t-lg">
-            <img src="/uploads/celebrate.png" alt="" className="w-8 h-8" />
+            <Image
+              src="/uploads/celebrate.png"
+              alt="Celebration icon"
+              width={32}
+              height={32}
+              className="w-8 h-8"
+            />
+
             <div className="relative overflow-hidden rounded-lg w-full max-w-[276px] h-[288.5px]">
-              <img
-                src="uploads/phone2.png"
+              <Image
+                src="/uploads/phone2.png"
                 alt="Phone"
+                width={276}
+                height={289}
                 className="absolute w-full h-full object-cover object-top"
               />
             </div>
@@ -50,7 +60,6 @@ export default function DownloadVault() {
           </div>
         </motion.div>
 
-        {/* Card 2 */}
         <motion.div
           className="w-full sm:w-[45%] lg:w-[38%] bg-white border border-[#E4E7EC] shadow-sm rounded-lg space-y-4"
           initial={{ opacity: 0, y: 50 }}
@@ -59,13 +68,21 @@ export default function DownloadVault() {
         >
           <div className="flex flex-col items-center space-y-4 bg-black px-4 pb-4 rounded-t-lg">
             <div className="relative overflow-hidden rounded-lg w-full max-w-[276px] h-[288.5px]">
-              <img
-                src="uploads/phone.png"
+              <Image
+                src="/uploads/phone.png"
                 alt="Phone"
+                width={276}
+                height={289}
                 className="absolute w-full h-full object-cover object-bottom"
               />
             </div>
-            <img src="/uploads/awesome.png" alt="" className="w-8 h-8" />
+            <Image
+              src="/uploads/awesome.png"
+              alt="Awesome icon"
+              width={32}
+              height={32}
+              className="w-8 h-8"
+            />
           </div>
           <div className="space-y-1 p-4">
             <p>
@@ -76,7 +93,7 @@ export default function DownloadVault() {
               clubs, religious organizations, businesses, and cooperative
               societies.
             </p>
-            <button className="w-full md:w-2/5 flex items-center justify-center gap-2 bg-black px-4 py-3 rounded-lg text-sm text-white hover:bg-[#474747]">
+            <button className="w-full md:w-1/2 flex items-center justify-center gap-2 bg-black px-4 py-3 rounded-lg text-sm text-white hover:bg-[#474747]">
               Join as an Organization
             </button>
           </div>

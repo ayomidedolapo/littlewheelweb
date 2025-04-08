@@ -8,11 +8,8 @@ import Image from "next/image";
 import Link from "next/link";
 
 const quickLinks = [
-  { id: 1, name: "Home", to: "home", type: "section" },
-  { id: 2, name: "About Us", to: "about", type: "section" },
-  { id: 3, name: "Our Services", to: "services", type: "section" },
-  { id: 4, name: "FAQ", to: "faq", type: "section" },
-  { id: 5, name: "Blog", to: "/blog", type: "link" },
+  { id: 1, name: "Home", to: "/" },
+  { id: 5, name: "Blog", to: "/blog" },
 ];
 
 const legalLinks = [
@@ -33,13 +30,7 @@ const socialLinks = [
   { icon: FaLinkedin, href: "#", label: "LinkedIn" },
 ];
 
-export default function Footer() {
-  const scrollToSection = (id: string) => {
-    const section = document.getElementById(id);
-    if (section) {
-      section.scrollIntoView({ behavior: "smooth" });
-    }
-  };
+export default function BlogFooter() {
   const [footerRef] = useInView({
     threshold: 0.9,
     triggerOnce: false,
@@ -77,21 +68,12 @@ export default function Footer() {
                   whileInView={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.6 }}
                 >
-                  {link.type === "link" ? (
-                    <Link
-                      href={link.to}
-                      className="hover:font-bold hover:underline text-sm"
-                    >
-                      {link.name}
-                    </Link>
-                  ) : (
-                    <button
-                      onClick={() => scrollToSection(link.to)}
-                      className="hover:font-bold hover:underline text-sm"
-                    >
-                      {link.name}
-                    </button>
-                  )}
+                  <Link
+                    href={link.to}
+                    className="hover:font-bold hover:underline text-sm"
+                  >
+                    {link.name}
+                  </Link>
                 </motion.li>
               ))}
             </motion.ul>

@@ -3,6 +3,7 @@ import { cn } from "@littlewheel/lib/utils";
 import { MdMail } from "react-icons/md";
 import { PiArrowRight } from "react-icons/pi";
 import { toast } from "sonner";
+import Image from "next/image";
 
 export default function HomeScreen() {
   const [email, setEmail] = useState("");
@@ -72,10 +73,10 @@ export default function HomeScreen() {
   return (
     <div
       id="home"
-      className="bg-white h-[92vh] text-black grid grid-cols-1 md:grid-cols-2 md:p-20 p-10 place-items-center md:place-items-start"
+      className="bg-white h-[92vh] text-black grid grid-cols-1 md:grid-cols-2"
     >
-      <div className="space-y-3 text-center md:text-left">
-        <h1 className="text-3xl md:text-5xl font-calsans">
+      <div className="space-y-3 text-center md:text-left p-10">
+        <h1 className="text-3xl md:text-4xl font-calsans">
           Your money era needs <span className="font-sans">a plan</span>
           <br className="hidden md:block" /> Step into it with Little Wheel.
         </h1>
@@ -125,7 +126,15 @@ export default function HomeScreen() {
           </button>
         </form>
       </div>
-      <img src="/uploads/chain.svg" alt="" className="w-[350px] md:w-[510px]" />
+      <div className="h-full flex justify-center items-center">
+        <Image
+          src="/uploads/chain.svg"
+          alt="Chain"
+          width={1}
+          height={1}
+          className="w-[350px] md:w-[510px]"
+        />
+      </div>
     </div>
   );
 }
