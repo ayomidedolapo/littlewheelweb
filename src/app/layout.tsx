@@ -324,9 +324,6 @@ const instrumentSerif = localFont({
 export const metadata: Metadata = {
   title: "littlewheel",
   description: "Build Financial Freedom with the Little Wheel",
-  icons: {
-    icon: "/uploads/favicon.png",
-  },
 };
 
 export default function RootLayout({
