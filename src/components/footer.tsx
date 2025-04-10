@@ -1,9 +1,14 @@
 "use client";
 import { Separator } from "@littlewheel/components/ui/separator";
-import { FaLinkedin, FaInstagram, FaFacebook } from "react-icons/fa";
+import {
+  FaLinkedin,
+  FaInstagram,
+  FaFacebook,
+  FaYoutube,
+  FaTiktok,
+} from "react-icons/fa";
 import { FaXTwitter } from "react-icons/fa6";
 import { motion } from "framer-motion";
-import { useInView } from "react-intersection-observer";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -27,10 +32,32 @@ const contactDetails = [
 ];
 
 const socialLinks = [
-  { icon: FaInstagram, href: "#", label: "Instagram" },
-  { icon: FaFacebook, href: "#", label: "Facebook" },
-  { icon: FaXTwitter, href: "#", label: "X" },
-  { icon: FaLinkedin, href: "#", label: "LinkedIn" },
+  {
+    icon: FaInstagram,
+    href: "https://www.instagram.com/littlewheelhq/",
+    label: "Instagram",
+  },
+  {
+    icon: FaFacebook,
+    href: "https://web.facebook.com/littlewheelhq/",
+    label: "Facebook",
+  },
+  { icon: FaXTwitter, href: "https://x.com/littlewheelhq", label: "X" },
+  {
+    icon: FaLinkedin,
+    href: "https://www.linkedin.com/company/littlewheelhq/",
+    label: "LinkedIn",
+  },
+  {
+    icon: FaYoutube,
+    href: "https://www.youtube.com/@Littlewheelhq",
+    label: "LinkedIn",
+  },
+  {
+    icon: FaTiktok,
+    href: "https://www.tiktok.com/@littlewheelhq",
+    label: "LinkedIn",
+  },
 ];
 
 export default function Footer() {
@@ -40,16 +67,12 @@ export default function Footer() {
       section.scrollIntoView({ behavior: "smooth" });
     }
   };
-  const [footerRef] = useInView({
-    threshold: 0.9,
-    triggerOnce: false,
-  });
   return (
     <motion.footer
-      initial={{ opacity: 0, y: -50 }}
+      initial={{ opacity: 0, y: -100 }}
       whileInView={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6 }}
-      className="p-6 md:p-12 font-sans font-medium"
+      className="p-6 md:p-12"
     >
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <div>
@@ -63,20 +86,32 @@ export default function Footer() {
           <p className="text-sm text-[#344054] px-4">
             Build Wealth Little by Little
           </p>
+
+          <div className="p-4 hidden md:block">
+            <p className="text-sm text-[#344054] mt-4">Follow us on:</p>
+            <div className="flex space-x-4 mt-2">
+              {socialLinks.map((social, index) => (
+                <a
+                  key={index}
+                  href={social.href}
+                  aria-label={social.label}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-black text-white p-1.5 rounded-full hover:bg-[#0D5EBA]"
+                >
+                  <social.icon size={20} />
+                </a>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
           <div>
             <h3 className="font-semibold mb-4">Quick Links</h3>
-            <motion.ul className="space-y-2">
+            <ul className="space-y-2">
               {quickLinks.map((link, index) => (
-                <motion.li
-                  key={index}
-                  ref={footerRef}
-                  initial={{ opacity: 0, x: 300 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.6 }}
-                >
+                <li key={index}>
                   {link.type === "link" ? (
                     <Link
                       href={link.to}
@@ -92,45 +127,32 @@ export default function Footer() {
                       {link.name}
                     </button>
                   )}
-                </motion.li>
+                </li>
               ))}
-            </motion.ul>
+            </ul>
           </div>
 
           <div>
             <h3 className="font-semibold mb-4">Legal</h3>
-            <motion.ul className="space-y-2">
+            <ul className="space-y-2">
               {legalLinks.map((link, index) => (
-                <motion.li
-                  key={index}
-                  ref={footerRef}
-                  initial={{ opacity: 0, y: -50 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6 }}
-                >
+                <li key={index}>
                   <a
                     href={link.href}
                     className="hover:font-bold hover:underline text-sm"
                   >
                     {link.name}
                   </a>
-                </motion.li>
+                </li>
               ))}
-            </motion.ul>
+            </ul>
           </div>
 
           <div className="relative z-10">
             <h3 className="font-semibold mb-4">Contact</h3>
-            <motion.ul className="space-y-2">
+            <ul className="space-y-2">
               {contactDetails.map((contact, index) => (
-                <motion.li
-                  key={index}
-                  ref={footerRef}
-                  initial={{ opacity: 0, x: -100 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.6 }}
-                  className="text-sm mb-2"
-                >
+                <li key={index} className="text-sm mb-2">
                   {contact.type === "Email" ? (
                     <a
                       href={`mailto:${contact.value}`}
@@ -146,17 +168,33 @@ export default function Footer() {
                       {contact.value}
                     </a>
                   )}
-                </motion.li>
+                </li>
               ))}
-            </motion.ul>
+            </ul>
           </div>
         </div>
       </div>
 
       <Separator className="my-8 bg-[#DADADA]" />
 
-      <div className="md:flex md:justify-between md:space-y-0 space-y-5">
-        <div className="w-full md:w-[70%] space-y-5 text-[#344054] text-sm">
+      <div className="space-y-4">
+        <div className="block md:hidden">
+          <div className="flex space-x-4">
+            {socialLinks.map((social, index) => (
+              <a
+                key={index}
+                href={social.href}
+                aria-label={social.label}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-black text-white p-1.5 rounded-full hover:bg-[#0D5EBA]"
+              >
+                <social.icon size={20} />
+              </a>
+            ))}
+          </div>
+        </div>
+        <div className="w-full space-y-5 text-[#344054] text-sm">
           <div className="space-y-3">
             <p>
               Little Wheel is an end-to-end software that provides individuals
@@ -180,24 +218,14 @@ export default function Footer() {
               about us
             </p>
           </div>
+          <div className="space-y-1">
+            <p>Nigeria: Sango Terminal, Sango, Ibadan, Nigeria. 07088867396</p>
+            <p>
+              United Kingdom: 14/2E Docklands Business Centre 10-16 Tiller Road
+              London United Kingdom E14 8PX
+            </p>
+          </div>
           <p>All Rights Reserved, 2025 || Little Wheel.</p>
-        </div>
-
-        <div className="flex space-x-4">
-          {socialLinks.map((social, index) => (
-            <motion.a
-              key={index}
-              ref={footerRef}
-              initial={{ opacity: 0, y: index % 2 === 0 ? -50 : 50 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-              href={social.href}
-              aria-label={social.label}
-              className="hover:text-[#014239]"
-            >
-              <social.icon size={24} />
-            </motion.a>
-          ))}
         </div>
       </div>
     </motion.footer>

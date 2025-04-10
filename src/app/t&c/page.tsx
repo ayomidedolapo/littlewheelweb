@@ -70,7 +70,7 @@ export default function Terms() {
           </section>
 
           <section className="min-h-[80vh] bg-[#f5f5f5] p-6 md:px-20 md:py-20 relative">
-            <div className="grid grid-cols-1 md:grid-cols-[35%_auto] gap-8 font-sans font-medium">
+            <div className="grid grid-cols-1 md:grid-cols-[35%_auto] gap-8">
               <div className="hidden md:flex gap-4">
                 <div className="h-[420px] border-l border-[#D0D5DD] transition-all duration-300" />
                 <nav className="flex flex-col space-y-4">

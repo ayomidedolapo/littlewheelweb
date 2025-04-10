@@ -124,7 +124,7 @@ export default function Waitlist() {
               isLoading ? "bg-gray-500" : "bg-black hover:bg-[#474747]"
             )}
           >
-            <span className="text-xs md:text-sm text-white">
+            <span className="text-xs md:text-sm text-white hidden md:inline">
               {isLoading ? "Processing..." : "Join the waitlist"}
             </span>
             {!isLoading && (

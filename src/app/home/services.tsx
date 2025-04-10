@@ -13,7 +13,8 @@ export default function Services() {
     <motion.div
       id="services"
       className="h-auto p-6 md:p-12 space-y-6 my-10"
-      whileInView={{ opacity: 1, x: 0 }}
+      initial={{ opacity: 0, y: 100 }}
+      whileInView={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6 }}
     >
       <div className="flex flex-col items-center text-center space-y-4">
@@ -29,8 +30,8 @@ export default function Services() {
 
       <motion.div
         ref={servicesRef}
-        initial={{ opacity: 0, x: -300 }}
-        whileInView={{ opacity: 1, x: 0 }}
+        initial={{ opacity: 0, y: 100 }}
+        whileInView={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
         className="flex flex-wrap items-center justify-center gap-4"
       >

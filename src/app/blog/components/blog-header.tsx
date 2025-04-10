@@ -76,7 +76,7 @@ export default function BlogHeader() {
       </Button>
 
       {isNavOpen && (
-        <nav className="md:hidden absolute top-0 right-0 w-full h-full bg-white flex justify-center shadow-2xl rounded-b-lg z-50 font-sans font-medium">
+        <nav className="md:hidden absolute top-0 right-0 w-full h-full bg-white flex justify-center shadow-2xl rounded-b-lg z-50">
           <span className="h-1/2 w-3/4 flex flex-col items-center justify-around my-10">
             {navigationList.map((nav) => (
               <a

@@ -48,10 +48,10 @@ export default function Testimonials() {
   });
   return (
     <motion.div
-      initial={{ opacity: 0, x: 300 }}
-      whileInView={{ opacity: 1, x: 0 }}
+      initial={{ opacity: 0, y: -100 }}
+      whileInView={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6 }}
-      className="h-auto px-6 py-20 flex flex-col items-center space-y-6 bg-white "
+      className="h-auto px-6 py-20 flex flex-col items-center space-y-6 bg-white"
     >
       <div className="p-2 gap-4 bg-black rounded-xl flex items-center">
         <div className="flex items-center">
@@ -79,21 +79,19 @@ export default function Testimonials() {
         </p>
       </div>
 
-      <div className="w-full max-w-7xl p-6 rounded-xl grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      <div className="w-full max-w-7xl md:p-6 rounded-xl grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {reviews.map((review, id) => (
           <motion.div
             key={id}
             ref={testimonyRef}
-            initial={{ opacity: 0, y: id % 2 === 0 ? -50 : 50 }}
+            initial={{ opacity: 0, y: 100 }}
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
             className="border border-[#F0F2F5] p-4 rounded-lg shadow-lg flex flex-col text-left space-y-4 bg-white"
           >
-            <p className="text-sm font-sans font-medium h-32">
-              <i>{review.feedback}</i>
-            </p>
+            <p className="text-sm h-32 italic">{review.feedback}</p>
             <div className="flex gap-2">
-              <Avatar className="w-10 rounded-full">
+              <Avatar className="w-10 h-10 rounded-full">
                 <AvatarImage src={review.image} />
                 <AvatarFallback>{review.name[0]}</AvatarFallback>
               </Avatar>

@@ -11,7 +11,6 @@ const navigationList = [
   { id: 1, title: "Home", to: "home", type: "section" },
   { id: 2, title: "About Us", to: "about", type: "section" },
   { id: 3, title: "Our Services", to: "services", type: "section" },
-  { id: 4, title: "FAQ", to: "faq", type: "section" },
   { id: 5, title: "Blog", to: "/blog", type: "link" },
 ];
 export default function Header() {
@@ -88,7 +87,7 @@ export default function Header() {
       </Button>
 
       {isNavOpen && (
-        <nav className="md:hidden absolute top-0 right-0 w-full h-full bg-white flex justify-center shadow-2xl rounded-b-lg z-50 font-sans font-medium">
+        <nav className="md:hidden absolute top-0 right-0 w-full h-full bg-white flex justify-center shadow-2xl rounded-b-lg z-50">
           <span className="h-1/2 w-3/4 flex flex-col items-center justify-around my-10">
             {navigationList.map((nav) =>
               nav.type === "section" ? (

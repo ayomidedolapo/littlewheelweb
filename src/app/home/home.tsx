@@ -73,14 +73,15 @@ export default function HomeScreen() {
   return (
     <div
       id="home"
-      className="bg-white h-[92vh] text-black grid grid-cols-1 md:grid-cols-2"
+      className="bg-white bg-[url('/uploads/vector.svg')] bg-cover bg-center h-[92vh] text-black grid grid-cols-1 md:grid-cols-2 items-center "
     >
-      <div className="space-y-3 text-center md:text-left p-10">
-        <h1 className="text-3xl md:text-4xl font-calsans">
-          Your money era needs <span className="font-sans">a plan</span>
+      <div className="space-y-3 text-center md:text-left px-6 md:p-10">
+        <h1 className="text-4xl font-calsans">
+          Your money era needs{" "}
+          <span className="font-['Instrument_Serif'] text-[40px]">a plan.</span>
           <br className="hidden md:block" /> Step into it with Little Wheel.
         </h1>
-        <p className="text-[#475367] font-sans text-sm md:text-lg font-medium">
+        <p className="text-[#475367] text-sm md:text-base leading">
           We dey for you. Steady increase the commas and turn up the
           <br className="hidden md:block" />
           hustle with Little Wheel tools and services.
@@ -111,18 +112,16 @@ export default function HomeScreen() {
             type="submit"
             disabled={isLoading}
             className={cn(
-              "flex items-center gap-3 rounded-md px-2 md:px-4 py-2  absolute top-1/2 right-3 transform -translate-y-1/2",
+              "flex items-center gap-3 rounded-md px-2 md:px-4 py-2 absolute top-1/2 right-3 transform -translate-y-1/2",
               isLoading ? "bg-gray-500" : "bg-black hover:bg-[#474747]"
             )}
           >
-            <span className="text-xs md:text-sm text-white">
+            <span className="text-xs md:text-sm text-white hidden md:inline">
               {isLoading ? "Processing..." : "Join the waitlist"}
             </span>
-            {!isLoading && (
-              <div className="bg-white w-[20px] aspect-square flex items-center justify-center rounded-md">
-                <PiArrowRight size={16} color="black" />
-              </div>
-            )}
+            <div className="bg-white w-[20px] aspect-square flex items-center justify-center rounded-md">
+              <PiArrowRight size={16} color="black" />
+            </div>
           </button>
         </form>
       </div>
@@ -132,7 +131,7 @@ export default function HomeScreen() {
           alt="Chain"
           width={1}
           height={1}
-          className="w-[350px] md:w-[510px]"
+          className="w-[250px] md:w-[510px]"
         />
       </div>
     </div>

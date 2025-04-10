@@ -82,8 +82,6 @@
 .dark {
   --background: oklch(0.141 0.005 285.823);
   --foreground: oklch(0.985 0 0);
-  --font-sans: "Inter", sans-serif; /* Ensure Inter is still the fallback */
-  --font-calsans: "var(--font-calsans)"; /* Add Cal Sans for dark theme */
   --card: oklch(0.21 0.006 285.885);
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.21 0.006 285.885);
@@ -122,4 +120,24 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+.font-inter-18pt {
+  font-family: var(--font-inter-18pt);
+}
+
+.font-inter-24pt {
+  font-family: var(--font-inter-24pt);
+}
+
+.font-inter-28pt {
+  font-family: var(--font-inter-28pt);
+}
+
+.font-calsans {
+  font-family: var(--font-calsans);
+}
+
+.font-instrumentSerif {
+  font-family: var(--font-instrumentSerif);
 }

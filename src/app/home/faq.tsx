@@ -26,7 +26,7 @@ const faqs = [
       "It provides access to savings services, investment opportunities, and tools like smart installments and progress trackers to help users grow their wealth over time.",
   },
   {
-    question: "WWhat tools does Little Wheel offer for organizations?",
+    question: "What tools does Little Wheel offer for organizations?",
     answer:
       "Little Wheel offers smart installments, payment links, progress trackers, and customizable tools to simplify operations, improve engagement, and grow customer or member bases.",
   },
@@ -46,8 +46,8 @@ export default function Faq() {
 
   return (
     <motion.div
-      initial={{ opacity: 0, x: -300 }}
-      whileInView={{ opacity: 1, x: 0 }}
+      initial={{ opacity: 0, y: 100 }}
+      whileInView={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6 }}
       id="faq"
       className="h-auto p-6 md:p-12 space-y-6 flex flex-col items-center bg-white"
@@ -56,9 +56,6 @@ export default function Faq() {
         <h1 className="text-2xl md:text-4xl font-extrabold text-black">
           Frequently Asked Questions
         </h1>
-        <p className="text-sm md:text-base text-[#344054]">
-          What do you think I must possess before you accept my proposal bunmi?
-        </p>
       </div>
       <div className="space-y-4 md:w-1/2 w-full">
         {faqs.map((faq, index) => (
@@ -75,11 +72,11 @@ export default function Faq() {
               transition={{ duration: 0.6 }}
             >
               <CollapsibleTrigger className="flex justify-between items-center bg-white border p-4 rounded-t-md w-full focus:outline-none">
-                <span>{faq.question}</span>
+                <span className="w-[85%] text-left">{faq.question}</span>
                 <PiCaretDown
                   size={20}
                   className={cn(
-                    "transition-transform duration-200",
+                    "w-[10%] transition-transform duration-200",
                     openFaqIndex === index ? "rotate-180" : ""
                   )}
                 />
