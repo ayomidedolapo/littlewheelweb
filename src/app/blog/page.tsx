@@ -4,7 +4,7 @@ import { Post } from "@littlewheel/types/posts";
 import { ScrollArea } from "@littlewheel/components/ui/scroll-area";
 import BlogHeader from "./components/blog-header";
 import BlogFooter from "./components/blog-footer";
-import Waitlist from "../landing/waitlist";
+import Waitlist from "../home/waitlist";
 
 export default function Blog() {
   const posts: Post[] = getAllPosts();

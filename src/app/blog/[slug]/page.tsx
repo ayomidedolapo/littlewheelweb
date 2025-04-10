@@ -7,7 +7,7 @@ import { PostWithHTML } from "@littlewheel/types/posts";
 import { ScrollArea } from "@littlewheel/components/ui/scroll-area";
 import BlogFooter from "../components/blog-footer";
 import BlogHeader from "../components/blog-header";
-import Waitlist from "@littlewheel/app/landing/waitlist";
+import Waitlist from "@littlewheel/app/home/waitlist";
 
 // Helper function to get post data
 async function getPostData(slug: string): Promise<PostWithHTML | null> {
