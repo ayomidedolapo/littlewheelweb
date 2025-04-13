@@ -76,15 +76,7 @@ export default function Waitlist() {
       id="waitlist"
       className="h-auto p-6 md:p-12 flex justify-center items-center bg-white"
     >
-      <div
-        className="bg-black w-full h-full rounded-lg overflow-hidden relative flex flex-col items-center px-6 sm:px-10 md:px-20 lg:px-40 py-10 md:py-40"
-        style={{
-          backgroundImage: "url('/uploads/ellipse.svg')",
-          backgroundSize: "contain",
-          backgroundPosition: "center",
-          backgroundRepeat: "no-repeat",
-        }}
-      >
+      <div className="bg-black bg-[url('/uploads/ellipse.svg')] bg-contain bg-center bg-no-repeat w-full h-full rounded-lg overflow-hidden relative flex flex-col items-center px-6 sm:px-10 md:px-20 lg:px-40 py-10 md:py-40">
         <h2 className="text-white text-2xl sm:text-3xl md:text-4xl font-bold text-center mb-4 z-10">
           Want to be the next (Mr/Ms) Money?
         </h2>
@@ -155,6 +147,7 @@ export default function Waitlist() {
           width={30}
           height={30}
           className="absolute -bottom-2 md:bottom-[10%] right-[10%] transform -translate-y-1/2 z-20"
+          priority
         />
       </div>
     </div>

@@ -49,6 +49,7 @@ export default function Vault1() {
                 width={40}
                 height={40}
                 className="rounded-md w-[15%] object-cover"
+                priority
               />
               <div className="space-y-1 flex-1">
                 <h2 className="text-sm font-semibold">{item.title}</h2>

@@ -17,6 +17,7 @@ export default function Vault2() {
           width={100}
           height={100}
           className="rounded-md w-[25%] aspect-square object-cover -rotate-12"
+          priority
         />
         <Image
           src="/uploads/buddies2.jpeg"
@@ -31,6 +32,7 @@ export default function Vault2() {
           width={100}
           height={100}
           className="rounded-md w-[25%] aspect-square object-cover rotate-12"
+          priority
         />
       </div>
     </div>

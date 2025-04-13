@@ -73,6 +73,7 @@ export default function BlogFooter() {
             width={340}
             height={90}
             className="max-w-full"
+            priority
           />
           <p className="text-sm text-[#344054] px-4">
             Build Wealth Little by Little

@@ -34,6 +34,7 @@ export default function DownloadVault() {
               width={32}
               height={32}
               className="w-8 h-8"
+              priority
             />
 
             <div className="relative overflow-hidden rounded-lg w-full max-w-[276px] h-[288.5px]">
@@ -43,6 +44,7 @@ export default function DownloadVault() {
                 width={276}
                 height={289}
                 className="absolute w-full h-full object-cover object-top"
+                priority
               />
             </div>
           </div>
@@ -74,6 +76,7 @@ export default function DownloadVault() {
                 width={276}
                 height={289}
                 className="absolute w-full h-full object-cover object-bottom"
+                priority
               />
             </div>
             <Image
@@ -82,6 +85,7 @@ export default function DownloadVault() {
               width={32}
               height={32}
               className="w-8 h-8"
+              priority
             />
           </div>
           <div className="space-y-1 p-4">

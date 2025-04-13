@@ -32,6 +32,7 @@ export default function About() {
                     alt=""
                     width={20}
                     height={20}
+                    priority
                   />
                 </span>
                 Community Driven
@@ -43,6 +44,7 @@ export default function About() {
                     alt=""
                     width={20}
                     height={20}
+                    priority
                   />
                 </span>
                 Transparency
@@ -54,6 +56,7 @@ export default function About() {
                     alt=""
                     width={20}
                     height={20}
+                    priority
                   />
                 </span>
                 Security and Secured
@@ -67,6 +70,7 @@ export default function About() {
               alt=""
               width={40}
               height={40}
+              priority
             />
             <div className="w-[60%] md:w-[70%] transform overflow-hidden hidden md:block">
               <Image
@@ -75,6 +79,7 @@ export default function About() {
                 width={500}
                 height={400}
                 className="w-full h-auto"
+                priority
               />
             </div>
             <div className="w-[70%] md:w-full p-1 z-10 block md:hidden">
@@ -96,6 +101,7 @@ export default function About() {
               alt=""
               width={40}
               height={40}
+              priority
             />
             <div className="w-[70%] md:w-full p-1 z-10 hidden md:block">
               <Image
@@ -104,6 +110,7 @@ export default function About() {
                 width={500}
                 height={400}
                 className="w-full h-auto"
+                priority
               />
             </div>
             <div className="w-[60%] md:w-[70%] transform overflow-hidden block md:hidden">
@@ -113,6 +120,7 @@ export default function About() {
                 width={500}
                 height={400}
                 className="w-full h-auto"
+                priority
               />
             </div>
           </div>

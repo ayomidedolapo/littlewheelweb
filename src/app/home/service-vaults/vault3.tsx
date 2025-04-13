@@ -22,10 +22,17 @@ export default function Vault3() {
           width={300}
           height={300}
           className="rounded-md md:w-[30%] w-16 aspect-square object-cover"
+          priority
         />
         <div className="space-y-1 ">
           <div className="w-1/2 rounded-lg p-3 bg-[#E3EFFC] flex items-center gap-2">
-            <Image src="/uploads/charity.svg" alt="" width={20} height={20} />
+            <Image
+              src="/uploads/charity.svg"
+              priority
+              alt=""
+              width={20}
+              height={20}
+            />
             <span className="text-xs">Charity</span>
           </div>
           <h2 className="text-sm font-semibold">

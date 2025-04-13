@@ -71,6 +71,7 @@ export default function Header() {
         width={150}
         height={40}
         className="md:-ml-36 ml-0"
+        priority
       />
 
       <FaBars

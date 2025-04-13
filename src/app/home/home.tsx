@@ -132,6 +132,7 @@ export default function HomeScreen() {
           width={1}
           height={1}
           className="w-[250px] md:w-[510px]"
+          priority
         />
       </div>
     </div>
