@@ -205,7 +205,7 @@ export default function BlogFooter() {
             <p>Nigeria: Sango Terminal, Sango, Ibadan, Nigeria. 07088867396</p>
             <p>
               United Kingdom: 14/2E Docklands Business Centre 10-16 Tiller Road
-              London United Kingdom E14 8PX
+              London United Kingdom E14 8PX. +447397667543
             </p>
           </div>
           <p>All Rights Reserved, 2025 || Little Wheel.</p>
