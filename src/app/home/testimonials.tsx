@@ -75,7 +75,7 @@ export default function Testimonials() {
           </Avatar>
         </div>
         <p className="text-white text-sm md:text-base">
-          Thousands of satisfied Little Wheeler savers!
+          Thousands of satisfied savers!
         </p>
       </div>
 

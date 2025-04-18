@@ -360,7 +360,7 @@ export default function RootLayout({
         </Script>
       </head>
       <body
-        className="antialiased bg-background text-foreground"
+        className="antialiased bg-background text-foreground overflow-hidden"
         style={{ fontFamily: "var(--font-inter-18pt)" }}
       >
         <ThemeProvider

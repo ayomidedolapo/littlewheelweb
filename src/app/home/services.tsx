@@ -19,12 +19,11 @@ export default function Services() {
     >
       <div className="flex flex-col items-center text-center space-y-4">
         <h1 className="text-2xl md:text-4xl font-extrabold text-black">
-          Build Financial Freedom with
-          <br /> the Little Wheel
+          Billings Everywhere, Start Saving Now
         </h1>
         <p className="text-sm md:text-base text-[#344054]">
-          Unlock your financial potential with tools and services designed for
-          every journey and dream.
+          Start small, grow big. From ten naira to ten trillion. Use our smart
+          structures and solid systems to control your money.
         </p>
       </div>
 

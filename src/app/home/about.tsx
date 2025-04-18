@@ -11,18 +11,21 @@ export default function About() {
       transition={{ duration: 0.6 }}
     >
       <div className="flex flex-col lg:flex-row justify-between space-y-10 lg:space-y-0 lg:space-x-10">
-        <div className="lg:w-1/2 space-y-12">
+        <div className="lg:w-3/5 space-y-12">
           <div className="space-y-4">
             <p className="text-xl sm:text-2xl md:text-3xl font-bold">
-              Everyone deserves to be a baller,
+              Everyone deserves to be a winner,
               <br />
               Our mission is to make you one
             </p>
             <p className="text-sm md:text-base leading-relaxed">
-              No be who hustle pass dey carry first, na who use Little Wheel.
-              Your rich uncle/aunty dreams are valid. We are redefining finance
-              by creating a financial ecosystem that provides you with every
-              tool you need to reach your financial goals.
+              Hustle Smart, Save Wise with Little Wheel. You can be more when
+              you master your money.
+            </p>
+            <p className="text-sm md:text-base leading-relaxed">
+              We are redefining finance by creating a financial ecosystem that
+              provides you with every tool you need to reach your financial
+              goals and build the life of your dreams..
             </p>
             <ul className="space-y-2">
               <li className="flex items-center">
@@ -35,7 +38,7 @@ export default function About() {
                     priority
                   />
                 </span>
-                Community Driven
+                Automated and Intuitive
               </li>
               <li className="flex items-center">
                 <span className="mr-2">
@@ -47,7 +50,7 @@ export default function About() {
                     priority
                   />
                 </span>
-                Transparency
+                Community Focused
               </li>
               <li className="flex items-center">
                 <span className="mr-2">
@@ -59,7 +62,7 @@ export default function About() {
                     priority
                   />
                 </span>
-                Security and Secured
+                Smart Installments
               </li>
             </ul>
           </div>

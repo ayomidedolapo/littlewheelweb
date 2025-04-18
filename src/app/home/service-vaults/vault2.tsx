@@ -7,8 +7,8 @@ export default function Vault2() {
         <strong>Create/Join Group Vaults</strong>
       </p>
       <p className="text-xs md:text-sm leading-relaxed">
-        Save together, ball together. Team up with your friends to save for a
-        shared goal.
+        Save together, win together. Set smart money goals with friends and
+        achieve them together.
       </p>
       <div className="relative h-40 flex items-center justify-center gap-20">
         <Image

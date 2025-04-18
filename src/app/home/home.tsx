@@ -4,6 +4,7 @@ import { MdMail } from "react-icons/md";
 import { PiArrowRight } from "react-icons/pi";
 import { toast } from "sonner";
 import Image from "next/image";
+import { TypeAnimation } from "react-type-animation";
 
 export default function HomeScreen() {
   const [email, setEmail] = useState("");
@@ -73,18 +74,36 @@ export default function HomeScreen() {
   return (
     <div
       id="home"
-      className="bg-white bg-[url('/uploads/vector.svg')] bg-cover bg-center h-[92vh] text-black grid grid-cols-1 md:grid-cols-2 items-center "
+      className="bg-white bg-[url('/uploads/vector.svg')] bg-cover bg-center h-[92vh] text-black grid grid-cols-1 md:grid-cols-[55%_45%] items-center "
     >
       <div className="space-y-3 text-center md:text-left px-6 md:p-10">
         <h1 className="text-4xl font-calsans">
           Your money era needs{" "}
-          <span className="font-['Instrument_Serif'] text-[40px]">a plan.</span>
-          <br className="hidden md:block" /> Step into it with Little Wheel.
+          <span className="font-['Instrument_Serif'] text-[40px]">
+            <TypeAnimation
+              sequence={[
+                "a plan.",
+                1000,
+                "cash.",
+                1000,
+                "discipline.",
+                1000,
+                "management.",
+                1000,
+                "people.",
+                1000,
+                "a community.",
+                1000,
+              ]}
+              speed={50}
+              repeat={Infinity}
+            />
+          </span>
+          <br /> Step into it with Little Wheel.
         </h1>
         <p className="text-[#475367] text-sm md:text-base leading">
-          We dey for you. Steady increase the commas and turn up the
-          <br className="hidden md:block" />
-          hustle with Little Wheel tools and services.
+          Less Wahala, More Wins. <br className="hidden md:block" />
+          Save smarter, be your own boss and build your future.
         </p>
 
         <form

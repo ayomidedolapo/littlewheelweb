@@ -32,8 +32,8 @@ export default function Vault1() {
         <strong>Start a Personal Vault</strong>
       </p>
       <p className="text-xs md:text-sm leading-relaxed">
-        Save first, flex later. Start small, stack the cash and wheel towards
-        your financial goals.
+        Save first, enjoy later. Start small, build your wealth and wheel
+        towards your financial goals.
       </p>
 
       <ScrollArea className="h-40 px-4">
