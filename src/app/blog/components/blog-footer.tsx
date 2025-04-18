@@ -1,3 +1,4 @@
+//src/app/blog/components/blog-footer.tsx
 "use client";
 import { Separator } from "@littlewheel/components/ui/separator";
 import {

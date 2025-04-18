@@ -5,6 +5,7 @@ import { PiArrowRight } from "react-icons/pi";
 import { cn } from "@littlewheel/lib/utils";
 import { toast } from "sonner";
 import Image from "next/image";
+import { TypeAnimation } from "react-type-animation";
 
 export default function Waitlist() {
   const [email, setEmail] = useState("");
@@ -78,7 +79,13 @@ export default function Waitlist() {
     >
       <div className="bg-black bg-[url('/uploads/ellipse.svg')] bg-contain bg-center bg-no-repeat w-full h-full rounded-lg overflow-hidden relative flex flex-col items-center px-6 sm:px-10 md:px-20 lg:px-40 py-10 md:py-40">
         <h2 className="text-white text-2xl sm:text-3xl md:text-4xl font-bold text-center mb-4 z-10">
-          Want to be the next (Mr/Ms) Money?
+          Want to be the next{" "}
+          <TypeAnimation
+            sequence={["Mr", 1000, "Mrs", 1000]}
+            speed={50}
+            repeat={Infinity}
+          />
+          Money?
         </h2>
         <p className="text-white text-center mb-8 z-10">
           Hop on the Wheel and join the waitlist. Let’s spin you into your money
