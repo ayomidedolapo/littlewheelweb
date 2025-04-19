@@ -71,7 +71,7 @@ export default function Testimonials() {
             </Avatar>
           ))}
           <Avatar className="w-8 h-8 bg-[#ffece5] text-xs border border-white -ml-2">
-            <AvatarFallback>+10</AvatarFallback>
+            <AvatarFallback>+3k</AvatarFallback>
           </Avatar>
         </div>
         <p className="text-white text-sm md:text-base">
