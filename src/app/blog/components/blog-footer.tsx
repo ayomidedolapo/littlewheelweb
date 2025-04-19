@@ -209,7 +209,7 @@ export default function BlogFooter() {
               London United Kingdom E14 8PX. +447397667543
             </p>
           </div>
-          <p>Little Wheel Tech. Ltd 2025</p>
+          <p>&#169;Little Wheel Tech. Ltd 2025</p>
         </div>
       </div>
     </motion.footer>
