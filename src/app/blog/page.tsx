@@ -14,29 +14,29 @@ export default function Blog() {
       <BlogHeader />
       <ScrollArea className="h-[calc(100vh-64px)]">
         <main className="h-full flex flex-col items-center py-16 px-4">
-          <h1 className="text-4xl font-bold mb-8">Blog</h1>
+          <h1 className="text-4xl font-bold">Blog</h1>
 
           {posts.length > 0 ? (
-            <ul className="w-full max-w-3xl space-y-6">
+            <ul className="w-full max-w-3xl py-5 space-y-6">
               {posts.map((post) => (
                 <li key={post.slug} className="border-b pb-4">
                   <Link
                     href={`/blog/${post.slug}`}
-                    className="text-xl font-semibold text-blue-600 hover:underline"
+                    className="text-xl font-semibold text-[#2563EB] hover:underline"
                   >
                     {post.title}
                   </Link>
-                  <p className="text-sm text-gray-500 mt-1">{post.date}</p>
+                  <p className="text-sm text-[#6B7280] mt-1">{post.date}</p>
                   {post.excerpt && (
-                    <p className="mt-2 text-gray-700">{post.excerpt}</p>
+                    <p className="mt-2 text-[#374151]">{post.excerpt}</p>
                   )}
                 </li>
               ))}
             </ul>
           ) : (
-            <div className="text-center py-10">
-              <p className="text-xl text-gray-600">No blog posts found</p>
-              <p className="mt-4">Check back soon for new content!</p>
+            <div className="text-center py-5 space-y-6">
+              <p className="text-xl text-[#4B5563]">The Creatives are cooking</p>
+              <p>Check back soon for new content!</p>
             </div>
           )}
         </main>
