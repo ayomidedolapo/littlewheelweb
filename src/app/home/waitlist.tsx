@@ -81,7 +81,7 @@ export default function Waitlist() {
         <h2 className="text-white text-2xl sm:text-3xl md:text-4xl font-bold text-center mb-4 z-10">
           Want to be the next{" "}
           <TypeAnimation
-            sequence={["Mr", 1000, "Mrs", 1000]}
+            sequence={["Mr.", 1000, "Ms.", 1000]}
             speed={50}
             repeat={Infinity}
           />
@@ -90,8 +90,6 @@ export default function Waitlist() {
         <p className="text-white text-center mb-8 z-10">
           Hop on the Wheel and join the waitlist. Let’s spin you into your money
           era!
-          <br className="hidden md:block" /> Prepare to cash in, because this
-          ride’s about to pay off
         </p>
 
         <form
