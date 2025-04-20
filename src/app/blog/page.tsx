@@ -1,3 +1,4 @@
+//src/app/blog/page.tsx
 import getAllPosts from "@littlewheel/lib/posts";
 import Link from "next/link";
 import { Post } from "@littlewheel/types/posts";
@@ -35,7 +36,9 @@ export default function Blog() {
             </ul>
           ) : (
             <div className="text-center py-5 space-y-6">
-              <p className="text-xl text-[#4B5563]">The Creatives are cooking</p>
+              <p className="text-xl text-[#4B5563]">
+                The Creatives are cooking
+              </p>
               <p>Check back soon for new content!</p>
             </div>
           )}
