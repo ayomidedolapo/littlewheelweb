@@ -4,6 +4,8 @@ export interface PostMetadata {
   excerpt?: string;
   date: string;
   author: string;
+  content: string;
+  tags?: string[];
   [key: string]: unknown; // For any additional frontmatter properties
 }
 
