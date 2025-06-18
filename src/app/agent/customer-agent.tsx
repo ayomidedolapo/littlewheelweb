@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import Image from "next/image";
+import FacilitatorIcon from "../../../public/uploads/facilitator";
 
 const aspectRelationship = [
   {
@@ -83,11 +84,7 @@ export default function CustomerAgent() {
           <div className="grid md:grid-cols-[30%_30%] gap-4 justify-around">
             {aspectRelationship.map((item, index) => (
               <div key={index} className="space-y-2">
-                <div className="flex items-center justify-center w-8 h-8 bg-[#F9FAFB] rounded-full border border-[#101928]">
-                  <span className="text-sm font-bold text-[#101928]">
-                    {index + 1}
-                  </span>
-                </div>
+                <FacilitatorIcon />
                 <div className="space-y-2">
                   <h3 className="font-semibold">{item.title}</h3>
                   <p className="text-sm text-[#344054]">{item.description}</p>
