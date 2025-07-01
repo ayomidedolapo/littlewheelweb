@@ -78,7 +78,7 @@ export default function Terms() {
                     <button
                       key={section.id}
                       className={cn(
-                        "text-left  pl-2 -ml-[17px]",
+                        "text-left  pl-2 -ml-[17px] cursor-pointer",
                         activeSection === section.id
                           ? "text-black font-bold border-l-2 border-black pl-2"
                           : "text-[#344054]"

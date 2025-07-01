@@ -1,24 +1,33 @@
 import { motion } from "framer-motion";
 import Image from "next/image";
-import FacilitatorIcon from "../../../public/uploads/facilitator";
+import {
+  PiEyeDuotone,
+  PiHandshakeDuotone,
+  PiShieldCheckDuotone,
+  PiWalletDuotone,
+} from "react-icons/pi";
 
 const aspectRelationship = [
   {
+    icon: PiHandshakeDuotone,
     title: "Agents act as facilitators",
     description:
       "They assist customers in saving money by using their own app interface.",
   },
   {
+    icon: PiShieldCheckDuotone,
     title: "Customers trust agents with their deposits",
     description:
       "Since some customers may not have smartphones, agents help them track their savings.",
   },
   {
+    icon: PiWalletDuotone,
     title: "Agents earn commissions",
     description:
       "Every time an agent facilitates a savings transaction, they receive a commission as an incentive.",
   },
   {
+    icon: PiEyeDuotone,
     title: "Transparency",
     description:
       "Both customers and agents receive transaction alerts to ensure trust and accountability.",
@@ -81,16 +90,23 @@ export default function CustomerAgent() {
           <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-center">
             Key Aspects of the Relationship
           </h2>
-          <div className="grid md:grid-cols-[30%_30%] gap-4 justify-around">
-            {aspectRelationship.map((item, index) => (
-              <div key={index} className="space-y-2">
-                <FacilitatorIcon />
-                <div className="space-y-2">
-                  <h3 className="font-semibold">{item.title}</h3>
-                  <p className="text-sm text-[#344054]">{item.description}</p>
+          <div className="grid md:grid-cols-[45%_45%] gap-4 justify-around">
+            {aspectRelationship.map((item, index) => {
+              const Icon = item.icon;
+              return (
+                <div key={index} className="space-y-2">
+                  <Icon size={24} />
+                  <div className="space-y-2">
+                    <h3 className="font-semibold leading-relaxed">
+                      {item.title}
+                    </h3>
+                    <p className="text-sm text-[#344054] leading-relaxed">
+                      {item.description}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>

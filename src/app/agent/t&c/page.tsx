@@ -1,9 +1,9 @@
 "use client";
-import Footer from "@littlewheel/components/footer";
-import Header from "@littlewheel/components/header";
 import { ScrollArea } from "@littlewheel/components/ui/scroll-area";
 import { cn } from "@littlewheel/lib/utils";
 import { useEffect, useRef, useState } from "react";
+import AgentHeader from "../component/agent-header";
+import AgentFooter from "../component/agent-footer";
 
 const policySections = [
   { id: "user-categories", title: "User Categories Covered" },
@@ -47,7 +47,7 @@ export default function Terms() {
 
   return (
     <div className="h-screen bg-[#F9FAFB] w-full m-0 p-0 overflow-hidden text-black">
-      <Header />
+      <AgentHeader />
       <ScrollArea className="h-[90%]">
         <div className="flex flex-col">
           <section
@@ -71,13 +71,13 @@ export default function Terms() {
           <section className="min-h-[80vh] bg-[#f5f5f5] p-6 md:px-20 md:py-20 relative">
             <div className="grid grid-cols-1 md:grid-cols-[35%_auto] gap-8">
               <div className="hidden md:flex gap-4">
-                <div className="h-[420px] border-l border-[#D0D5DD] transition-all duration-300" />
+                <div className="h-[300px] border-l border-[#D0D5DD] transition-all duration-300" />
                 <nav className="flex flex-col space-y-4">
                   {policySections.map((section) => (
                     <button
                       key={section.id}
                       className={cn(
-                        "text-left pl-2 -ml-[17px]",
+                        "text-left pl-2 -ml-[17px] cursor-pointer",
                         activeSection === section.id
                           ? "text-black font-bold border-l-2 border-black pl-2"
                           : "text-[#344054]"
@@ -353,7 +353,7 @@ export default function Terms() {
               </div>
             </div>
           </section>
-          <Footer />
+          <AgentFooter />
         </div>
       </ScrollArea>
     </div>

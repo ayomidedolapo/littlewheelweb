@@ -10,13 +10,13 @@ const steps = [
   },
   {
     id: 2,
-    title: "Help customers save by depositing their cash into their vaults",
+    title: "Recharge your Wallet",
     description:
       "No be who hustle pass dey carry first, na who use Little Wheel. Your rich uncle/aunty dreams are valid. We are redefining finance",
   },
   {
     id: 3,
-    title: "Earn commission on every transaction",
+    title: "Help customers save by depositing their cash into their vaults",
     description:
       "No be who hustle pass dey carry first, na who use Little Wheel. Your rich uncle/aunty dreams are valid. We are redefining finance",
   },
@@ -40,22 +40,25 @@ export default function GetStarted() {
         <div className="space-y-8 md:space-y-12">
           <div>
             <h2 className="text-xl sm:text-2xl md:text-3xl font-bold">
-              Get Started in 3 steps
+              Get Started in 4 steps
             </h2>
-            <p className="text-sm md:text-base leading-relaxed">
+            {/* <p className="text-sm md:text-base leading-relaxed">
               No be who hustle pass dey carry first, na who use Little Wheel.
-            </p>
+            </p> */}
           </div>
 
           <div className="space-y-4">
             {steps.map((step) => (
-              <div key={step.id} className="flex gap-4">
-                <div className="flex items-center justify-center w-20 h-10 md:w-10 md:h-8 p-2 bg-white rounded-full text-sm text-black font-bold">
+              <div
+                key={step.id}
+                className="grid grid-cols-[10%_90%] gap-4 items-center"
+              >
+                <div className="flex items-center justify-center w-10 h-10  p-2 bg-white rounded-full text-sm text-black font-bold">
                   {step.id}
                 </div>
                 <div>
                   <h2 className="font-semibold">{step.title}</h2>
-                  <p className="text-sm leading-relaxed">{step.description}</p>
+                  {/* <p className="text-sm leading-relaxed">{step.description}</p> */}
                 </div>
               </div>
             ))}

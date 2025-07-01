@@ -21,8 +21,9 @@ export default function AgentKnowlege() {
 
             {[
               "POS Operator",
-              "Get access to financial growth opportunities and tools.",
-              "Easy-to-use mobile app with real-time tracking.",
+              "Shop owners and small business owners",
+              "People looking for extra income",
+              "Community leaders",
             ].map((item, index) => (
               <div key={index} className="flex items-center gap-4">
                 <WheelIcon />
@@ -56,11 +57,10 @@ export default function AgentKnowlege() {
             </h2>
             {[
               "Earn commissions on every savings transaction",
-              "Shop owners and small business owners",
-              "People looking for extra income",
-              "Community leaders",
+              "Get access to financial growth opportunities and tools.",
+              "Easy-to-use mobile app with real-time tracking.",
             ].map((item, index) => (
-              <div key={index} className="flex items-center gap-4">
+              <div key={index} className="flex md:items-center gap-4">
                 <IoMdCheckmark />
                 <span className="text-sm leading-relaxed">{item}</span>
               </div>

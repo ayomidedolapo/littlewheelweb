@@ -1,9 +1,9 @@
 "use client";
-import Footer from "@littlewheel/components/footer";
-import Header from "@littlewheel/components/header";
 import { ScrollArea } from "@littlewheel/components/ui/scroll-area";
 import { cn } from "@littlewheel/lib/utils";
 import { useEffect, useRef, useState } from "react";
+import AgentHeader from "../component/agent-header";
+import AgentFooter from "../component/agent-footer";
 
 const policySections = [
   { id: "scope", title: "Scope of This Policy" },
@@ -48,7 +48,7 @@ export default function PivacyPolicy() {
   }, []);
   return (
     <div className="h-screen bg-[#F9FAFB] w-full m-0 p-0 overflow-hidden text-black">
-      <Header />
+      <AgentHeader />
       <ScrollArea className="h-[90%]">
         <div className="flex flex-col">
           <section
@@ -77,7 +77,7 @@ export default function PivacyPolicy() {
                     <button
                       key={section.id}
                       className={cn(
-                        "text-left  pl-2 -ml-[17px]",
+                        "text-left  pl-2 -ml-[17px] cursor-pointer",
                         activeSection === section.id
                           ? "text-black font-bold border-l-2 border-black pl-2"
                           : "text-[#344054]"
@@ -412,7 +412,7 @@ export default function PivacyPolicy() {
               </div>
             </div>
           </section>
-          <Footer />
+          <AgentFooter />
         </div>
       </ScrollArea>
     </div>
