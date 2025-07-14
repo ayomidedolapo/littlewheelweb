@@ -26,7 +26,10 @@ export default function BecomeAgent() {
               height={200}
             />
           </Link>
-          <Link href="https://play.google.com/store/apps/" target="_blank">
+          <Link
+            href="https://play.google.com/store/apps/details?id=com.lilttlewheel.agentapp&pcampaignid=web_share"
+            target="_blank"
+          >
             <Image
               src="/uploads/google-store.svg"
               alt=""
