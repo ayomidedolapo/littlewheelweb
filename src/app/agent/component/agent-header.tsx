@@ -10,6 +10,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@littlewheel/components/ui/dropdown-menu";
+import { toast } from "sonner";
 
 export default function AgentHeader() {
   return (
@@ -34,13 +35,21 @@ export default function AgentHeader() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem asChild>
-              <Link href="https://apps.apple.com/" target="_blank">
-                iOS (App Store)
-              </Link>
+            <DropdownMenuItem
+              onClick={() =>
+                toast.info(
+                  "iOS app is not available yet. Please check back soon!"
+                )
+              }
+              className="cursor-pointer"
+            >
+              iOS (App Store)
             </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="https://play.google.com/store/apps/details?id=com.lilttlewheel.agentapp&pcampaignid=web_share" target="_blank">
+            <DropdownMenuItem asChild className="cursor-pointer">
+              <Link
+                href="https://play.google.com/store/apps/details?id=com.lilttlewheel.agentapp&pcampaignid=web_share"
+                target="_blank"
+              >
                 Android (Google Play)
               </Link>
             </DropdownMenuItem>

@@ -1,6 +1,7 @@
 import { TbPlug } from "react-icons/tb";
 import Image from "next/image";
 import Link from "next/link";
+import { toast } from "sonner";
 
 export default function HomeScreen() {
   return (
@@ -27,15 +28,34 @@ export default function HomeScreen() {
         </div>
 
         <div className="grid grid-cols-2 items-center gap-4">
-          <Link href="https://apps.apple.com/" target="_blank">
+          {/* <Link href="https://apps.apple.com/" target="_blank">
             <Image
               src="/uploads/apple-store.svg"
               alt=""
               width={200}
               height={200}
             />
-          </Link>
-          <Link href="https://play.google.com/store/apps/" target="_blank">
+          </Link> */}
+          <button
+            onClick={() =>
+              toast.info(
+                "iOS app is not available yet. Please check back soon!"
+              )
+            }
+            className="focus:outline-none"
+          >
+            <Image
+              src="/uploads/apple-store.svg"
+              alt="Apple Store"
+              width={200}
+              height={200}
+            />
+          </button>
+
+          <Link
+            href="https://play.google.com/store/apps/details?id=com.lilttlewheel.agentapp&pcampaignid=web_share"
+            target="_blank"
+          >
             <Image
               src="/uploads/google-store.svg"
               alt=""
