@@ -28,6 +28,7 @@ export default function BecomeAgent() {
             />
           </Link> */}
           <button
+            title="app unavailable"
             onClick={() =>
               toast.info(
                 "iOS app is not available yet. Please check back soon!"
