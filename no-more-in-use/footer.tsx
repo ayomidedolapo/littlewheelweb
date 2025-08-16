@@ -1,4 +1,3 @@
-//src/app/blog/components/blog-footer.tsx
 "use client";
 import { Separator } from "@littlewheel/components/ui/separator";
 import {
@@ -14,8 +13,11 @@ import Image from "next/image";
 import Link from "next/link";
 
 const quickLinks = [
-  { id: 1, name: "Home", to: "/" },
-  { id: 5, name: "Blog", to: "/blog" },
+  { id: 1, name: "Home", to: "home", type: "section" },
+  { id: 2, name: "About Us", to: "about", type: "section" },
+  { id: 3, name: "Our Services", to: "services", type: "section" },
+  { id: 4, name: "FAQ", to: "faq", type: "section" },
+  { id: 5, name: "Blog", to: "/blog", type: "link" },
 ];
 
 const legalLinks = [
@@ -58,13 +60,19 @@ const socialLinks = [
   },
 ];
 
-export default function BlogFooter() {
+export default function Footer() {
+  const scrollToSection = (id: string) => {
+    const section = document.getElementById(id);
+    if (section) {
+      section.scrollIntoView({ behavior: "smooth" });
+    }
+  };
   return (
     <motion.footer
       initial={{ opacity: 0, y: -100 }}
       whileInView={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6 }}
-      className="p-6 md:p-12"
+      className="p-6 md:p-12 bg-black text-white"
     >
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <div>
@@ -76,12 +84,12 @@ export default function BlogFooter() {
             className="max-w-full"
             priority
           />
-          <p className="text-sm text-[#344054] px-4">
+          <p className="text-sm text-[#F7F9FC] px-4">
             Build Wealth Little by Little
           </p>
 
           <div className="p-4 hidden md:block">
-            <p className="text-sm text-[#344054] mt-4">Follow us on:</p>
+            <p className="text-sm text-[#F7F9FC] mt-4">Follow us on:</p>
             <div className="flex space-x-4 mt-2">
               {socialLinks.map((social, index) => (
                 <a
@@ -105,12 +113,21 @@ export default function BlogFooter() {
             <ul className="space-y-2">
               {quickLinks.map((link, index) => (
                 <li key={index}>
-                  <Link
-                    href={link.to}
-                    className="hover:font-bold hover:underline text-sm"
-                  >
-                    {link.name}
-                  </Link>
+                  {link.type === "link" ? (
+                    <Link
+                      href={link.to}
+                      className="hover:font-bold hover:underline text-sm"
+                    >
+                      {link.name}
+                    </Link>
+                  ) : (
+                    <button
+                      onClick={() => scrollToSection(link.to)}
+                      className="hover:font-bold hover:underline text-sm"
+                    >
+                      {link.name}
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -178,7 +195,7 @@ export default function BlogFooter() {
             ))}
           </div>
         </div>
-        <div className="w-full space-y-5 text-[#344054] text-sm">
+        <div className="w-full space-y-5 text-[#F7F9FC] text-sm">
           <div className="space-y-3">
             <p>
               Little Wheel is an end-to-end software that provides individuals
@@ -209,7 +226,8 @@ export default function BlogFooter() {
               London United Kingdom E14 8PX. +447397667543
             </p>
           </div>
-          <p>&#169;Little Wheel Tech. Ltd 2025</p>
+          {/* <p>&#169;Little Wheel Tech. Ltd 2025</p> */}
+          <p>All Right reserved, 2025 || Little Wheel.</p>
         </div>
       </div>
     </motion.footer>

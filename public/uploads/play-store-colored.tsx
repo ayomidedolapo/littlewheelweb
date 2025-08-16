@@ -22,7 +22,7 @@ export default function PlayStoreColored({ size = 189 }) {
         height="54.7"
         rx="5.85"
         stroke="#A6A6A6"
-        stroke-width="1.3"
+        strokeWidth="1.3"
       />
       <g filter="url(#filter0_ii_15925_54620)">
         <path
@@ -79,44 +79,44 @@ export default function PlayStoreColored({ size = 189 }) {
       <path
         d="M66.385 14.34C66.385 15.5132 66.0378 16.447 65.342 17.1442C64.5524 17.973 63.522 18.3874 62.2564 18.3874C61.044 18.3874 60.0122 17.9674 59.1652 17.1274C58.3168 16.286 57.8926 15.2444 57.8926 14.0012C57.8926 12.7566 58.3168 11.715 59.1652 10.875C60.0122 10.0336 61.044 9.61358 62.2564 9.61358C62.8584 9.61358 63.4338 9.73117 63.9798 9.96497C64.5272 10.2002 64.9654 10.5124 65.293 10.903L64.5552 11.6422C63.9994 10.9772 63.2336 10.6454 62.255 10.6454C61.3702 10.6454 60.6058 10.9562 59.9604 11.5778C59.315 12.1994 58.993 13.0072 58.993 13.9998C58.993 14.9924 59.315 15.8002 59.9604 16.4218C60.6058 17.0434 61.3702 17.3542 62.255 17.3542C63.193 17.3542 63.9756 17.042 64.6014 16.4162C65.0074 16.0088 65.2426 15.4418 65.3056 14.7152H62.255V13.7058H66.3248C66.3668 13.9256 66.385 14.137 66.385 14.34Z"
         stroke="white"
-        stroke-width="0.26"
-        stroke-miterlimit="10"
+        strokeWidth="0.26"
+        strokeMiterlimit="10"
       />
       <path
         d="M72.8391 10.8317H69.0143V13.4945H72.4639V14.5039H69.0143V17.1667H72.8391V18.1999H67.9349V9.79985H72.8391V10.8317Z"
         stroke="white"
-        stroke-width="0.26"
-        stroke-miterlimit="10"
+        strokeWidth="0.26"
+        strokeMiterlimit="10"
       />
       <path
         d="M77.3903 18.1999H76.311V10.8317H73.9646V9.79985H79.7367V10.8317H77.3903V18.1999Z"
         stroke="white"
-        stroke-width="0.26"
-        stroke-miterlimit="10"
+        strokeWidth="0.26"
+        strokeMiterlimit="10"
       />
       <path
         d="M83.9129 18.1999V9.79985H84.9923V18.1999H83.9129Z"
         stroke="white"
-        stroke-width="0.26"
-        stroke-miterlimit="10"
+        strokeWidth="0.26"
+        strokeMiterlimit="10"
       />
       <path
         d="M89.7791 18.1999H88.6997V10.8317H86.3533V9.79985H92.1255V10.8317H89.7791V18.1999Z"
         stroke="white"
-        stroke-width="0.26"
-        stroke-miterlimit="10"
+        strokeWidth="0.26"
+        strokeMiterlimit="10"
       />
       <path
         d="M103.052 17.1148C102.226 17.9632 101.2 18.3874 99.9722 18.3874C98.7444 18.3874 97.7182 17.9632 96.8936 17.1148C96.0676 16.2664 95.656 15.2276 95.656 13.9998C95.656 12.772 96.0676 11.7332 96.8936 10.8848C97.7182 10.0364 98.7444 9.61084 99.9722 9.61084C101.193 9.61084 102.218 10.0378 103.047 10.8904C103.875 11.743 104.29 12.779 104.29 13.9998C104.29 15.2276 103.877 16.2664 103.052 17.1148ZM97.6902 16.4106C98.3118 17.0406 99.072 17.3542 99.9722 17.3542C100.872 17.3542 101.634 17.0392 102.254 16.4106C102.876 15.7806 103.188 14.977 103.188 13.9998C103.188 13.0226 102.876 12.219 102.254 11.589C101.634 10.959 100.872 10.6454 99.9722 10.6454C99.072 10.6454 98.3118 10.9604 97.6902 11.589C97.07 12.219 96.7578 13.0226 96.7578 13.9998C96.7578 14.977 97.07 15.7806 97.6902 16.4106Z"
         stroke="white"
-        stroke-width="0.26"
-        stroke-miterlimit="10"
+        strokeWidth="0.26"
+        strokeMiterlimit="10"
       />
       <path
         d="M105.805 18.1999V9.79985H107.118L111.2 16.3337H111.246L111.2 14.7153V9.79985H112.28V18.1999H111.153L106.881 11.3483H106.835L106.881 12.9667V18.1999H105.805Z"
         stroke="white"
-        stroke-width="0.26"
-        stroke-miterlimit="10"
+        strokeWidth="0.26"
+        strokeMiterlimit="10"
       />
       <defs>
         <filter
@@ -126,9 +126,9 @@ export default function PlayStoreColored({ size = 189 }) {
           width="32.3242"
           height="36.0088"
           filterUnits="userSpaceOnUse"
-          color-interpolation-filters="sRGB"
+          colorInterpolationFilters="sRGB"
         >
-          <feFlood flood-opacity="0" result="BackgroundImageFix" />
+          <feFlood floodOpacity="0" result="BackgroundImageFix" />
           <feBlend
             mode="normal"
             in="SourceGraphic"
@@ -177,9 +177,9 @@ export default function PlayStoreColored({ size = 189 }) {
           width="23.3613"
           height="18.0049"
           filterUnits="userSpaceOnUse"
-          color-interpolation-filters="sRGB"
+          colorInterpolationFilters="sRGB"
         >
-          <feFlood flood-opacity="0" result="BackgroundImageFix" />
+          <feFlood floodOpacity="0" result="BackgroundImageFix" />
           <feBlend
             mode="normal"
             in="SourceGraphic"
@@ -212,12 +212,12 @@ export default function PlayStoreColored({ size = 189 }) {
           y2="35.6871"
           gradientUnits="userSpaceOnUse"
         >
-          <stop stop-color="#00A0FF" />
-          <stop offset="0.0066" stop-color="#00A1FF" />
-          <stop offset="0.2601" stop-color="#00BEFF" />
-          <stop offset="0.5122" stop-color="#00D2FF" />
-          <stop offset="0.7604" stop-color="#00DFFF" />
-          <stop offset="1" stop-color="#00E3FF" />
+          <stop stopColor="#00A0FF" />
+          <stop offset="0.0066" stopColor="#00A1FF" />
+          <stop offset="0.2601" stopColor="#00BEFF" />
+          <stop offset="0.5122" stopColor="#00D2FF" />
+          <stop offset="0.7604" stopColor="#00DFFF" />
+          <stop offset="1" stopColor="#00E3FF" />
         </linearGradient>
         <linearGradient
           id="paint1_linear_15925_54620"
@@ -227,10 +227,10 @@ export default function PlayStoreColored({ size = 189 }) {
           y2="28.001"
           gradientUnits="userSpaceOnUse"
         >
-          <stop stop-color="#FFE000" />
-          <stop offset="0.4087" stop-color="#FFBD00" />
-          <stop offset="0.7754" stop-color="#FFA500" />
-          <stop offset="1" stop-color="#FF9C00" />
+          <stop stopColor="#FFE000" />
+          <stop offset="0.4087" stopColor="#FFBD00" />
+          <stop offset="0.7754" stopColor="#FFA500" />
+          <stop offset="1" stopColor="#FF9C00" />
         </linearGradient>
         <linearGradient
           id="paint2_linear_15925_54620"
@@ -240,8 +240,8 @@ export default function PlayStoreColored({ size = 189 }) {
           y2="63.0743"
           gradientUnits="userSpaceOnUse"
         >
-          <stop stop-color="#FF3A44" />
-          <stop offset="1" stop-color="#C31162" />
+          <stop stopColor="#FF3A44" />
+          <stop offset="1" stopColor="#C31162" />
         </linearGradient>
         <linearGradient
           id="paint3_linear_15925_54620"
@@ -251,11 +251,11 @@ export default function PlayStoreColored({ size = 189 }) {
           y2="14.4745"
           gradientUnits="userSpaceOnUse"
         >
-          <stop stop-color="#32A071" />
-          <stop offset="0.0685" stop-color="#2DA771" />
-          <stop offset="0.4762" stop-color="#15CF74" />
-          <stop offset="0.8009" stop-color="#06E775" />
-          <stop offset="1" stop-color="#00F076" />
+          <stop stopColor="#32A071" />
+          <stop offset="0.0685" stopColor="#2DA771" />
+          <stop offset="0.4762" stopColor="#15CF74" />
+          <stop offset="0.8009" stopColor="#06E775" />
+          <stop offset="1" stopColor="#00F076" />
         </linearGradient>
       </defs>
     </svg>

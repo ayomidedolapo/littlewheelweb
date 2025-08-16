@@ -34,7 +34,7 @@ const contactDetails = [
 const socialLinks = [
   {
     icon: FaInstagram,
-    href: "https://www.instagram.com/littlewheelhq/",
+    href: "https://www.instagram.com/little_wheel_hq/",
     label: "Instagram",
   },
   {

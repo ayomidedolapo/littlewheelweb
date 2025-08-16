@@ -9,6 +9,7 @@ import Image from "next/image";
 import Link from "next/link";
 import AppleWhite from "../../public/uploads/apple-white";
 import PlayStoreWhite from "../../public/uploads/play-store-white";
+import { toast } from "sonner";
 
 const navigationList = [
   { title: "Activator", to: "/activator", type: "link" },
@@ -74,17 +75,29 @@ export default function Header() {
         className="hover:text-[#344054] md:hidden"
       />
       <div className="hidden md:flex items-center gap-4">
-        <Link href="/">
+        {/* <Link href="/">
+                <AppleWhite />
+              </Link> */}
+        <button
+          onClick={() =>
+            toast.info("iOS app is not available yet. Please check back soon!")
+          }
+          className="cursor-pointer"
+        >
           <AppleWhite />
-        </Link>
-        <Link href="/">
+        </button>
+        <Link
+          href="https://play.google.com/store/apps/details?id=com.lilttlewheel.agentapp&hl=en"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
           <PlayStoreWhite />
         </Link>
       </div>
 
       {isNavOpen && (
-        <nav className="md:hidden absolute top-0 right-0 w-full h-full bg-white text-black flex justify-center shadow-2xl rounded-b-lg z-50">
-          <span className="h-1/2 w-3/4 flex flex-col items-center justify-around my-10">
+        <nav className="md:hidden absolute top-0 right-0 w-full h-full bg-black text-white flex justify-center items-center z-50">
+          <span className="h-1/2 w-3/4 flex flex-col items-center justify-around">
             {navigationList.map((nav, idx) => (
               <a
                 key={idx}
@@ -98,17 +111,29 @@ export default function Header() {
                 {nav.title}
               </a>
             ))}
-
-            <Button
-              onClick={() => {
-                scrollToSection("waitlist");
-                toggleNav();
-              }}
-              className="flex items-center gap-2 bg-black px-4 py-5 text-white hover:bg-[#474747] hover:font-bold mt-4"
-            >
-              <HiUserGroup size={24} />
-              Join the waitlist
-            </Button>
+            {/* <div className="flex flex-col items-center space-y-3"> */}.
+            <div className="flex items-center gap-4">
+              {/* <Link href="/">
+                <AppleWhite />
+              </Link> */}
+              <button
+                onClick={() =>
+                  toast.info(
+                    "iOS app is not available yet. Please check back soon!"
+                  )
+                }
+                className="cursor-pointer"
+              >
+                <AppleWhite />
+              </button>
+              <Link
+                href="https://play.google.com/store/apps/details?id=com.lilttlewheel.agentapp&hl=en"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <PlayStoreWhite />
+              </Link>
+            </div>
           </span>
           <FaTimes
             size={24}
