@@ -79,6 +79,7 @@ export default function Header() {
                 <AppleWhite />
               </Link> */}
         <button
+          title="Download on the App Store"
           onClick={() =>
             toast.info("iOS app is not available yet. Please check back soon!")
           }
@@ -111,12 +112,13 @@ export default function Header() {
                 {nav.title}
               </a>
             ))}
-            {/* <div className="flex flex-col items-center space-y-3"> */}.
+            {/* <div className="flex flex-col items-center space-y-3"> */}
             <div className="flex items-center gap-4">
               {/* <Link href="/">
                 <AppleWhite />
               </Link> */}
               <button
+                title="Download on the App Store"
                 onClick={() =>
                   toast.info(
                     "iOS app is not available yet. Please check back soon!"
