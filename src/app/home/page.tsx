@@ -2,7 +2,7 @@
 import { ScrollArea } from "@littlewheel/components/ui/scroll-area";
 import HomeScreen from "./home";
 import Testimonials from "./testimonials";
-import About from "./about";
+// import About from "./about";
 import Services from "./services";
 import Faq from "./faq";
 import Waitlist from "./waitlist";
@@ -16,9 +16,9 @@ export default function LandingPage() {
       <ScrollArea className="h-[calc(100vh-64px)]">
         <div className="h-full">
           <HomeScreen />
-          <Testimonials />
-          <About />
+          {/* <About /> */}
           <Services />
+          <Testimonials />
           <Faq />
           <Waitlist />
           <Footer />

@@ -1,14 +1,14 @@
 import DownloadVault from "./service-vaults/download-vault";
-import Vault1 from "./service-vaults/vault1";
-import Vault2 from "./service-vaults/vault2";
-import Vault3 from "./service-vaults/vault3";
+// import Vault1 from "./service-vaults/vault1";
+// import Vault2 from "./service-vaults/vault2";
+// import Vault3 from "./service-vaults/vault3";
 import { motion } from "framer-motion";
-import { useInView } from "react-intersection-observer";
+// import { useInView } from "react-intersection-observer";
 export default function Services() {
-  const [servicesRef] = useInView({
-    threshold: 0.9,
-    triggerOnce: false,
-  });
+  // const [servicesRef] = useInView({
+  //   threshold: 0.9,
+  //   triggerOnce: false,
+  // });
   return (
     <motion.div
       id="services"
@@ -17,7 +17,7 @@ export default function Services() {
       whileInView={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6 }}
     >
-      <div className="flex flex-col items-center text-center space-y-4">
+      {/* <div className="flex flex-col items-center text-center space-y-4">
         <h1 className="text-2xl md:text-4xl font-extrabold text-black">
           Billings Everywhere, Start Saving Now
         </h1>
@@ -37,7 +37,7 @@ export default function Services() {
         <Vault1 />
         <Vault2 />
         <Vault3 />
-      </motion.div>
+      </motion.div> */}
 
       <DownloadVault />
     </motion.div>

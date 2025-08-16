@@ -6,12 +6,16 @@ import { FaBars, FaTimes } from "react-icons/fa";
 import { HiUserGroup } from "react-icons/hi2";
 import { Button } from "./ui/button";
 import Image from "next/image";
+import Link from "next/link";
+import AppleWhite from "../../public/uploads/apple-white";
+import PlayStoreWhite from "../../public/uploads/play-store-white";
 
 const navigationList = [
-  { id: 1, title: "Home", to: "home", type: "section" },
-  { id: 2, title: "About Us", to: "about", type: "section" },
-  { id: 3, title: "Our Services", to: "services", type: "section" },
-  { id: 5, title: "Blog", to: "/blog", type: "link" },
+  { title: "Activator", to: "/activator", type: "link" },
+  { title: "Agents", to: "/agent", type: "link" },
+  { title: "Research", to: "/research", type: "link" },
+  { title: "Gallery", to: "/gallery", type: "link" },
+  { title: "Team", to: "/team", type: "link" },
 ];
 export default function Header() {
   const [isNavOpen, setIsNavOpen] = useState(false);
@@ -39,32 +43,8 @@ export default function Header() {
     };
   }, []);
   return (
-    <header className="h-[10%] flex items-center justify-between px-6 py-4 shadow-md">
-      <nav className="hidden md:flex gap-10">
-        {navigationList.map((nav) =>
-          nav.type === "section" ? (
-            <button
-              key={nav.id}
-              onClick={() => scrollToSection(nav.to)}
-              className={cn(
-                "text-sm hover:font-bold hover:underline px-3 py-2 rounded-md",
-                activeNav === nav.to && "bg-[#F7F9FC]"
-              )}
-            >
-              {nav.title}
-            </button>
-          ) : (
-            <a
-              key={nav.id}
-              href={nav.to}
-              className="text-sm hover:font-bold hover:underline px-3 py-2 rounded-md"
-            >
-              {nav.title}
-            </a>
-          )
-        )}
-      </nav>
-
+    <header className="h-[10%] flex items-center justify-between px-10 py-4 shadow-md bg-black text-[#F9FAFB]">
+      {/* <div className="w-4/5 flex items-center justify-between"> */}
       <Image
         src="/uploads/logo.svg"
         alt="Little Wheel"
@@ -73,49 +53,51 @@ export default function Header() {
         className="md:-ml-36 ml-0"
         priority
       />
+      <nav className="hidden md:flex gap-10">
+        {navigationList.map((nav, idx) => (
+          <a
+            key={idx}
+            href={nav.to}
+            className={cn(
+              "text-sm hover:font-bold hover:underline px-3 py-2 rounded-md",
+              activeNav === nav.to && "bg-[#F7F9FC] text-black font-semibold"
+            )}
+          >
+            {nav.title}
+          </a>
+        ))}
+      </nav>
 
       <FaBars
         size={24}
         onClick={toggleNav}
         className="hover:text-[#344054] md:hidden"
       />
-      <Button
-        onClick={() => scrollToSection("waitlist")}
-        className="hidden md:flex items-center gap-2 bg-black px-4 py-5 text-white hover:bg-[#474747] hover:font-bold"
-      >
-        <HiUserGroup size={24} />
-        Join the waitlist
-      </Button>
+      <div className="hidden md:flex items-center gap-4">
+        <Link href="/">
+          <AppleWhite />
+        </Link>
+        <Link href="/">
+          <PlayStoreWhite />
+        </Link>
+      </div>
 
       {isNavOpen && (
-        <nav className="md:hidden absolute top-0 right-0 w-full h-full bg-white flex justify-center shadow-2xl rounded-b-lg z-50">
+        <nav className="md:hidden absolute top-0 right-0 w-full h-full bg-white text-black flex justify-center shadow-2xl rounded-b-lg z-50">
           <span className="h-1/2 w-3/4 flex flex-col items-center justify-around my-10">
-            {navigationList.map((nav) =>
-              nav.type === "section" ? (
-                <button
-                  key={nav.id}
-                  onClick={() => {
-                    scrollToSection(nav.to);
-                    toggleNav();
-                  }}
-                  className={cn(
-                    "text-sm hover:font-bold hover:underline my-2 px-3 py-2 rounded-md",
-                    activeNav === nav.to && "bg-[#F7F9FC]"
-                  )}
-                >
-                  {nav.title}
-                </button>
-              ) : (
-                <a
-                  key={nav.id}
-                  href={nav.to}
-                  onClick={toggleNav}
-                  className="text-sm hover:font-bold hover:underline my-2 px-3 py-2 rounded-md"
-                >
-                  {nav.title}
-                </a>
-              )
-            )}
+            {navigationList.map((nav, idx) => (
+              <a
+                key={idx}
+                href={nav.to}
+                className={cn(
+                  "text-sm hover:font-bold hover:underline px-3 py-2 rounded-md",
+                  activeNav === nav.to &&
+                    "bg-[#F7F9FC] text-black font-semibold"
+                )}
+              >
+                {nav.title}
+              </a>
+            ))}
 
             <Button
               onClick={() => {
@@ -135,6 +117,7 @@ export default function Header() {
           />
         </nav>
       )}
+      {/* </div> */}
     </header>
   );
 }

@@ -72,7 +72,7 @@ export default function Footer() {
       initial={{ opacity: 0, y: -100 }}
       whileInView={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6 }}
-      className="p-6 md:p-12"
+      className="p-6 md:p-12 bg-black text-white"
     >
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <div>
@@ -84,12 +84,12 @@ export default function Footer() {
             className="max-w-full"
             priority
           />
-          <p className="text-sm text-[#344054] px-4">
+          <p className="text-sm text-[#F7F9FC] px-4">
             Build Wealth Little by Little
           </p>
 
           <div className="p-4 hidden md:block">
-            <p className="text-sm text-[#344054] mt-4">Follow us on:</p>
+            <p className="text-sm text-[#F7F9FC] mt-4">Follow us on:</p>
             <div className="flex space-x-4 mt-2">
               {socialLinks.map((social, index) => (
                 <a
@@ -195,7 +195,7 @@ export default function Footer() {
             ))}
           </div>
         </div>
-        <div className="w-full space-y-5 text-[#344054] text-sm">
+        <div className="w-full space-y-5 text-[#F7F9FC] text-sm">
           <div className="space-y-3">
             <p>
               Little Wheel is an end-to-end software that provides individuals
@@ -226,7 +226,8 @@ export default function Footer() {
               London United Kingdom E14 8PX. +447397667543
             </p>
           </div>
-          <p>&#169;Little Wheel Tech. Ltd 2025</p>
+          {/* <p>&#169;Little Wheel Tech. Ltd 2025</p> */}
+          <p>All Right reserved, 2025 || Little Wheel.</p>
         </div>
       </div>
     </motion.footer>
