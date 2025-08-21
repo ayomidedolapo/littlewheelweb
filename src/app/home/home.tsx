@@ -29,6 +29,7 @@ export default function HomeScreen() {
             <AppleWhiteLarge />
           </Link> */}
           <button
+            title="Download on the App Store"
             onClick={() =>
               toast.info(
                 "iOS app is not available yet. Please check back soon!"
@@ -48,6 +49,7 @@ export default function HomeScreen() {
             <AppleWhiteLarge />
           </Link> */}
           <button
+            title="Download on the App Store"
             onClick={() =>
               toast.info(
                 "iOS app is not available yet. Please check back soon!"

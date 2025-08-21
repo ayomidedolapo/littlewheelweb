@@ -1,13 +1,15 @@
-/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import React, { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { Input } from "@littlewheel/components/ui/input";
 import Link from "next/link";
+import InputPhone5 from "@littlewheel/components/input-phone-5";
+import { Value } from "react-phone-number-input";
+import { toast } from "sonner";
 
 export default function MobileLoginPage() {
-  const [phoneNumber, setPhoneNumber] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState<Value>();
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -24,7 +26,14 @@ export default function MobileLoginPage() {
   };
 
   return (
-    <div className="h-full grid items-center">
+    <div
+      className="h-full grid items-center"
+      onClick={() =>
+        toast.info(
+          "We're working on making this available, kindly check back soonest"
+        )
+      }
+    >
       <form className="space-y-6" onSubmit={handleSubmit}>
         <div className="space-y-2">
           <h1 className="text-2xl font-semibold">
@@ -36,35 +45,15 @@ export default function MobileLoginPage() {
         </div>
 
         <div className="space-y-5">
-          <div className="space-y-2">
-            <label
-              htmlFor="phone"
-              className="block text-sm font-medium text-[#101928]"
-            >
-              Mobile Number
-            </label>
-            <div className="flex items-center gap-1">
-              <div className="flex items-center px-3 py-[7.5px] border border-[#E4E7EC] rounded-md bg-[#F0F2F5]">
-                <img
-                  src="https://flagemoji.com/wp-content/uploads/2020/02/Flag_of_Nigeria.svg"
-                  alt="Nigeria Flag"
-                  width={24}
-                  height={24}
-                  className="mr-2 rounded-full"
-                />
-                <span className="text-sm text-gray-700">+234</span>
-              </div>
-              <Input
-                id="phone"
-                type="tel"
-                value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
-                placeholder="000-0000-000"
-                className="flex-1 border border-[#E4E7EC] text-sm"
-                required
-              />
-            </div>
-          </div>
+          <InputPhone5
+            label="Mobile Number"
+            id="phone"
+            value={phoneNumber}
+            onChange={setPhoneNumber}
+            className="flex-1 border border-[#E4E7EC] text-sm"
+            // required
+            disabled
+          />
 
           <div className="space-y-2">
             <label
@@ -81,7 +70,8 @@ export default function MobileLoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••"
                 className="w-full pr-10 border border-[#E4E7EC] text-sm"
-                required
+                // required
+                disabled
               />
               <button
                 type="button"
@@ -108,7 +98,13 @@ export default function MobileLoginPage() {
 
         <button
           type="submit"
-          disabled={isLoading}
+          disabled
+          // disabled={isLoading}
+          // onClick={() =>
+          //   toast.info(
+          //     "We're working on making this available, kindly check back soonest"
+          //   )
+          // }
           className="w-full bg-black text-white py-3 px-4 rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
         >
           {isLoading ? (

@@ -1,4 +1,3 @@
-/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import { useState } from "react";
@@ -18,6 +17,8 @@ import { EyeOff, Eye, ArrowLeftIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import data from "@littlewheel/data/state.json";
+import { Value } from "react-phone-number-input";
+import InputPhone5 from "@littlewheel/components/input-phone-5";
 
 const states = data.states;
 
@@ -39,7 +40,7 @@ export default function Page() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState<Value>();
   const [sex, setSex] = useState("");
   const [dob, setDob] = useState("");
   const [nin, setNin] = useState("");
@@ -51,7 +52,6 @@ export default function Page() {
   const [address, setAddress] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -236,35 +236,15 @@ export default function Page() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label
-                  htmlFor="phone"
-                  className="block text-sm font-medium text-[#101928]"
-                >
-                  Mobile Number
-                </label>
-                <div className="flex items-center gap-1">
-                  <div className="flex items-center px-3 py-[7.5px] border border-[#E4E7EC] rounded-md bg-[#F0F2F5]">
-                    <img
-                      src="https://flagemoji.com/wp-content/uploads/2020/02/Flag_of_Nigeria.svg"
-                      alt="Nigeria Flag"
-                      width={24}
-                      height={24}
-                      className="mr-2 rounded-full"
-                    />
-                    <span className="text-sm text-gray-700">+234</span>
-                  </div>
-                  <Input
-                    id="phone"
-                    type="tel"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    placeholder="000-0000-000"
-                    className="flex-1 border border-[#E4E7EC] text-sm"
-                    required
-                  />
-                </div>
-              </div>
+              <InputPhone5
+                label="Mobile Number"
+                id="phone"
+                value={phoneNumber}
+                onChange={setPhoneNumber}
+                className="flex-1 border border-[#E4E7EC] text-sm"
+                // required
+                disabled
+              />
 
               <div className="grid grid-cols-2 space-x-4">
                 <div className="space-y-2">

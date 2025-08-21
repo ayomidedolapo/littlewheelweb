@@ -1,21 +1,70 @@
 import * as React from "react";
 
 import { cn } from "@littlewheel/lib/utils";
+import { CircleHelpIcon, Info, TriangleAlert } from "lucide-react";
 
-function Input({ className, type, ...props }: React.ComponentProps<"input">) {
+// Removed InputProps interface as it was redundant
+
+export interface InputInfoProps {
+  error?: React.ReactNode;
+  warn?: React.ReactNode;
+  info?: React.ReactNode;
+  className?: string;
+}
+
+export const inputErrorClassName = " text-destructive";
+export const inputWarnClassName = " text-yellow-500";
+
+const Input = React.forwardRef<
+  HTMLInputElement,
+  React.InputHTMLAttributes<HTMLInputElement>
+>(({ className, type, ...props }, ref) => {
   return (
     <input
       type={type}
-      data-slot="input"
       className={cn(
-        "file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 border-input flex h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:  disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
-        "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
-        "aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
+        "flex h-12 sm:h-12 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
         className
       )}
+      ref={ref}
       {...props}
     />
   );
-}
+});
+Input.displayName = "Input";
 
 export { Input };
+
+export const InputInfo = ({ error, warn, info, className }: InputInfoProps) => {
+  const containerClassName =
+    " mt-2 flex gap-1 items-center text-sm font-medium";
+  return (
+    <>
+      {error ? (
+        <div
+          className={cn(
+            " p-3 px-5 rounded-lg bg-destructive/15",
+            containerClassName,
+            inputErrorClassName,
+            className
+          )}
+        >
+          <CircleHelpIcon className="shrink-0 text-destructive" />
+          <span className="mb-[1px] text-muted-foreground ml-2">{error}</span>
+        </div>
+      ) : null}
+      {warn ? (
+        <div className={cn(containerClassName, inputWarnClassName, className)}>
+          <TriangleAlert className="shrink-0" size={16} />
+          <span className="mb-[1px] ">{warn}</span>
+        </div>
+      ) : null}
+      {info ? (
+        <div className={cn(containerClassName, className)}>
+          <Info className="shrink-0" size={16} />
+          <span className="mb-[1px]">{info}</span>
+        </div>
+      ) : null}
+    </>
+  );
+};

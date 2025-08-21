@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@littlewheel/components/ui/button";
 import { ScrollArea } from "@littlewheel/components/ui/scroll-area";
 import { X } from "lucide-react";
@@ -12,6 +13,13 @@ import TotalAgents from "./components/total-agents";
 import { toast } from "sonner";
 
 export default function ActivatorsPage() {
+  const router = useRouter();
+
+  // Redirect to login page immediately when component mounts
+  useEffect(() => {
+    router.push("/activators/login");
+  }, [router]);
+
   const getTimeInfo = () => {
     const hour = new Date().getHours();
 
@@ -69,6 +77,7 @@ export default function ActivatorsPage() {
 
   const referralLink = "https://www.littlewheel.com/OR39"; // This should be dynamic from props or API
 
+  // This content will briefly show before redirect (or not at all due to immediate redirect)
   return (
     <ScrollArea className="h-full">
       <div className="space-y-3">
@@ -169,7 +178,7 @@ export default function ActivatorsPage() {
                   await navigator.clipboard.writeText(referralLink);
                   toast.success("Link copied to clipboard!");
                 } catch {
-                  toast.error("Failed to copy Llnk.");
+                  toast.error("Failed to copy Link.");
                 }
               }}
               className="bg-[#3A6BFF] text-white rounded-full p-2 flex items-center gap-2 text-xs cursor-pointer"

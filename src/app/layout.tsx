@@ -371,7 +371,7 @@ export default function RootLayout({
         >
           <NextTopLoader color="#000" />
           {children}
-          <Toaster richColors position="bottom-right" duration={1000} />
+          <Toaster richColors position="top-right" duration={1000} />
         </ThemeProvider>
       </body>
     </html>

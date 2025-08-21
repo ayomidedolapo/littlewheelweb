@@ -12,9 +12,13 @@ import PlayStoreWhite from "../../public/uploads/play-store-white";
 import { toast } from "sonner";
 
 const navigationList = [
-  { title: "Activator", to: "/activator", type: "link" },
+  { title: "Activators", to: "/activators", type: "link" },
   { title: "Agents", to: "/agent", type: "link" },
-  { title: "Research", to: "/research", type: "link" },
+  {
+    title: "Research",
+    to: "https://littlewheel.medium.com/market-research-and-analysis-for-little-wheel-6e828a1833f0",
+    type: "link",
+  },
   { title: "Gallery", to: "/gallery", type: "link" },
   { title: "Team", to: "/team", type: "link" },
 ];
