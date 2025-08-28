@@ -12,11 +12,11 @@ export default function HomeScreen() {
       {/* Background section - stops at logos */}
       <div className="bg-[url('/uploads/vector.jpg')] bg-contain bg-center text-white text-center p-6 md:p-10 space-y-10 md:space-y-26">
         <div className="space-y-8">
-          <div className="space-y-4 p-12">
-            <h1 className="text-4xl md:text-7xl font-calsans">
+          <div className="space-y-4">
+            <h1 className="text-3xl sm:text-4xl md:text-7xl font-calsans">
               SAVING SOLUTIONS BUILT FOR NIGERIA&apos;S INFORMAL SECTOR
             </h1>
-            <p className="text-[#F7F9FC] text-sm md:text-base leading-relaxed">
+            <p className="text-[#F7F9FC] text-xs md:text-base leading-relaxed">
               Digitizing daily contributions for traders, commercial
               transporters <br className="hidden md:block" />
               and artisans through agent-assisted models
