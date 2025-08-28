@@ -1,5 +1,4 @@
 "use client";
-
 import {
   FaLinkedin,
   FaInstagram,
@@ -39,22 +38,156 @@ const socialLinks = [
   {
     icon: FaYoutube,
     href: "https://www.youtube.com/@Littlewheelhq",
-    label: "LinkedIn",
+    label: "YouTube",
   },
   {
     icon: FaTiktok,
     href: "https://www.tiktok.com/@littlewheelhq",
-    label: "LinkedIn",
+    label: "TikTok",
   },
 ];
 
 export default function Footer() {
   return (
-    <footer className="p-6 md:p-12 bg-black text-white">
-      <div className="grid md:grid-cols-[1fr_auto] gap-6">
-        <div className="p-4">
-          <p className="text-sm text-[#F7F9FC] mt-4">Follow us on:</p>
-          <div className="flex space-x-4 mt-2">
+    <footer className="bg-black text-white px-6 py-12 md:px-12">
+      {/* Desktop Layout - Large screens */}
+      <div className="hidden lg:block">
+        {/* Logo at center top */}
+        <div className="flex justify-center mb-8">
+          <div className="w-48 h-12 rounded flex items-center justify-center">
+            <img src="uploads/logo.png" alt="" />
+          </div>
+        </div>
+        <br />
+
+        {/* Three column layout */}
+        <div className="grid grid-cols-3 gap-8 items-start">
+          {/* Left Column - Social Links */}
+          <div>
+            <p className="text-sm text-[#F7F9FC] mb-4">Follow us on:</p>
+            <div className="flex space-x-4">
+              {socialLinks.map((social, index) => (
+                <a
+                  key={index}
+                  href={social.href}
+                  aria-label={social.label}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-white text-black p-2 rounded-full hover:bg-gray-200 transition-colors"
+                >
+                  <social.icon size={20} />
+                </a>
+              ))}
+            </div>
+          </div>
+
+          {/* Center Column - Contact Info */}
+          <div className="text-center">
+            <div className="space-y-3">
+              {contactDetails.map((contact, index) => (
+                <div key={index} className="text-sm">
+                  {contact.type === "Email" ? (
+                    <div>
+                      <span>{contact.title}: </span>
+                      <Link
+                        href={`mailto:${contact.value}`}
+                        className="hover:underline text-white"
+                      >
+                        {contact.value}
+                      </Link>
+                    </div>
+                  ) : (
+                    <div>
+                      <span>{contact.title}: </span>
+                      <Link
+                        href={`tel:${contact.value}`}
+                        className="hover:underline text-white"
+                      >
+                        {contact.value}
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Right Column - Address */}
+          <div className="text-right">
+            <p className="text-sm">
+              <span className="font-medium">Address:</span>
+              <br />
+              Sango Terminal, Sango, Ibadan, Nigeria.
+            </p>
+          </div>
+        </div>
+
+        <Separator className="my-8 bg-[#344054]" />
+
+        {/* Bottom section with copyright and logos */}
+        <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
+          <p className="text-sm text-[#F7F9FC] text-center md:text-left">
+            All Right reserved, 2025 || Little Wheel.
+          </p>
+          <div className="flex items-center justify-center md:justify-end gap-2 md:gap-4">
+            <CBN />
+            <NDIC />
+            <Fortress />
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile Layout - Small screens */}
+      <div className="lg:hidden">
+        {/* Logo at top */}
+        <div className="flex justify-center mb-8">
+          <div className="w-48 h-12 rounded flex items-center justify-center">
+            <img src="uploads/logo.png" alt="" />
+          </div>
+        </div>
+
+        {/* Contact Info */}
+        <div className="space-y-4 mb-6">
+          {contactDetails.map((contact, index) => (
+            <div key={index} className="text-sm">
+              {contact.type === "Email" ? (
+                <div>
+                  <span className="font-medium">{contact.title}: </span>
+                  <Link
+                    href={`mailto:${contact.value}`}
+                    className="hover:underline text-white underline"
+                  >
+                    {contact.value}
+                  </Link>
+                </div>
+              ) : (
+                <div>
+                  <span className="font-medium">{contact.title}: </span>
+                  <Link
+                    href={`tel:${contact.value}`}
+                    className="hover:underline text-white"
+                  >
+                    {contact.value}
+                  </Link>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Address */}
+        <div className="mb-6">
+          <p className="text-sm">
+            <span className="font-medium">Address:</span>
+            <br />
+            Sango Terminal, Sango, Ibadan, Nigeria.
+          </p>
+        </div>
+
+        {/* Social Links */}
+        <div className="mb-8">
+          <p className="text-sm text-[#F7F9FC] mb-4">Follow us on:</p>
+          <div className="flex space-x-4">
             {socialLinks.map((social, index) => (
               <a
                 key={index}
@@ -62,7 +195,7 @@ export default function Footer() {
                 aria-label={social.label}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="bg-black text-white p-1.5 rounded-full hover:bg-[#0D5EBA]"
+                className="bg-white text-black p-2 rounded-full hover:bg-gray-200 transition-colors"
               >
                 <social.icon size={20} />
               </a>
@@ -70,54 +203,13 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="grid space-y-4 md:space-y-0 md:grid-cols-2 md:items-center">
-          <div>
-            <h3 className="font-semibold mb-4">Contact</h3>
-            <ul className="space-y-2">
-              {contactDetails.map((contact, index) => (
-                <li key={index} className="text-sm mb-2">
-                  {contact.type === "Email" ? (
-                    <Link
-                      href={`mailto:${contact.value}`}
-                      className="hover:font-bold hover:underline"
-                    >
-                      {contact.title}: {contact.value}
-                    </Link>
-                  ) : (
-                    <Link
-                      href={`tel:${contact.value}`}
-                      className="hover:font-bold hover:underline"
-                    >
-                      {contact.title}: {contact.value}
-                    </Link>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
+        <Separator className="my-8 bg-[#344054]" />
 
-          <p>
-            Address: <br />
-            Sango Terminal, Sango, Ibadan, Nigeria.
+        {/* Bottom section - logos removed */}
+        <div className="space-y-4">
+          <p className="text-sm text-[#F7F9FC]">
+            All Right reserved, 2025 || Little Wheel
           </p>
-        </div>
-      </div>
-
-      <Separator className="my-8 bg-[#344054]" />
-
-      <div className="grid space-y-4 md:space-y-0 md:flex md:items-center md:justify-between">
-        <p className="text-sm text-[#F7F9FC]">
-          All Right reserved, 2025 || Little Wheel.
-        </p>
-        <div className="hidden md:flex items-center gap-2">
-          <CBN />
-          <NDIC />
-          <Fortress />
-        </div>
-        <div className="md:hidden flex items-center justify-between">
-          <CBN size={100} />
-          <NDIC size={100} />
-          <Fortress size={100} />
         </div>
       </div>
     </footer>

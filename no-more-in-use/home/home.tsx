@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
-import AppleWhiteLarge from "../../../public/uploads/apple-white-large";
-import PlayStoreColored from "../../../public/uploads/play-store-colored";
+import AppleWhiteLarge from "./../../public/uploads/apple-white-large";
+import PlayStoreColored from "./../../public/uploads/play-store-colored";
 import { toast } from "sonner";
 
 export default function HomeScreen() {
@@ -31,6 +31,8 @@ export default function HomeScreen() {
               )
             }
             className="cursor-pointer"
+            aria-label="Download on the App Store"
+            title="Download on the App Store"
           >
             <AppleWhiteLarge />
           </button>
@@ -50,6 +52,8 @@ export default function HomeScreen() {
               )
             }
             className="cursor-pointer"
+            title="Download on the App Store"
+            aria-label="Download on the App Store"
           >
             <AppleWhiteLarge size={140} />
           </button>
