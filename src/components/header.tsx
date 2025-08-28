@@ -22,10 +22,11 @@ const navigationList = [
   { title: "Gallery", to: "/gallery", type: "link" },
   { title: "Team", to: "/team", type: "link" },
 ];
+
 export default function Header() {
   const [isNavOpen, setIsNavOpen] = useState(false);
   const [isScrolledIn, setIsScrolledIn] = useState(false);
-  const [activeNav, setActiveNav] = useState<string>("home");
+  const [activeNav, setActiveNav] = useState<string>("Activators");
 
   const toggleNav = () => setIsNavOpen(!isNavOpen);
 
@@ -47,80 +48,97 @@ export default function Header() {
       window.removeEventListener("scroll", handleScroll);
     };
   }, []);
+
   return (
     <header className="h-[10%] flex items-center justify-between px-10 py-4 shadow-md bg-black text-[#F9FAFB]">
-      {/* <div className="w-4/5 flex items-center justify-between"> */}
-      <Image
-        src="/uploads/logo.svg"
-        alt="Little Wheel"
-        width={150}
-        height={40}
-        className="md:-ml-36 ml-0"
-        priority
-      />
-      <nav className="hidden md:flex gap-10">
-        {navigationList.map((nav, idx) => (
-          <a
-            key={idx}
-            href={nav.to}
-            className={cn(
-              "text-sm hover:font-bold hover:underline px-3 py-2 rounded-md",
-              activeNav === nav.to && "bg-[#F7F9FC] text-black font-semibold"
-            )}
-          >
-            {nav.title}
-          </a>
-        ))}
-      </nav>
+      {/* Left side - Logo and Navigation */}
+      <div className="flex items-center gap-8">
+        {/* Logo placeholder - you can replace the src with your logo URL */}
+        <Image
+          src="/uploads/logo.png" // Replace this with your logo URL
+          alt="Little Wheel"
+          width={150}
+          height={40}
+          className="w-30"
+          priority
+        />
 
-      <FaBars
-        size={24}
-        onClick={toggleNav}
-        className="hover:text-[#344054] md:hidden"
-      />
-      <div className="hidden md:flex items-center gap-4">
-        {/* <Link href="/">
-                <AppleWhite />
-              </Link> */}
-        <button
-          title="Download on the App Store"
-          onClick={() =>
-            toast.info("iOS app is not available yet. Please check back soon!")
-          }
-          className="cursor-pointer"
-        >
-          <AppleWhite />
-        </button>
-        <Link
-          href="https://play.google.com/store/apps/details?id=com.lilttlewheel.agentapp&hl=en"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <PlayStoreWhite />
-        </Link>
+        {/* Navigation - only visible on large screens */}
+        <nav className="hidden lg:flex gap-6 pl-22">
+          {navigationList.map((nav, idx) => (
+            <a
+              key={idx}
+              href={nav.to}
+              className={cn(
+                "text-sm px-4 py-2 rounded-md transition-all duration-200 hover:bg-white hover:text-black",
+                nav.title === "Activators"
+                  ? "bg-white text-black font-bold"
+                  : "hover:font-bold"
+              )}
+            >
+              {nav.title}
+            </a>
+          ))}
+        </nav>
       </div>
 
+      {/* Right side - Mobile menu button and app store buttons */}
+      <div className="flex items-center gap-4">
+        {/* Hamburger icon - visible on small and medium screens but hidden on large screens */}
+        <FaBars
+          size={24}
+          onClick={toggleNav}
+          className="hover:text-[#344054] lg:hidden"
+        />
+
+        {/* App store buttons - visible on medium screens and up with smaller size for medium screens */}
+        <div className="hidden md:flex items-center gap-1 lg:gap-4">
+          <button
+            title="Download on the App Store"
+            onClick={() =>
+              toast.info(
+                "iOS app is not available yet. Please check back soon!"
+              )
+            }
+            className="cursor-pointer transform hover:scale-105 transition-transform duration-200"
+          >
+            <div className="md:scale-75 lg:scale-100">
+              <AppleWhite />
+            </div>
+          </button>
+          <Link
+            href="https://play.google.com/store/apps/details?id=com.lilttlewheel.agentapp&hl=en"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="transform hover:scale-105 transition-transform duration-200"
+          >
+            <div className="md:scale-75 lg:scale-100">
+              <PlayStoreWhite />
+            </div>
+          </Link>
+        </div>
+      </div>
+
+      {/* Mobile Navigation - now shows for both small and medium screens */}
       {isNavOpen && (
-        <nav className="md:hidden absolute top-0 right-0 w-full h-full bg-black text-white flex justify-center items-center z-50">
+        <nav className="lg:hidden absolute top-0 right-0 w-full h-full bg-black text-white flex justify-center items-center z-50">
           <span className="h-1/2 w-3/4 flex flex-col items-center justify-around">
             {navigationList.map((nav, idx) => (
               <a
                 key={idx}
                 href={nav.to}
                 className={cn(
-                  "text-sm hover:font-bold hover:underline px-3 py-2 rounded-md",
-                  activeNav === nav.to &&
-                    "bg-[#F7F9FC] text-black font-semibold"
+                  "text-sm px-4 py-2 rounded-full transition-all duration-200 hover:bg-white hover:text-black",
+                  nav.title === "Activators"
+                    ? "bg-white text-black font-semibold"
+                    : "hover:font-bold"
                 )}
               >
                 {nav.title}
               </a>
             ))}
-            {/* <div className="flex flex-col items-center space-y-3"> */}
+
             <div className="flex items-center gap-4">
-              {/* <Link href="/">
-                <AppleWhite />
-              </Link> */}
               <button
                 title="Download on the App Store"
                 onClick={() =>
@@ -148,7 +166,6 @@ export default function Header() {
           />
         </nav>
       )}
-      {/* </div> */}
     </header>
   );
 }
