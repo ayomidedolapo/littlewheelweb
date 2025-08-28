@@ -12,6 +12,7 @@ import { Separator } from "./ui/separator";
 import CBN from "../../public/uploads/cbn";
 import NDIC from "../../public/uploads/ndic";
 import Fortress from "../../public/uploads/fortress";
+import Image from "next/image";
 
 const contactDetails = [
   { type: "Phone", title: "Phone Number", value: "09160006929" },
@@ -55,7 +56,12 @@ export default function Footer() {
         {/* Logo at center top */}
         <div className="flex justify-center mb-8">
           <div className="w-48 h-12 rounded flex items-center justify-center">
-            <img src="uploads/logo.png" alt="" />
+            <Image
+              src="/uploads/logo.png"
+              alt="Logo"
+              width={190} // adjust based on actual logo size
+              height={100}
+            />
           </div>
         </div>
         <br />
@@ -142,7 +148,12 @@ export default function Footer() {
         {/* Logo at top */}
         <div className="flex justify-center mb-8">
           <div className="w-48 h-12 rounded flex items-center justify-center">
-            <img src="uploads/logo.png" alt="" />
+            <Image
+              src="/uploads/logo.png"
+              alt="Logo"
+              width={190} // adjust to your logo’s actual width
+              height={40} // adjust to your logo’s actual height
+            />
           </div>
         </div>
 

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import CBN from "../../../public/uploads/cbn";
 import Fortress from "../../../public/uploads/fortress";
 import NDIC from "../../../public/uploads/ndic";
+import Image from "next/image";
 
 export default function HomeScreen() {
   return (
@@ -69,9 +70,11 @@ export default function HomeScreen() {
               <div className="flex items-center">
                 <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 bg-white rounded-full flex items-center justify-center mr-2 sm:mr-3 md:mr-4 flex-shrink-0">
                   {/* Replace with your image component */}
-                  <img
+                  <Image
                     src="/uploads/Emojis.png"
                     alt="Sign Up"
+                    width={24} // set a base width (px)
+                    height={24} // set a base height (px)
                     className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6"
                   />
                 </div>
@@ -92,9 +95,11 @@ export default function HomeScreen() {
               <div className="flex items-center">
                 <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 bg-white rounded-full flex items-center justify-center mr-2 sm:mr-3 md:mr-4 flex-shrink-0">
                   {/* Replace with your image component */}
-                  <img
+                  <Image
                     src="/uploads/Emojis1.png"
                     alt="Make Contributions"
+                    width={24} // base size, works with Tailwind classes
+                    height={24}
                     className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6"
                   />
                 </div>
@@ -114,9 +119,11 @@ export default function HomeScreen() {
               <div className="flex items-center">
                 <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 bg-white rounded-full flex items-center justify-center mr-2 sm:mr-3 md:mr-4 flex-shrink-0">
                   {/* Replace with your image component */}
-                  <img
+                  <Image
                     src="/uploads/Confetti Ball.png"
                     alt="Instant Deposit"
+                    width={24}
+                    height={24}
                     className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6"
                   />
                 </div>
@@ -125,8 +132,8 @@ export default function HomeScreen() {
                     Instant Deposit & Tracking
                   </h3>
                   <p className="text-gray-300 text-xs sm:text-xs md:text-sm leading-snug">
-                    Agent records transactions instantly updating the customer's
-                    Little Wheel account.
+                    Agent records transactions instantly updating the
+                    customer&apos;s Little Wheel account.
                   </p>
                 </div>
               </div>
@@ -139,9 +146,11 @@ export default function HomeScreen() {
       <div className="p-6 pt-1 md:h-[700px] h-auto flex items-center justify-center">
         <div className="relative w-full max-w-6xl aspect-square sm:w-[700px] sm:h-[700px] md:w-[900px] md:h-[900px] lg:w-[1000px] lg:h-[1000px] rounded-sm overflow-hidden shadow-lg cursor-pointer group">
           {/* Thumbnail image */}
-          <img
+          <Image
             src="/uploads/frame.png"
             alt="Little Wheel - Build Wealth Little by Little"
+            width={500} // placeholder value, adjust based on actual image
+            height={500} // placeholder value, adjust based on actual image
             className="w-full h-full object-contain"
           />
 
