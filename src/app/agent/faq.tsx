@@ -50,10 +50,10 @@ export default function Faq() {
       whileInView={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6 }}
       id="faq"
-      className="h-auto p-6 md:p-12 space-y-10 flex flex-col items-center bg-white"
+      className="h-auto p-6 md:p-12 space-y-10 flex flex-col items-center bg-black"
     >
       <div className="space-y-2 text-center">
-        <h1 className="text-2xl md:text-4xl font-extrabold text-black">
+        <h1 className="text-2xl md:text-4xl font-extrabold text-white">
           Frequently Asked Questions
         </h1>
       </div>
@@ -71,7 +71,7 @@ export default function Faq() {
               whileInView={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
             >
-              <CollapsibleTrigger className="flex justify-between items-center bg-white border p-4 rounded-t-md w-full focus:outline-none">
+              <CollapsibleTrigger className="flex justify-between items-center bg-black text-white border-black p-4 rounded-t-md w-full focus:outline-none">
                 <span className="w-[85%] text-left">{faq.question}</span>
                 <PiCaretDown
                   size={20}
@@ -86,7 +86,7 @@ export default function Faq() {
                 animate={{ height: openFaqIndex === index ? "auto" : 0 }}
                 transition={{ duration: 0.3 }}
               >
-                <CollapsibleContent className="bg- py-4 px-6 rounded-b-md">
+                <CollapsibleContent className="bg-white py-4 px-6 rounded-b-md">
                   {faq.answer}
                 </CollapsibleContent>
               </motion.div>

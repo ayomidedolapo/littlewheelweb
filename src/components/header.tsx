@@ -10,6 +10,7 @@ import Link from "next/link";
 import AppleWhite from "../../public/uploads/apple-white";
 import PlayStoreWhite from "../../public/uploads/play-store-white";
 import { toast } from "sonner";
+import { usePathname } from "next/navigation";
 
 const navigationList = [
   { title: "Activators", to: "/activators", type: "link" },
@@ -17,7 +18,7 @@ const navigationList = [
   {
     title: "Research",
     to: "https://littlewheel.medium.com/market-research-and-analysis-for-little-wheel-6e828a1833f0",
-    type: "link",
+    type: "external",
   },
   { title: "Gallery", to: "/gallery", type: "link" },
   { title: "Team", to: "/team", type: "link" },
@@ -26,9 +27,27 @@ const navigationList = [
 export default function Header() {
   const [isNavOpen, setIsNavOpen] = useState(false);
   const [isScrolledIn, setIsScrolledIn] = useState(false);
-  const [activeNav, setActiveNav] = useState<string>("Activators");
+  const [activeNav, setActiveNav] = useState<string>("");
+  const pathname = usePathname();
 
   const toggleNav = () => setIsNavOpen(!isNavOpen);
+
+  // Set active nav based on current pathname
+  useEffect(() => {
+    const currentNav = navigationList.find(
+      (nav) => nav.type === "link" && pathname === nav.to
+    );
+    if (currentNav) {
+      setActiveNav(currentNav.title);
+    }
+  }, [pathname]);
+
+  const handleNavClick = (nav: (typeof navigationList)[0]) => {
+    if (nav.type === "link") {
+      setActiveNav(nav.title);
+    }
+    setIsNavOpen(false); // Close mobile menu on click
+  };
 
   const scrollToSection = (id: string) => {
     setActiveNav(id);
@@ -69,12 +88,13 @@ export default function Header() {
             <a
               key={idx}
               href={nav.to}
+              onClick={() => handleNavClick(nav)}
               className={cn(
-                "text-sm px-4 py-2 rounded-md transition-all duration-200 hover:bg-white hover:text-black",
-                nav.title === "Activators"
-                  ? "bg-white text-black font-bold"
-                  : "hover:font-bold"
+                "text-sm px-4 py-2 rounded-md transition-all duration-200 hover:bg-white hover:text-black hover:font-bold",
+                activeNav === nav.title && "bg-white text-black font-bold"
               )}
+              target={nav.type === "external" ? "_blank" : undefined}
+              rel={nav.type === "external" ? "noopener noreferrer" : undefined}
             >
               {nav.title}
             </a>
@@ -127,12 +147,15 @@ export default function Header() {
               <a
                 key={idx}
                 href={nav.to}
+                onClick={() => handleNavClick(nav)}
                 className={cn(
-                  "text-sm px-4 py-2 rounded-full transition-all duration-200 hover:bg-white hover:text-black",
-                  nav.title === "Activators"
-                    ? "bg-white text-black font-semibold"
-                    : "hover:font-bold"
+                  "text-sm px-4 py-2 rounded-full transition-all duration-200 hover:bg-white hover:text-black hover:font-bold",
+                  activeNav === nav.title && "bg-white text-black font-bold"
                 )}
+                target={nav.type === "external" ? "_blank" : undefined}
+                rel={
+                  nav.type === "external" ? "noopener noreferrer" : undefined
+                }
               >
                 {nav.title}
               </a>

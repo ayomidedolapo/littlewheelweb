@@ -8,6 +8,7 @@ import {
 } from "react-icons/fa";
 import { FaXTwitter } from "react-icons/fa6";
 import Link from "next/link";
+import { motion } from "framer-motion";
 import { Separator } from "./ui/separator";
 import CBN from "../../public/uploads/cbn";
 import NDIC from "../../public/uploads/ndic";
@@ -50,7 +51,12 @@ const socialLinks = [
 
 export default function Footer() {
   return (
-    <footer className="bg-black text-white px-6 py-12 md:px-12">
+    <motion.footer
+      initial={{ opacity: 0, y: -100 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6 }}
+      className="bg-black text-white px-6 py-12 md:px-12"
+    >
       {/* Desktop Layout - Large screens */}
       <div className="hidden lg:block">
         {/* Logo at center top */}
@@ -151,8 +157,8 @@ export default function Footer() {
             <Image
               src="/uploads/logo.png"
               alt="Logo"
-              width={190} // adjust to your logo’s actual width
-              height={40} // adjust to your logo’s actual height
+              width={190} // adjust to your logo's actual width
+              height={40} // adjust to your logo's actual height
             />
           </div>
         </div>
@@ -223,6 +229,6 @@ export default function Footer() {
           </p>
         </div>
       </div>
-    </footer>
+    </motion.footer>
   );
 }

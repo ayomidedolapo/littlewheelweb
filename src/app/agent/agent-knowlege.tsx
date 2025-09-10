@@ -6,7 +6,7 @@ import { IoMdCheckmark } from "react-icons/io";
 export default function AgentKnowlege() {
   return (
     <motion.div
-      className="h-auto p-6 md:p-12 flex justify-center items-center"
+      className="h-auto p-6 md:p-12 flex justify-center items-center bg-black text-white"
       id="agent-knowledge"
       initial={{ opacity: 0, y: 100 }}
       whileInView={{ opacity: 1, y: 0 }}
@@ -15,7 +15,7 @@ export default function AgentKnowlege() {
       <div className="w-[85%] space-y-8 md:space-y-12">
         <div className="grid md:grid-cols-2 items-center md:gap-4 space-y-6">
           <div className="space-y-4">
-            <h2 className="text-xl sm:text-2xl md:text-3xl font-bold">
+            <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white">
               Who can be an Agent?
             </h2>
 
@@ -26,8 +26,12 @@ export default function AgentKnowlege() {
               "Community leaders",
             ].map((item, index) => (
               <div key={index} className="flex items-center gap-4">
-                <WheelIcon />
-                <span className="text-sm leading-relaxed">{item}</span>
+                <div className="text-white">
+                  <WheelIcon />
+                </div>
+                <span className="text-sm leading-relaxed text-white">
+                  {item}
+                </span>
               </div>
             ))}
           </div>
@@ -51,7 +55,7 @@ export default function AgentKnowlege() {
             />
           </div>
           <div className="space-y-4 ">
-            <h2 className="text-xl sm:text-2xl md:text-3xl font-bold">
+            <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white">
               Smart Move. Sharp <br className="hidden md:block" /> Hustle. Win
               Big.
             </h2>
@@ -61,8 +65,10 @@ export default function AgentKnowlege() {
               "Easy-to-use mobile app with real-time tracking.",
             ].map((item, index) => (
               <div key={index} className="flex md:items-center gap-4">
-                <IoMdCheckmark />
-                <span className="text-sm leading-relaxed">{item}</span>
+                <IoMdCheckmark className="text-white" />
+                <span className="text-sm leading-relaxed text-white">
+                  {item}
+                </span>
               </div>
             ))}
           </div>

@@ -27,10 +27,11 @@ const steps = [
       "No be who hustle pass dey carry first, na who use Little Wheel. Your rich uncle/aunty dreams are valid. We are redefining finance",
   },
 ];
+
 export default function GetStarted() {
   return (
     <motion.div
-      className="h-auto p-6 md:p-12 bg-[url('/uploads/vector1.svg')] bg-cover bg-center  flex justify-center items-center bg-black"
+      className="h-auto p-6 md:p-12 bg-[url('/uploads/vector.jpg')] bg-contain bg-center flex justify-center items-center bg-black"
       id="get-started"
       initial={{ opacity: 0, y: -100 }}
       whileInView={{ opacity: 1, y: 0 }}
@@ -53,7 +54,7 @@ export default function GetStarted() {
                 key={step.id}
                 className="grid grid-cols-[10%_90%] gap-4 items-center"
               >
-                <div className="flex items-center justify-center w-10 h-10  p-2 bg-white rounded-full text-sm text-black font-bold">
+                <div className="flex items-center justify-center w-10 h-10 p-2 bg-white rounded-full text-sm text-black font-bold">
                   {step.id}
                 </div>
                 <div>
@@ -68,8 +69,9 @@ export default function GetStarted() {
           <Image
             src="/uploads/phone.svg"
             alt="phone"
-            width={280}
-            height={200}
+            width={400}
+            height={600}
+            className="max-w-full h-auto"
           />
         </div>
       </div>

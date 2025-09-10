@@ -6,21 +6,25 @@ import CBN from "../../../public/uploads/cbn";
 import Fortress from "../../../public/uploads/fortress";
 import NDIC from "../../../public/uploads/ndic";
 import Image from "next/image";
+import { useState } from "react";
 
 export default function HomeScreen() {
+  const [showVideo, setShowVideo] = useState(false);
+
   return (
     <div id="home">
       {/* Background section - stops at logos */}
       <div className="bg-[url('/uploads/vector.jpg')] bg-contain bg-center text-white text-center p-6 md:p-10 space-y-10 md:space-y-26">
         <div className="space-y-8">
           <div className="space-y-4 p-6">
-            <h1 className="text-3xl sm:text-4xl md:text-7xl font-calsans">
+            <h1 className="text-2xl sm:text-4xl md:text-8xl font-calsans">
               SAVING SOLUTIONS BUILT FOR NIGERIA&apos;S INFORMAL SECTOR
             </h1>
             <p className="text-[#F7F9FC] text-xs md:text-base leading-relaxed">
               Digitizing daily contributions for traders, commercial
-              transporters <br className="hidden md:block" />
-              and artisans through agent-assisted models
+              transporters and artisans through agent-
+              <br className="hidden md:block" />
+              assisted models
             </p>
           </div>
 
@@ -64,25 +68,25 @@ export default function HomeScreen() {
           </div>
 
           {/* Steps Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6 -mx-2 sm:-mx-4 md:-mx-6 lg:-mx-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 lg:gap-6 px-4 sm:px-6 md:px-8">
             {/* Step 1 */}
-            <div className="bg-gray-900 rounded-lg sm:rounded-xl px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4">
+            <div className="bg-gray-900 rounded-lg sm:rounded-xl px-4 sm:px-5 md:px-6 lg:px-8 py-4 sm:py-5 lg:py-4">
               <div className="flex items-center">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 bg-white rounded-full flex items-center justify-center mr-2 sm:mr-3 md:mr-4 flex-shrink-0">
+                <div className="w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 lg:w-10 lg:h-10 bg-white rounded-full flex items-center justify-center mr-3 sm:mr-4 lg:mr-3 flex-shrink-0">
                   {/* Replace with your image component */}
                   <Image
                     src="/uploads/Emojis.png"
                     alt="Sign Up"
-                    width={24} // set a base width (px)
-                    height={24} // set a base height (px)
-                    className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6"
+                    width={24}
+                    height={24}
+                    className="w-5 h-5 sm:w-6 sm:h-6 lg:w-5 lg:h-5"
                   />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-xs sm:text-sm md:text-md lg:text-lg font-semibold mb-1 leading-tight">
+                  <h3 className="text-sm sm:text-md md:text-lg lg:text-base font-semibold mb-2 lg:mb-1 leading-tight">
                     Sign Up Through our Trusted Agent
                   </h3>
-                  <p className="text-gray-300 text-xs sm:text-xs md:text-sm leading-snug">
+                  <p className="text-gray-300 text-xs sm:text-sm md:text-base lg:text-sm leading-relaxed lg:leading-snug">
                     Customer finds a nearby Little Wheel agent and open an
                     account.
                   </p>
@@ -91,23 +95,23 @@ export default function HomeScreen() {
             </div>
 
             {/* Step 2 */}
-            <div className="bg-gray-900 rounded-lg sm:rounded-xl px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4">
+            <div className="bg-gray-900 rounded-lg sm:rounded-xl px-4 sm:px-5 md:px-6 lg:px-8 py-4 sm:py-5 lg:py-4">
               <div className="flex items-center">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 bg-white rounded-full flex items-center justify-center mr-2 sm:mr-3 md:mr-4 flex-shrink-0">
+                <div className="w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 lg:w-10 lg:h-10 bg-white rounded-full flex items-center justify-center mr-3 sm:mr-4 lg:mr-3 flex-shrink-0">
                   {/* Replace with your image component */}
                   <Image
                     src="/uploads/Emojis1.png"
                     alt="Make Contributions"
-                    width={24} // base size, works with Tailwind classes
+                    width={24}
                     height={24}
-                    className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6"
+                    className="w-5 h-5 sm:w-6 sm:h-6 lg:w-5 lg:h-5"
                   />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-xs sm:text-sm md:text-md lg:text-lg font-semibold mb-1 leading-tight">
+                  <h3 className="text-sm sm:text-md md:text-lg lg:text-base font-semibold mb-2 lg:mb-1 leading-tight">
                     Make Your Contributions
                   </h3>
-                  <p className="text-gray-300 text-xs sm:text-xs md:text-sm leading-snug">
+                  <p className="text-gray-300 text-xs sm:text-sm md:text-base lg:text-sm leading-relaxed lg:leading-snug">
                     Make cash or transfer contributions to the agent.
                   </p>
                 </div>
@@ -115,23 +119,23 @@ export default function HomeScreen() {
             </div>
 
             {/* Step 3 */}
-            <div className="bg-gray-900 rounded-lg sm:rounded-xl px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4">
+            <div className="bg-gray-900 rounded-lg sm:rounded-xl px-4 sm:px-5 md:px-6 lg:px-8 py-4 sm:py-5 lg:py-4">
               <div className="flex items-center">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 bg-white rounded-full flex items-center justify-center mr-2 sm:mr-3 md:mr-4 flex-shrink-0">
+                <div className="w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 lg:w-10 lg:h-10 bg-white rounded-full flex items-center justify-center mr-3 sm:mr-4 lg:mr-3 flex-shrink-0">
                   {/* Replace with your image component */}
                   <Image
                     src="/uploads/Confetti Ball.png"
                     alt="Instant Deposit"
                     width={24}
                     height={24}
-                    className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6"
+                    className="w-5 h-5 sm:w-6 sm:h-6 lg:w-5 lg:h-5"
                   />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-xs sm:text-sm md:text-md lg:text-lg font-semibold mb-1 leading-tight">
+                  <h3 className="text-sm sm:text-md md:text-lg lg:text-base font-semibold mb-2 lg:mb-1 leading-tight">
                     Instant Deposit & Tracking
                   </h3>
-                  <p className="text-gray-300 text-xs sm:text-xs md:text-sm leading-snug">
+                  <p className="text-gray-300 text-xs sm:text-sm md:text-base lg:text-sm leading-relaxed lg:leading-snug">
                     Agent records transactions instantly updating the
                     customer&apos;s Little Wheel account.
                   </p>
@@ -142,28 +146,36 @@ export default function HomeScreen() {
         </div>
       </div>
 
-      {/* Video section - now separate from background */}
-      <div className="p-6 pt-1 md:h-[700px] h-auto flex items-center justify-center">
-        <div className="relative w-full max-w-6xl aspect-square sm:w-[700px] sm:h-[700px] md:w-[900px] md:h-[900px] lg:w-[1000px] lg:h-[1000px] rounded-sm overflow-hidden shadow-lg cursor-pointer group">
-          {/* Thumbnail image */}
-          <Image
-            src="/uploads/frame.png"
-            alt="Little Wheel - Build Wealth Little by Little"
-            width={500} // placeholder value, adjust based on actual image
-            height={500} // placeholder value, adjust based on actual image
-            className="w-full h-full object-contain"
-          />
+      {/* Video section - now with inline video playback */}
+      <div className="p-6 pt-1 flex items-center justify-center">
+        <div className="relative w-full max-w-4xl aspect-video sm:max-w-2xl md:max-w-3xl lg:max-w-4xl rounded-lg overflow-hidden shadow-lg cursor-pointer group">
+          {!showVideo ? (
+            <>
+              {/* Thumbnail image */}
+              <Image
+                src="/uploads/frame.png"
+                alt="Little Wheel - Build Wealth Little by Little"
+                width={500} // placeholder value, adjust based on actual image
+                height={500} // placeholder value, adjust based on actual image
+                className="w-full h-full object-contain"
+              />
 
-          {/* Click handler to open YouTube video */}
-          <div
-            className="absolute inset-0"
-            onClick={() =>
-              window.open(
-                "https://www.youtube.com/watch?v=bznC8lDH3Fs&t=17s",
-                "_blank"
-              )
-            }
-          />
+              {/* Click handler to show video */}
+              <div
+                className="absolute inset-0"
+                onClick={() => setShowVideo(true)}
+              />
+            </>
+          ) : (
+            // Embedded video with no controls, title, or YouTube branding
+            <iframe
+              src="https://www.youtube.com/embed/bznC8lDH3Fs?start=17&autoplay=1&rel=0&modestbranding=1&controls=0&showinfo=0&fs=0&cc_load_policy=0&iv_load_policy=3&disablekb=1"
+              title="YouTube video player"
+              frameBorder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              className="w-full h-full rounded-lg"
+            />
+          )}
         </div>
       </div>
     </div>

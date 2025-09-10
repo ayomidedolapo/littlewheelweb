@@ -51,9 +51,9 @@ export default function Testimonials() {
       initial={{ opacity: 0, y: -100 }}
       whileInView={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6 }}
-      className="h-auto px-6 py-10 flex flex-col items-center space-y-6 bg-white"
+      className="h-auto px-6 py-10 flex flex-col items-center space-y-6 bg-black"
     >
-      <h2 className="text-black text-sm md:text-xl font-semibold text-center">
+      <h2 className="text-white text-sm md:text-xl font-semibold text-center">
         Short success stories from existing agents
       </h2>
 
@@ -65,16 +65,16 @@ export default function Testimonials() {
             initial={{ opacity: 0, y: 100 }}
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
-            className="border border-[#F0F2F5] p-4 rounded-lg shadow-lg flex flex-col text-left space-y-4 bg-white"
+            className="border border-gray-900 p-4 rounded-lg shadow-lg flex flex-col text-left space-y-4 bg-gray-900"
           >
-            <p className="text-sm h-32 italic">{review.feedback}</p>
+            <p className="text-sm h-32 text-white italic">{review.feedback}</p>
             <div className="flex gap-2">
               <Avatar className="w-10 h-10 rounded-full">
                 <AvatarImage src={review.image} />
                 <AvatarFallback>{review.name[0]}</AvatarFallback>
               </Avatar>
               <div>
-                <p className="font-semibold">{review.name}</p>
+                <p className="font-semibold text-white">{review.name}</p>
                 <p className="text-xs text-gray-500">{review.occupation}</p>
               </div>
             </div>

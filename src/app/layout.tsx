@@ -6,7 +6,10 @@ import { Toaster } from "sonner";
 import { cn } from "@littlewheel/lib/utils";
 import NextTopLoader from "nextjs-toploader";
 import Script from "next/script";
+import ConditionalHeader from "../components/ConditionalHeader";
+import ConditionalFooter from "../components/ConditionalFooter";
 
+// ... all your font definitions remain the same ...
 const inter18pt = localFont({
   src: [
     {
@@ -360,7 +363,7 @@ export default function RootLayout({
         </Script>
       </head>
       <body
-        className="antialiased bg-background text-foreground overflow-hidden"
+        className="antialiased bg-background text-foreground min-h-screen flex flex-col"
         style={{ fontFamily: "var(--font-inter-18pt)" }}
       >
         <ThemeProvider
@@ -369,9 +372,15 @@ export default function RootLayout({
           enableSystem={true}
           disableTransitionOnChange
         >
-          <NextTopLoader color="#000" />
-          {children}
-          <Toaster richColors position="top-right" duration={1000} />
+          <ConditionalHeader />
+
+          <main className="flex-grow">
+            <NextTopLoader color="#000" />
+            {children}
+            <Toaster richColors position="top-right" duration={1000} />
+          </main>
+
+          <ConditionalFooter />
         </ThemeProvider>
       </body>
     </html>
