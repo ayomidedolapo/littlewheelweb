@@ -2,8 +2,6 @@
 import { ScrollArea } from "@littlewheel/components/ui/scroll-area";
 import { cn } from "@littlewheel/lib/utils";
 import { useEffect, useRef, useState } from "react";
-import AgentHeader from "../component/agent-header";
-import AgentFooter from "../component/agent-footer";
 
 const policySections = [
   { id: "user-categories", title: "User Categories Covered" },
@@ -47,7 +45,6 @@ export default function Terms() {
 
   return (
     <div className="h-screen bg-[#F9FAFB] w-full m-0 p-0 overflow-hidden text-black">
-      <AgentHeader />
       <ScrollArea className="h-[90%]">
         <div className="flex flex-col">
           <section
@@ -353,7 +350,6 @@ export default function Terms() {
               </div>
             </div>
           </section>
-          <AgentFooter />
         </div>
       </ScrollArea>
     </div>

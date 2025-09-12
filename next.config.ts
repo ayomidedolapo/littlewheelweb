@@ -7,6 +7,17 @@ const nextConfig: NextConfig = {
     // Temporarily ignore build errors
     ignoreBuildErrors: true,
   },
+
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "flagpedia.net",
+        port: "",
+        pathname: "/data/flags/**",
+      },
+    ],
+  },
 };
 
 export default nextConfig;
