@@ -1,12 +1,13 @@
 "use client";
 
 import { Wallet, Banknote, ArrowDownFromLine } from "lucide-react";
+import React from "react";
 
 type Txn = {
-  id: string;
-  title: string;
-  timestamp: string; // e.g., "Mar 4th, 02:46:32"
-  amount: number; // negative = debit, positive = credit
+  id: "txn_123";
+  type: "withdrawal";
+  createdAt: "2025-09-12T15:20:30Z";
+  amount: -2000; // negative = debit, positive = credit
   icon: "withdraw" | "commission" | "recharge";
 };
 
@@ -18,7 +19,7 @@ const NGN = new Intl.NumberFormat("en-NG", {
 
 const ICONS: Record<Txn["icon"], React.ReactNode> = {
   withdraw: <Wallet className="w-4 h-4 text-red-600" />,
-  commission: <Banknote className="w-4 h-4 text-yellow-500" />, // yellow now
+  commission: <Banknote className="w-4 h-4 text-yellow-500" />,
   recharge: <ArrowDownFromLine className="w-4 h-4 text-emerald-600" />,
 };
 
@@ -30,6 +31,21 @@ const ICON_BG: Record<Txn["icon"], string> = {
 
 // Mock data set to empty until API comes in
 const MOCK_TXNS: Txn[] = [];
+
+function fmtDate(iso: string) {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
 
 export default function RecentTransactions({
   items = MOCK_TXNS,
@@ -80,10 +96,10 @@ export default function RecentTransactions({
 
                     <div className="min-w-0">
                       <p className="text-[13px] font-medium text-gray-900 truncate">
-                        {t.title}
+                        {t.type.charAt(0).toUpperCase() + t.type.slice(1)}
                       </p>
                       <p className="text-[11px] text-slate-500">
-                        {t.timestamp}
+                        {fmtDate(t.createdAt)}
                       </p>
                     </div>
                   </div>
@@ -102,8 +118,15 @@ export default function RecentTransactions({
           })}
         </ul>
       ) : (
-        <div className="mt-4 text-center text-[13px] text-slate-500">
-          No recent transaction done
+        <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-6 flex items-center justify-center">
+          {/* Empty state image */}
+          {/* Make sure you have: public/upload/Empty State.png */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/uploads/Empty State.png"
+            alt="No recent transactions"
+            className="h-28 object-contain opacity-90"
+          />
         </div>
       )}
     </section>
