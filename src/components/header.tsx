@@ -20,8 +20,8 @@ const navigationList = [
     to: "https://littlewheel.medium.com/market-research-and-analysis-for-little-wheel-6e828a1833f0",
     type: "external",
   },
-  { title: "Gallery", to: "/gallery", type: "link" },
-  { title: "Team", to: "/team", type: "link" },
+  // { title: "Gallery", to: "/gallery", type: "link" },
+  // { title: "Team", to: "/team", type: "link" },
 ];
 
 export default function Header() {

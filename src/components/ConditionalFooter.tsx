@@ -4,7 +4,8 @@ import Footer from "./footer";
 
 export default function ConditionalFooter() {
   const pathname = usePathname();
-  const isLandingPage = pathname === "/home";
+  const hiddenRoutes =
+    pathname === "/home" || pathname.startsWith("/activators");
 
-  return !isLandingPage ? <Footer /> : null;
+  return hiddenRoutes ? null : <Footer />;
 }

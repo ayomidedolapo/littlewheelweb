@@ -141,3 +141,15 @@
 .font-instrumentSerif {
   font-family: var(--font-instrumentSerif);
 }
+
+::-webkit-scrollbar {
+  display: none;
+}
+
+* {
+  scrollbar-width: none;
+}
+
+* {
+  -ms-overflow-style: none;
+}

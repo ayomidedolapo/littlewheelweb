@@ -4,7 +4,8 @@ import Header from "./header";
 
 export default function ConditionalHeader() {
   const pathname = usePathname();
-  const isLandingPage = pathname === "/home";
+  const hiddenRoutes =
+    pathname === "/home" || pathname.startsWith("/activators");
 
-  return !isLandingPage ? <Header /> : null;
+  return hiddenRoutes ? null : <Header />;
 }
