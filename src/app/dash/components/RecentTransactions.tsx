@@ -1,13 +1,14 @@
+// app/dash/components/RecentTransactions.tsx
 "use client";
 
+import React, { useEffect, useMemo, useState } from "react";
 import { Wallet, Banknote, ArrowDownFromLine } from "lucide-react";
-import React from "react";
 
 type Txn = {
-  id: "txn_123";
-  type: "withdrawal";
-  createdAt: "2025-09-12T15:20:30Z";
-  amount: -2000; // negative = debit, positive = credit
+  id: string;
+  type: "withdrawal" | "commission" | "recharge" | string;
+  createdAt: string; // ISO
+  amount: number; // negative = debit, positive = credit
   icon: "withdraw" | "commission" | "recharge";
 };
 
@@ -29,7 +30,6 @@ const ICON_BG: Record<Txn["icon"], string> = {
   recharge: "bg-emerald-50",
 };
 
-// Mock data set to empty until API comes in
 const MOCK_TXNS: Txn[] = [];
 
 function fmtDate(iso: string) {
@@ -47,14 +47,149 @@ function fmtDate(iso: string) {
   }
 }
 
+/* ------------------------------ Mappers ---------------------------------- */
+function pickArray(payload: any): any[] {
+  if (!payload) return [];
+
+  const deepCands = [
+    payload?.data?.data?.items,
+    payload?.data?.list?.items,
+    payload?.data?.items,
+    payload?.list?.items,
+  ];
+  for (const c of deepCands) if (Array.isArray(c)) return c;
+
+  const top = [payload.data, payload.results, payload.items, payload.docs];
+  for (const c of top) if (Array.isArray(c)) return c;
+
+  if (Array.isArray(payload)) return payload;
+
+  return [];
+}
+
+function toTxn(p: any): Txn | null {
+  if (!p) return null;
+
+  const id =
+    p.id ||
+    p._id ||
+    p.reference ||
+    p.ref ||
+    p.txnId ||
+    p.txId ||
+    Math.random().toString(36).slice(2);
+
+  const createdAt =
+    p.createdAt ||
+    p.created_at ||
+    p.date ||
+    p.timestamp ||
+    new Date().toISOString();
+
+  const numeric = Number(p.amount ?? p.value ?? p.total ?? 0);
+  const amountRaw = Number.isFinite(numeric) ? numeric : 0;
+
+  const flow = (p.type || p.direction || "").toString().toUpperCase();
+  const isOut = flow.includes("OUT") || flow === "OUTFLOW";
+  const signedAmount = isOut ? -Math.abs(amountRaw) : Math.abs(amountRaw);
+
+  const label =
+    (p.description || p.title || p.note || "").toString().trim() ||
+    (isOut ? "withdrawal" : "recharge");
+
+  const iconHint = (p.icon || p.category || p.tag || "")
+    .toString()
+    .toLowerCase();
+  let icon: Txn["icon"] = "recharge";
+  if (
+    iconHint.includes("commission") ||
+    label.toLowerCase().includes("commission")
+  )
+    icon = "commission";
+  else if (isOut || iconHint.includes("withdraw")) icon = "withdraw";
+  else icon = "recharge";
+
+  return {
+    id: String(id),
+    createdAt: String(createdAt),
+    amount: signedAmount,
+    type: label.toLowerCase(),
+    icon,
+  };
+}
+
+/* --------------------------------- UI ------------------------------------ */
 export default function RecentTransactions({
   items = MOCK_TXNS,
   onSeeAll,
+  page = 1,
+  limit = 5, // ← fetch only 5 by default
 }: {
   items?: Txn[];
   onSeeAll?: () => void;
+  page?: number;
+  limit?: number; // how many to fetch when this component fetches for itself
 }) {
-  const hasTxns = items && items.length > 0;
+  const [loading, setLoading] = useState(false);
+  const [fetched, setFetched] = useState<Txn[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  // If parent didn't pass items, we'll fetch from API
+  const shouldFetch = !items || items.length === 0;
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!shouldFetch) return;
+
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const qs = new URLSearchParams({
+          page: String(page),
+          limit: String(limit),
+          sort: "-createdAt",
+        }).toString();
+
+        const res = await fetch(`/api/v1/payments?${qs}`, {
+          method: "GET",
+          cache: "no-store",
+          credentials: "include",
+        });
+
+        const text = await res.text();
+        let json: any = {};
+        try {
+          json = JSON.parse(text || "{}");
+        } catch {}
+
+        if (!res.ok)
+          throw new Error(json?.message || json?.error || `HTTP ${res.status}`);
+
+        const arr = pickArray(json);
+        const txns = arr.map(toTxn).filter(Boolean) as Txn[];
+
+        if (!cancelled) setFetched(txns);
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message || "Failed to load transactions.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [shouldFetch, page, limit]);
+
+  // Whether we fetched or were given items, only show the first 5
+  const data = useMemo(() => {
+    const src = shouldFetch ? fetched : items;
+    return (src || []).slice(0, 5);
+  }, [shouldFetch, fetched, items]);
+
+  const hasTxns = !!data && data.length > 0;
 
   return (
     <section className="w-full">
@@ -72,10 +207,31 @@ export default function RecentTransactions({
         </button>
       </div>
 
+      {/* States */}
+      {loading && (
+        <div className="mt-3 space-y-2">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-gray-100 animate-pulse" />
+                <div className="h-3 w-40 bg-gray-100 rounded animate-pulse" />
+              </div>
+              <div className="h-3 w-16 bg-gray-100 rounded animate-pulse" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {error && !loading && (
+        <div className="mt-3 rounded-xl border border-rose-100 bg-rose-50 p-3 text-[12px] text-rose-700">
+          {error}
+        </div>
+      )}
+
       {/* List or Empty */}
-      {hasTxns ? (
+      {!loading && !error && hasTxns ? (
         <ul className="mt-3 divide-y divide-gray-100">
-          {items.map((t) => {
+          {data.map((t) => {
             const isCredit = t.amount > 0;
             const sign = isCredit ? "+" : "-";
             const amountAbs = Math.abs(t.amount);
@@ -87,16 +243,18 @@ export default function RecentTransactions({
                   <div className="flex items-center gap-2 min-w-0">
                     <div
                       className={`w-8 h-8 ${
-                        ICON_BG[t.icon]
+                        ICONS[t.icon] ? ICON_BG[t.icon] : "bg-gray-100"
                       } rounded-full flex items-center justify-center`}
                       aria-hidden
                     >
-                      {ICONS[t.icon]}
+                      {ICONS[t.icon] || ICONS.recharge}
                     </div>
 
                     <div className="min-w-0">
                       <p className="text-[13px] font-medium text-gray-900 truncate">
-                        {t.type.charAt(0).toUpperCase() + t.type.slice(1)}
+                        {t.type
+                          ? t.type.charAt(0).toUpperCase() + t.type.slice(1)
+                          : "Transaction"}
                       </p>
                       <p className="text-[11px] text-slate-500">
                         {fmtDate(t.createdAt)}
@@ -117,10 +275,10 @@ export default function RecentTransactions({
             );
           })}
         </ul>
-      ) : (
+      ) : null}
+
+      {!loading && !error && !hasTxns && (
         <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-6 flex items-center justify-center">
-          {/* Empty state image */}
-          {/* Make sure you have: public/upload/Empty State.png */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/uploads/Empty State.png"

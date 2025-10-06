@@ -7,8 +7,8 @@ const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS ?? 45000);
 
 async function readCookie(name: string) {
   try {
-    const cookieStore = await cookies();
-    return cookieStore.get(name)?.value || "";
+    const store = await cookies();
+    return store.get(name)?.value || "";
   } catch {
     return "";
   }
@@ -21,14 +21,17 @@ async function readBearer(req: NextRequest) {
   const altHdr = (req.headers.get("x-lw-auth") || "")
     .replace(/^Bearer\s+/i, "")
     .trim();
+  // Prefer canonical cookie, then legacy, then any older names
   const cookieTok =
-    (await readCookie("lw_token")) || (await readCookie("token"));
+    (await readCookie("lw_auth")) ||
+    (await readCookie("lw_token")) || // legacy alias
+    (await readCookie("token")) ||
+    "";
+
   return header || altHdr || cookieTok || "";
 }
 
 export async function GET(req: NextRequest) {
-  console.log("=== GET USER PROFILE ===");
-
   if (!V1) {
     return NextResponse.json(
       { success: false, message: "Missing BACKEND_API_URL" },
@@ -38,13 +41,6 @@ export async function GET(req: NextRequest) {
 
   const bearer = await readBearer(req);
 
-  console.log("Token check:", {
-    hasAuthHeader: !!req.headers.get("authorization"),
-    hasXLwAuth: !!req.headers.get("x-lw-auth"),
-    hasCookieToken: !!(await readCookie("lw_token")),
-    finalBearer: bearer ? `[${bearer.length} chars]` : "MISSING",
-  });
-
   if (!bearer) {
     return NextResponse.json(
       { success: false, message: "Missing authentication token" },
@@ -53,9 +49,6 @@ export async function GET(req: NextRequest) {
   }
 
   const url = `${V1}/users/me`;
-
-  console.log("Fetching user profile from:", url);
-
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort("timeout"), TIMEOUT_MS);
 
@@ -78,13 +71,6 @@ export async function GET(req: NextRequest) {
       data = { message: text || response.statusText };
     }
 
-    console.log("User profile response:", {
-      status: response.status,
-      success: data?.success,
-      hasUserData: !!data?.user || !!data?.data,
-      dataKeys: data ? Object.keys(data) : [],
-    });
-
     if (!response.ok) {
       return NextResponse.json(
         {
@@ -95,7 +81,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Return the data in a consistent format
+    // Keep original payload, but also include a normalized "user" root for consumers.
     return NextResponse.json(
       {
         success: true,
@@ -106,8 +92,6 @@ export async function GET(req: NextRequest) {
     );
   } catch (e: any) {
     const aborted = e?.name === "AbortError" || e === "timeout";
-    console.error("Get user profile error:", e);
-
     return NextResponse.json(
       {
         success: false,

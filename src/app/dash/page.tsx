@@ -1,6 +1,7 @@
+/* app/dash/page.tsx */
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Bell,
   Eye,
@@ -8,6 +9,7 @@ import {
   ArrowDownCircle,
   ArrowUpRight,
   X,
+  Copy,
 } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -27,18 +29,24 @@ const FULL_TRANSACTIONS_ROUTE = "/dash/fulltransaction";
 const NGN = (v: number) =>
   `₦${(v || 0).toLocaleString("en-NG", { maximumFractionDigits: 0 })}`;
 
-function getCookie(name: string) {
-  if (typeof document === "undefined") return "";
-  const match = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
-  return match ? decodeURIComponent(match[2]) : "";
-}
+const NGN_FULL = (v: number) =>
+  `₦${(v || 0).toLocaleString("en-NG", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 
 type Tx = {
   id?: string | number;
   note?: string;
   type?: "deposit" | "withdraw";
-  amount?: number; // + for deposit, - for withdraw (we'll fall back if not provided)
-  at?: string; // date string
+  amount?: number;
+  at?: string;
+};
+
+type VirtualAccount = {
+  bankName?: string;
+  accountNumber?: string;
+  accountName?: string;
 };
 
 type User = {
@@ -47,117 +55,358 @@ type User = {
   middleName?: string;
   username?: string;
   email?: string;
-  balance?: number;
-  commission?: number;
+  balance?: number; // (fallback only)
+  commission?: number; // (fallback only)
   transactions?: Tx[];
   notifications?: any[];
   avatarUrl?: string;
+  // derived
+  isTier2?: boolean;
+  virtual?: VirtualAccount | null;
 };
 
 export default function MobileDashboard() {
   const router = useRouter();
 
   const [creditBalance, setCreditBalance] = useState(0.0);
+  const [commissionTotal, setCommissionTotal] = useState(0.0);
   const [notificationCount, setNotificationCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [showBalance, setShowBalance] = useState(true);
 
+  // Copy feedback for VA number
+  const [copied, setCopied] = useState(false);
+
   // Bottom-sheet for all transactions
   const [showAllTx, setShowAllTx] = useState(false);
 
-  // ✅ Fetch user from the correct API endpoint
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+  function isBareBase64Jpeg(s?: string) {
+    return !!s && /^\/9j\//.test(s);
+  }
+  function looksLikeDataUrl(s?: string) {
+    return !!s && /^data:image\/[a-z]+;base64,/i.test(s || "");
+  }
+  function normalizeImgSrc(u?: string) {
+    if (!u) return "";
+    if (looksLikeDataUrl(u)) return u;
+    if (isBareBase64Jpeg(u)) return `data:image/jpeg;base64,${u}`;
+    return u;
+  }
+  function getDisplayName(u?: User | null) {
+    if (!u) return "User";
+    const firstName = u.firstName || "";
+    const lastName = u.lastName || "";
+    const username = u.username || "";
+    if (firstName && lastName) return `${firstName} ${lastName}`;
+    if (firstName) return firstName;
+    if (username) return username;
+    return "User";
+  }
 
-        console.log("Fetching user profile from /api/user/me...");
+  /** Parse virtual account from flexible shapes */
+  function pickVirtualAccount(obj: any): VirtualAccount | null {
+    if (!obj) return null;
 
-        const res = await fetch("/api/user/me", {
-          method: "GET",
-          credentials: "include",
-          headers: {
-            Accept: "application/json",
-          },
-        });
+    // Common shapes
+    const direct =
+      obj.virtualAccount ||
+      obj.virtual_account ||
+      obj.virtual ||
+      obj.VirtualAccount; // <= handle capitalized key
 
-        console.log("User profile response status:", res.status);
+    if (direct && (direct.accountNumber || direct.account_number)) {
+      return {
+        bankName: direct.bankName || direct.bank || direct.bank_name,
+        accountNumber: String(
+          direct.accountNumber || direct.account_number || ""
+        ),
+        accountName: direct.accountName || direct.account_name,
+      };
+    }
 
-        if (!res.ok) {
-          if (res.status === 401) {
-            // Unauthorized - redirect to login
-            console.log("User not authenticated, redirecting to login...");
-            router.replace(LOGIN_ROUTE);
-            return;
-          }
-
-          const errorData = await res
-            .json()
-            .catch(() => ({ message: "Failed to load profile" }));
-          throw new Error(errorData.message || `HTTP ${res.status}`);
-        }
-
-        const data = await res.json();
-        console.log("User profile data:", data);
-
-        // Handle different possible response structures
-        const userData = data?.user || data?.data || data;
-
-        if (userData) {
-          const userInfo: User = {
-            firstName: userData.firstName || userData.first_name,
-            lastName: userData.lastName || userData.last_name,
-            middleName: userData.middleName || userData.middle_name,
-            username: userData.username,
-            email: userData.email,
-            balance: Number(userData.balance || userData.creditBalance || 0),
-            commission: Number(
-              userData.commission || userData.totalCommission || 0
-            ),
-            transactions:
-              userData.transactions || userData.recentTransactions || [],
-            notifications: userData.notifications || [],
-            avatarUrl: userData.avatarUrl || userData.avatar_url,
-          };
-
-          setUser(userInfo);
-          setCreditBalance(userInfo.balance || 0);
-          setNotificationCount(userInfo.notifications?.length || 0);
-
-          console.log("User profile loaded successfully:", {
-            name: `${userInfo.firstName} ${userInfo.lastName}`,
-            balance: userInfo.balance,
-            commission: userInfo.commission,
-            transactionsCount: userInfo.transactions?.length || 0,
-          });
-        } else {
-          throw new Error("Invalid user data received");
-        }
-      } catch (err) {
-        console.error("Error fetching user profile:", err);
-        const errorMessage =
-          err instanceof Error ? err.message : "Failed to load user profile";
-        setError(errorMessage);
-
-        // If it's an authentication error, redirect to login
-        if (
-          errorMessage.includes("401") ||
-          errorMessage.includes("Unauthorized")
-        ) {
-          router.replace(LOGIN_ROUTE);
-        }
-      } finally {
-        setLoading(false);
+    // Accounts array with a "virtual" type
+    const arr = obj.accounts || obj.bankAccounts || obj.bank_accounts || [];
+    if (Array.isArray(arr)) {
+      const v =
+        arr.find(
+          (a: any) =>
+            (a.type || a.kind || a.accountType || "")
+              .toString()
+              .toLowerCase()
+              .includes("virtual") || a.isVirtual === true
+        ) || null;
+      if (v) {
+        return {
+          bankName: v.bankName || v.bank || v.bank_name,
+          accountNumber: String(v.accountNumber || v.account_number || ""),
+          accountName: v.accountName || v.account_name,
+        };
       }
-    };
+    }
 
-    fetchUser();
+    // Scattered keys
+    const num =
+      obj.virtualAccountNumber ||
+      obj.virtual_account_number ||
+      obj.vAccountNumber ||
+      obj.accountNumber;
+    if (num) {
+      return {
+        bankName:
+          obj.virtualBankName ||
+          obj.bankName ||
+          obj.bank ||
+          obj.virtual_bank_name,
+        accountNumber: String(num),
+        accountName:
+          obj.virtualAccountName || obj.accountName || obj.account_name,
+      };
+    }
+
+    return null;
+  }
+
+  /** Parse tier-2 indicator from flexible shapes (adds accountTier support) */
+  function pickIsTier2(obj: any): boolean {
+    if (!obj) return false;
+
+    // Explicit enums/strings the backend may send
+    const accountTier = (obj.accountTier || obj.account_tier || "").toString();
+    if (/^TIER[_\s-]*2$/i.test(accountTier)) return true;
+
+    // Numeric or string levels
+    const level =
+      obj.tier ||
+      obj.level ||
+      obj.accountLevel ||
+      obj.kycLevel ||
+      obj.kyc ||
+      obj.kyc_level ||
+      obj.kycTier;
+
+    if (typeof level === "number") return level >= 2;
+    if (typeof level === "string") {
+      const n = parseInt(level.replace(/\D/g, "") || "0", 10);
+      if (Number.isFinite(n)) return n >= 2;
+      if (/tier\s*2|level\s*2|kyc\s*2/i.test(level)) return true;
+    }
+
+    // Boolean hints/flags
+    return !!(
+      obj.isTier2 ||
+      obj.tier2 ||
+      obj.hasVirtualAccount ||
+      obj.virtualAccount ||
+      obj.VirtualAccount
+    );
+  }
+
+  const fetchUser = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const res = await fetch("/api/user/me", {
+        method: "GET",
+        cache: "no-store",
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          router.replace(LOGIN_ROUTE);
+          return;
+        }
+        const errorData = await res
+          .json()
+          .catch(() => ({ message: "Failed to load profile" }));
+        throw new Error(
+          errorData?.message ||
+            (res.status === 404
+              ? "User endpoint not found"
+              : `HTTP ${res.status}`)
+        );
+      }
+
+      const data = await res.json();
+      const userData = data?.user || data?.data || data;
+      if (!userData) throw new Error("Invalid user data received");
+
+      const rawAvatar =
+        userData.avatarUrl || userData.avatar_url || userData.avatar || "";
+      const avatarUrl = normalizeImgSrc(rawAvatar);
+
+      const virtual = pickVirtualAccount(userData);
+      const isTier2 = pickIsTier2(userData);
+
+      const userInfo: User = {
+        firstName: userData.firstName || userData.first_name,
+        lastName: userData.lastName || userData.last_name,
+        middleName: userData.middleName || userData.middle_name,
+        username: userData.username,
+        email: userData.email,
+        // Fallback values (balances endpoint is the source of truth)
+        balance: Number(
+          userData.balance ??
+            userData.creditBalance ??
+            userData.walletBalance ??
+            0
+        ),
+        commission: Number(
+          userData.commission ??
+            userData.totalCommission ??
+            userData.commissionBalance ??
+            0
+        ),
+        transactions:
+          userData.transactions || userData.recentTransactions || [],
+        notifications: userData.notifications || [],
+        avatarUrl,
+        isTier2,
+        virtual,
+      };
+
+      // (Optional) cache lightweight profile for other pages
+      try {
+        localStorage.setItem(
+          "lw_profile",
+          JSON.stringify({
+            avatarUrl: userInfo.avatarUrl || "",
+            displayName: getDisplayName(userInfo),
+            username: userInfo.username || "",
+            email: userInfo.email || "",
+            isTier2: !!userInfo.isTier2,
+            vaAccountNumber: userInfo.virtual?.accountNumber || "",
+            vaBankName: userInfo.virtual?.bankName || "",
+          })
+        );
+      } catch {}
+
+      setUser(userInfo);
+      setNotificationCount(userInfo.notifications?.length || 0);
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : "Failed to load user profile";
+      setError(msg);
+      if (msg.toLowerCase().includes("unauthorized") || msg.includes("401")) {
+        router.replace(LOGIN_ROUTE);
+      }
+    } finally {
+      setLoading(false);
+    }
   }, [router]);
 
-  const handleToggleBalance = () => setShowBalance(!showBalance);
+  /** Authoritative balances (credit + commission) from /api/v1/agent/balances */
+  const fetchBalances = useCallback(async () => {
+    const toNum = (v: any) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    try {
+      const res = await fetch("/api/v1/agent/balances", {
+        method: "GET",
+        cache: "no-store",
+        credentials: "include",
+      });
+
+      const text = await res.text();
+      let j: any = {};
+      try {
+        j = JSON.parse(text || "{}");
+      } catch {}
+
+      if (!res.ok) {
+        // fall back to user object values if available
+        if (typeof user?.balance === "number" && isFinite(user.balance)) {
+          setCreditBalance(user.balance);
+        }
+        if (typeof user?.commission === "number" && isFinite(user.commission)) {
+          setCommissionTotal(user.commission);
+        }
+        return;
+      }
+
+      // { data: { rechargeBalance, commissionBalance } }
+      const d = j?.data || {};
+      const credit = toNum(d.rechargeBalance ?? d.creditBalance);
+      const commission = toNum(d.commissionBalance);
+
+      setCreditBalance(credit);
+      setCommissionTotal(commission);
+    } catch {
+      // fallbacks on any error
+      if (typeof user?.balance === "number" && isFinite(user.balance)) {
+        setCreditBalance(user.balance);
+      }
+      if (typeof user?.commission === "number" && isFinite(user.commission)) {
+        setCommissionTotal(user.commission);
+      }
+    }
+  }, [user?.balance, user?.commission]);
+
+  // Initial load + short poll for fresh balances (helps right after a recharge)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      await fetchUser();
+      await fetchBalances();
+      if (cancelled) return;
+
+      // short 2-minute poll (20s interval)
+      const start = Date.now();
+      const poll = setInterval(() => {
+        if (Date.now() - start > 2 * 60 * 1000) {
+          clearInterval(poll);
+          return;
+        }
+        fetchBalances();
+      }, 20000);
+      return () => clearInterval(poll);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchUser, fetchBalances]);
+
+  // Refetch on focus/visibility (no hard reloads)
+  useEffect(() => {
+    const onFocus = () => {
+      fetchUser();
+      fetchBalances();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        fetchUser();
+        fetchBalances();
+      }
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [fetchUser, fetchBalances]);
+
+  // Cross-tab signal
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "lw_balance_dirty") fetchBalances();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [fetchBalances]);
+
+  // Keep card in sync if user.balance changes and balances call failed
+  useEffect(() => {
+    if (typeof user?.balance === "number" && isFinite(user.balance)) {
+      setCreditBalance((prev) => (isFinite(prev) ? prev : user.balance));
+    }
+  }, [user?.balance]);
+
   const openSettings = () => router.push(SETTINGS_ROUTE);
   const goRecharge = () => router.push(RECHARGE_ROUTE);
   const goWithdraw = () => router.push(WITHDRAW_ROUTE);
@@ -167,7 +416,6 @@ export default function MobileDashboard() {
   // Normalize transactions for the bottom sheet
   const txList: Tx[] = useMemo(() => {
     const list = user?.transactions ?? [];
-    // If the API doesn't supply positive/negative amounts, we'll infer from type
     return list.map((t, i) => {
       let amount = typeof t.amount === "number" ? t.amount : 0;
       if (!amount && t.type === "withdraw") amount = -Math.abs(amount || 0);
@@ -187,32 +435,12 @@ export default function MobileDashboard() {
     });
   }, [user?.transactions]);
 
-  // Get user display name
-  const getUserDisplayName = () => {
-    if (!user) return "User";
-
-    const firstName = user.firstName || "";
-    const lastName = user.lastName || "";
-    const username = user.username || "";
-
-    if (firstName && lastName) {
-      return `${firstName} ${lastName}`;
-    } else if (firstName) {
-      return firstName;
-    } else if (username) {
-      return username;
-    }
-
-    return "User";
-  };
-
-  // Handle retry for errors
   const handleRetry = () => {
     setError(null);
-    window.location.reload();
+    fetchUser();
+    fetchBalances();
   };
 
-  // If there's an error, show error state
   if (error && !loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center p-4">
@@ -240,6 +468,10 @@ export default function MobileDashboard() {
     );
   }
 
+  const displayName = getDisplayName(user);
+  const isTier2 = !!user?.isTier2;
+  const va = user?.virtual || null;
+
   return (
     <div className="min-h-screen bg-white flex items-start justify-center p-0 md:p-4">
       <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-3xl md:shadow-xl overflow-hidden">
@@ -247,7 +479,7 @@ export default function MobileDashboard() {
         <div className="bg-black px-6 pt-8 pb-6">
           {/* Greeting + Notifications */}
           <div className="flex items-center justify-between mb-6">
-            {/* Make the whole profile area clickable */}
+            {/* Profile → Settings */}
             <button
               type="button"
               onClick={openSettings}
@@ -262,10 +494,11 @@ export default function MobileDashboard() {
                     width={48}
                     height={48}
                     className="w-full h-full object-cover"
+                    unoptimized
                   />
                 ) : (
                   <div className="w-full h-full bg-gray-400 flex items-center justify-center text-white text-lg font-bold">
-                    {getUserDisplayName().charAt(0).toUpperCase()}
+                    {displayName.charAt(0).toUpperCase()}
                   </div>
                 )}
               </div>
@@ -277,7 +510,7 @@ export default function MobileDashboard() {
                   <div className="w-32 h-6 bg-white/20 rounded animate-pulse" />
                 ) : (
                   <p className="text-md font-bold text-white group-hover:underline">
-                    {getUserDisplayName()}
+                    {displayName}
                   </p>
                 )}
               </div>
@@ -299,9 +532,8 @@ export default function MobileDashboard() {
             </div>
           </div>
 
-          {/* Credit Balance (white card with transparent black grid lines) */}
+          {/* Credit Balance card */}
           <div className="bg-white rounded-md p-6 shadow-sm relative overflow-hidden">
-            {/* grid overlay */}
             <div
               aria-hidden
               className="pointer-events-none absolute inset-0 rounded-md"
@@ -313,7 +545,60 @@ export default function MobileDashboard() {
               }}
             />
 
-            {/* content */}
+            {/* VA strip (shows number if Tier-2 & VA available; otherwise a KYC prompt) */}
+            <div className="relative z-10 mb-3 -mx-1">
+              {isTier2 && va?.accountNumber ? (
+                <div className="relative">
+                  <div className="flex items-center justify-between rounded-full bg-gray-100/80 border border-gray-200 px-5 py-1.5">
+                    <span className="text-[12px] font-semibold text-gray-800">
+                      Your Virtual account
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(
+                            va.accountNumber!
+                          );
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 1400);
+                        } catch {}
+                      }}
+                      className="group inline-flex items-center gap-2 text-gray-800 hover:text-black"
+                      title="Copy account number"
+                    >
+                      <span className="font-mono text-[13px] tracking-wide leading-none">
+                        {va.accountNumber}
+                      </span>
+                      <Copy className="w-3.5 h-3.5 opacity-80 group-hover:opacity-100" />
+                    </button>
+                  </div>
+
+                  {copied && (
+                    <div className="absolute right-3 mt-1 rounded-full bg-black text-white text-[10px] px-2 py-0.5">
+                      Copied!
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => router.push("/dash/components/kyc")}
+                  className="w-full flex items-center justify-between rounded-full bg-amber-100/40 border border-amber-200 px-5 py-1.5 text-amber-900 hover:bg-amber-100/60"
+                  title="Upgrade to Tier 2"
+                >
+                  <span className="text-[12px] font-semibold leading-none">
+                    Your Virtual account
+                  </span>
+                  <span className="text-[12px] font-medium leading-none">
+                    {isTier2 ? "Pending setup" : "Upgrade to Tier 2 →"}
+                  </span>
+                </button>
+              )}
+            </div>
+
+            {/* Balance row + Add credit */}
             <div className="relative z-10 flex items-center justify-between">
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-2">
@@ -321,7 +606,7 @@ export default function MobileDashboard() {
                     Credit Balance
                   </p>
                   <button
-                    onClick={handleToggleBalance}
+                    onClick={() => setShowBalance(!showBalance)}
                     className="text-gray-400 hover:text-gray-600"
                     aria-label={showBalance ? "Hide balance" : "Show balance"}
                   >
@@ -336,7 +621,7 @@ export default function MobileDashboard() {
                   <div className="w-24 h-6 bg-gray-200 rounded animate-pulse" />
                 ) : (
                   <p className="text-xl font-extrabold text-gray-900">
-                    {showBalance ? `₦${creditBalance.toFixed(2)}` : "₦••••"}
+                    {showBalance ? NGN_FULL(creditBalance) : "₦••••"}
                   </p>
                 )}
               </div>
@@ -374,7 +659,7 @@ export default function MobileDashboard() {
             ) : (
               <RecentTransactions
                 items={user?.transactions ?? []}
-                onSeeAll={goToFullTransactions} // ⬅️ route to full transactions page
+                onSeeAll={goToFullTransactions}
               />
             )}
           </div>
@@ -388,9 +673,9 @@ export default function MobileDashboard() {
               </div>
             ) : (
               <CommissionSummary
-                total={user?.commission ?? 0}
+                total={commissionTotal}
                 withdrawablePct={0.7}
-                onWithdraw={goWithdraw} // ⬅️ route to withdraw
+                onWithdraw={() => router.push(WITHDRAW_ROUTE)}
               />
             )}
           </div>
@@ -406,30 +691,12 @@ export default function MobileDashboard() {
       {/* Bottom Sheet: All Recent Transactions */}
       {showAllTx && (
         <div className="fixed inset-0 z-50">
-          {/* backdrop */}
           <div
             className="absolute inset-0 bg-black/40"
             onClick={() => setShowAllTx(false)}
             aria-hidden
           />
-          {/* sheet */}
-          <div
-            className="absolute inset-x-0 bottom-0 bg-white rounded-t-3xl p-5 shadow-2xl"
-            style={{
-              animation: "slideUp 260ms cubic-bezier(0.22, 1, 0.36, 1)",
-            }}
-          >
-            <style jsx>{`
-              @keyframes slideUp {
-                from {
-                  transform: translateY(100%);
-                }
-                to {
-                  transform: translateY(0);
-                }
-              }
-            `}</style>
-
+          <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-3xl p-5 shadow-2xl">
             <div className="mx-auto h-1.5 w-16 rounded-full bg-gray-200 mb-3" />
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-base font-semibold text-gray-900">
@@ -450,7 +717,7 @@ export default function MobileDashboard() {
                   No transactions yet.
                 </p>
                 <button
-                  onClick={goRecharge}
+                  onClick={() => router.push(RECHARGE_ROUTE)}
                   className="text-sm text-blue-600 hover:underline"
                 >
                   Add your first credit

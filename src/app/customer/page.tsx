@@ -1,240 +1,775 @@
+/* pages/customers/page.tsx */
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Search,
-  Plus,
-  DollarSign,
-  Eye,
-  ArrowUpRight,
-  X,
-  Check,
-} from "lucide-react";
+import { Search, Plus, RotateCcw, ChevronRight } from "lucide-react";
+import Image from "next/image";
 import BottomTabs from "../dash/components/BottomTabs";
 
-/* ─────────────────────────────
-   Lightweight types (same shape as mocks)
-────────────────────────────── */
+/* ---------- tiny spinner + overlay ---------- */
+function Spinner({ className = "w-5 h-5 text-black" }: { className?: string }) {
+  return (
+    <svg
+      className={`animate-spin ${className}`}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+        fill="none"
+        className="opacity-25"
+      />
+      <path
+        fill="currentColor"
+        className="opacity-90"
+        d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"
+      />
+    </svg>
+  );
+}
+function LoadingOverlay({
+  show,
+  label = "Loading…",
+}: {
+  show: boolean;
+  label?: string;
+}) {
+  if (!show) return null;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-[1px] flex items-center justify-center"
+    >
+      <div className="rounded-xl bg-white px-4 py-3 shadow-2xl flex items-center gap-3">
+        <Spinner />
+        <span className="text-[13px] font-semibold text-gray-900">{label}</span>
+      </div>
+    </div>
+  );
+}
+
+/* -------- types & utils -------- */
 type Customer = {
   id: string;
   firstName: string;
   lastName: string;
-  phone: string;
-  createdAt: string;
+  phone?: string;
+  phoneNumber?: string;
+  createdAt?: string;
+  vaultBalance?: number | null;
+  avatarUrl?: string | null;
+  profileImageUrl?: string | null;
+  avatar?: string | null;
+  email?: string | null;
 };
-type Vault = {
+
+type APIVault = {
+  id?: string;
+  vaultId?: string;
+  _id?: string;
+  name?: string;
+  targetAmount?: number;
+  amount?: number;
+};
+
+type VaultRow = {
   id: string;
-  customerId: string;
   name: string;
   balance: number;
-  targetAmount?: number;
-  createdAt: string;
+  target: number;
+  daily: number;
 };
 
-/* Currency helper */
-const N = (v: number) =>
-  `₦${(v || 0).toLocaleString("en-NG", { maximumFractionDigits: 0 })}`;
+const C = {
+  deposit: "#0F973D",
+  vault: "#1671D9",
+  withdraw: "#D42620",
+};
 
+function fmtNaira2(n: number) {
+  return `₦${n.toLocaleString("en-NG", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+function fmtNairaCompact(v?: number | null) {
+  if (typeof v !== "number") return "₦0.00";
+  if (Math.abs(v) < 1000) {
+    return `₦${v.toLocaleString("en-NG", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  }
+  return `₦${new Intl.NumberFormat("en", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(v)}`;
+}
+function uniq<T>(arr: T[], key: (t: T) => string) {
+  const seen = new Set<string>();
+  return arr.filter((it) =>
+    seen.has(key(it)) ? false : (seen.add(key(it)), true)
+  );
+}
+const s = (v: any) => (v == null ? "" : String(v));
+
+function setActiveCustomer(id: string) {
+  try {
+    sessionStorage.setItem("lw_active_customer_id", id);
+    sessionStorage.removeItem("lw_onboarding_customer_id");
+  } catch {}
+}
+
+function extractArray(payload: any): any[] {
+  const d = payload?.data ?? payload;
+  if (Array.isArray(d)) return d;
+  if (Array.isArray(d?.items)) return d.items;
+  if (Array.isArray(payload?.items)) return payload.items;
+  if (Array.isArray(d?.data)) return d.data;
+  return [];
+}
+
+/* ---------- phone helpers ---------- */
+// Display without +234/234 and without a leading 0 afterwards
+function displayPhoneLocal(input?: string) {
+  const digits = (input || "").replace(/\D/g, "");
+  let v = digits;
+  if (v.startsWith("234")) v = v.slice(3);
+  if (v.startsWith("0")) v = v.slice(1);
+  return v || "—";
+}
+
+/* ---------- caching for vault balances ---------- */
+type BalanceCache = Record<string, number>; // customerId -> balance
+const BAL_CACHE_KEY = "lw_vault_balances_cache_v1";
+function readBalanceCache(): BalanceCache {
+  try {
+    const raw = sessionStorage.getItem(BAL_CACHE_KEY);
+    if (!raw) return {};
+    const j = JSON.parse(raw);
+    if (j && typeof j === "object") return j;
+  } catch {}
+  return {};
+}
+function writeBalanceCache(m: BalanceCache) {
+  try {
+    sessionStorage.setItem(BAL_CACHE_KEY, JSON.stringify(m));
+  } catch {}
+}
+
+/* ---------- image helpers ---------- */
+function looksLikeBareBase64(input: string) {
+  const str = input.replace(/\s/g, "");
+  if (/^(?:iVBOR|\/9j\/|UklGR)/.test(str)) return true;
+  return (
+    str.length > 100 && /^[A-Za-z0-9+/=]+$/.test(str) && str.length % 4 === 0
+  );
+}
+function pickRawImage(c: Customer): string | null {
+  return (
+    (c.profileImageUrl && c.profileImageUrl.trim()) ||
+    (c.avatarUrl && c.avatarUrl.trim()) ||
+    (c.avatar && c.avatar.trim()) ||
+    null
+  );
+}
+function toImageSrc(c: Customer): string | null {
+  const raw = pickRawImage(c);
+  if (!raw) return null;
+
+  const v = raw.trim();
+  if (v.startsWith("data:image/")) return v;
+  if (looksLikeBareBase64(v)) {
+    const head = v.startsWith("iVBOR") ? "image/png" : "image/jpeg";
+    return `data:${head};base64,${v}`;
+  }
+  try {
+    const u = new URL(v);
+    return u.toString();
+  } catch {
+    return v.startsWith("/") ? v : `/${v}`;
+  }
+}
+
+/* Avatar with fallback initials */
+function Avatar({
+  customer,
+  size = 40,
+}: {
+  customer: Customer;
+  size?: number;
+}) {
+  const [broken, setBroken] = useState(false);
+  const initials = `${(customer.firstName || " ")[0]}${
+    (customer.lastName || " ")[0]
+  }`.toUpperCase();
+  const src = broken ? null : toImageSrc(customer);
+
+  if (src) {
+    return (
+      <div
+        className="rounded-full overflow-hidden bg-gray-100"
+        style={{ width: size, height: size }}
+      >
+        <Image
+          src={src}
+          alt={`${customer.firstName} ${customer.lastName}`}
+          width={size}
+          height={size}
+          className="w-full h-full object-cover"
+          unoptimized
+          onError={() => setBroken(true)}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="rounded-full bg-gray-200 text-gray-700 flex items-center justify-center font-semibold"
+      style={{ width: size, height: size, fontSize: size * 0.4 }}
+      aria-label={`Avatar for ${customer.firstName} ${customer.lastName}`}
+    >
+      {initials}
+    </div>
+  );
+}
+
+/* map user-like row into Customer */
+function mapUserLikeRow(row: any): Customer {
+  const user = row?.user || row?.customer || row?.owner || {};
+  const base = { ...user, ...row };
+
+  const id =
+    row.customerId ||
+    user.id ||
+    base.customerId ||
+    base.userId ||
+    base.id ||
+    row.beneficiaryId ||
+    row._id ||
+    "";
+
+  const firstName =
+    s(base.firstName) ||
+    s(base.firstname) ||
+    s(base.first_name) ||
+    s(base.givenName) ||
+    s(base.given_name);
+
+  const lastName =
+    s(base.lastName) ||
+    s(base.lastname) ||
+    s(base.last_name) ||
+    s(base.surname) ||
+    s(base.family_name);
+
+  const phone = s(base.phoneNumber) || s(base.phone) || s(base.msisdn) || "";
+
+  const profileImageUrl =
+    base.profileImageUrl || base.photoUrl || base.photo || null;
+  const avatarUrl = base.avatarUrl || base.avatar || null;
+
+  const createdAt =
+    base.createdAt ||
+    base.created_at ||
+    row.createdAt ||
+    row.created_at ||
+    undefined;
+
+  const vaultBalanceNum = Number(
+    base.vaultBalance ??
+      base.balance ??
+      base.walletBalance ??
+      base.currentBalance ??
+      0
+  );
+  const vaultBalance =
+    Number.isFinite(vaultBalanceNum) && vaultBalanceNum !== 0
+      ? vaultBalanceNum
+      : null;
+
+  const email = base.email || base.emailAddress || base.email_address || null;
+
+  return {
+    id: String(id),
+    firstName: (firstName || "").trim(),
+    lastName: (lastName || "").trim(),
+    phone,
+    phoneNumber: phone,
+    createdAt,
+    vaultBalance,
+    avatarUrl,
+    profileImageUrl,
+    avatar: base.avatar || null,
+    email,
+  };
+}
+
+/* -------- page -------- */
 export default function CustomerPage() {
   const router = useRouter();
+  const [isRouting, startTransition] = useTransition();
 
+  // beneficiaries (default list)
+  const [beneficiaries, setBeneficiaries] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
-  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // vault-balance enrichment state
+  const [enriching, setEnriching] = useState(false);
+
+  // SEARCH — number only
   const [search, setSearch] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<Customer[]>([]);
+  const debounceRef = useRef<number | undefined>(undefined);
 
-  /* Bottom-sheet modal for deposit/withdraw */
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [sheetMode, setSheetMode] = useState<"deposit" | "withdraw">("deposit");
-  const [activeCustomer, setActiveCustomer] = useState<Customer | null>(null);
-  const [amount, setAmount] = useState<string>("");
+  // picker state
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [flow, setFlow] = useState<"deposit" | "withdraw">("deposit");
+  const [selectedVaultId, setSelectedVaultId] = useState<string | null>(null);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(
+    null
+  );
 
-  /* Bottom toast (slide-up) notification */
-  const [toast, setToast] = useState<{
-    open: boolean;
-    title: string;
-    desc?: string;
-  }>({ open: false, title: "" });
+  // vaults for picker
+  const [vaults, setVaults] = useState<VaultRow[]>([]);
+  const [vaultsLoading, setVaultsLoading] = useState(false);
+  const [vaultsErr, setVaultsErr] = useState<string | null>(null);
 
-  // Load customers from mock API; fall back to localStorage seed if needed
+  const routePush = (href: string) => {
+    startTransition(() => {
+      router.push(href);
+    });
+  };
+  const routeRefresh = () => {
+    startTransition(() => {
+      router.refresh?.();
+      setTimeout(() => location.reload(), 40);
+    });
+  };
+
+  const openPicker = (mode: "deposit" | "withdraw", customerId: string) => {
+    setFlow(mode);
+    setSelectedVaultId(null);
+    setSelectedCustomerId(customerId);
+    setActiveCustomer(customerId);
+    setPickerOpen(true);
+  };
+
+  const proceed = () => {
+    if (!selectedVaultId || !selectedCustomerId) return;
+    setPickerOpen(false);
+    const q = new URLSearchParams();
+    q.set("customerId", selectedCustomerId);
+    q.set("vaultId", selectedVaultId);
+    routePush(
+      flow === "deposit"
+        ? `/customer/vault/deposit?${q.toString()}`
+        : `/customer/vault/withdraw?${q.toString()}`
+    );
+  };
+
+  /* ---------- 1) Load BENEFICIARIES ---------- */
   useEffect(() => {
     let cancelled = false;
 
-    async function load() {
+    (async () => {
       setLoading(true);
+      setErrorMsg(null);
       try {
-        const res = await fetch("/api/mock/customers", { cache: "no-store" });
-        if (!res.ok) throw new Error("no mock api");
-        const json = await res.json();
-        if (!cancelled) setCustomers(json?.data ?? []);
-      } catch {
-        // fallback: try seed from localStorage (if you used the mockDb)
-        try {
-          const raw = localStorage.getItem("lw_mock_db_v1");
-          const parsed = raw ? JSON.parse(raw) : null;
-          const list: Customer[] = parsed?.customers ?? [];
-          if (!cancelled) setCustomers(list);
-        } catch {
-          if (!cancelled) setCustomers([]);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
+        const qs = new URLSearchParams({
+          page: "1",
+          limit: "100",
+          sort: "createdAt:DESC",
+        }).toString();
 
-    load();
+        const res = await fetch(`/api/v1/agent/beneficiaries?${qs}`, {
+          cache: "no-store",
+          credentials: "include",
+        });
+
+        const text = await res.text();
+        let json: any = {};
+        try {
+          json = JSON.parse(text || "{}");
+        } catch {}
+
+        if (!res.ok) {
+          throw new Error(json?.message || json?.error || `HTTP ${res.status}`);
+        }
+
+        const rows = extractArray(json);
+        const mapped = rows.map(mapUserLikeRow);
+        const deduped = uniq(mapped, (c) => c.id).sort(
+          (a, b) =>
+            new Date(b.createdAt || 0).getTime() -
+            new Date(a.createdAt || 0).getTime()
+        );
+
+        if (!cancelled) {
+          setBeneficiaries(deduped);
+          setLoading(false);
+          if (deduped.length === 0) {
+            setErrorMsg("No users with deposits yet.");
+          }
+        }
+      } catch (e: any) {
+        if (!cancelled) {
+          setLoading(false);
+          setErrorMsg(e?.message || "Failed to load users.");
+        }
+      }
+    })();
+
     return () => {
       cancelled = true;
     };
   }, []);
 
-  /* Derived filtered list */
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return customers;
-    return customers.filter((c) => {
-      const name = `${c.firstName} ${c.lastName}`.toLowerCase();
-      return name.includes(q) || c.phone.includes(q);
-    });
-  }, [search, customers]);
+  /* ---------- 1b) ENRICH vault balances ---------- */
+  useEffect(() => {
+    let cancelled = false;
 
-  /* Open bottom sheet for a quick deposit/withdraw */
-  const openQuickAction = (mode: "deposit" | "withdraw", c: Customer) => {
-    setActiveCustomer(c);
-    setSheetMode(mode);
-    setAmount("");
-    setSheetOpen(true);
-  };
+    async function getTotalBalanceFromAPI(customerId: string): Promise<number> {
+      const cache = readBalanceCache();
+      if (cache[customerId] != null) return cache[customerId];
 
-  const closeSheet = () => setSheetOpen(false);
+      try {
+        const r = await fetch(
+          `/api/v1/agent/customers/${encodeURIComponent(
+            customerId
+          )}/vaults/balance`,
+          { cache: "no-store", credentials: "include" }
+        );
+        if (r.ok) {
+          const j = await r.json().catch(() => ({}));
+          const bal = Number(j?.balance ?? 0) || 0;
+          const next = { ...cache, [customerId]: bal };
+          writeBalanceCache(next);
+          return bal;
+        }
+      } catch {}
 
-  /* Ensure customer has a vault; create "Main Vault" if not */
-  async function ensureDefaultVault(customerId: string): Promise<Vault> {
-    // 1) try list
-    try {
-      const r = await fetch(`/api/mock/customers/${customerId}/vaults`, {
-        cache: "no-store",
-      });
-      if (r.ok) {
-        const j = await r.json();
-        const first: Vault | undefined = j?.data?.[0];
-        if (first) return first;
+      try {
+        const listRes = await fetch(
+          `/api/v1/agent/customers/${customerId}/vaults?status=ONGOING`,
+          { cache: "no-store", credentials: "include" }
+        );
+        if (!listRes.ok) return 0;
+        const listJ = await listRes.json().catch(() => ({}));
+        const apiVaults: APIVault[] = extractArray(listJ);
+
+        let total = 0;
+        for (const v of apiVaults || []) {
+          const apiId = v.id || v.vaultId || v._id || "";
+          if (!apiId) continue;
+          try {
+            const vr = await fetch(
+              `/api/v1/agent/customers/${customerId}/vaults/${apiId}`,
+              { cache: "no-store", credentials: "include" }
+            );
+            if (!vr.ok) continue;
+            const vj = await vr.json().catch(() => ({}));
+            const d = vj?.data ?? vj ?? {};
+            const bal =
+              Number(
+                d.availableBalance ??
+                  d.currentAmount ??
+                  d.currentBalance ??
+                  d.amount ??
+                  d.balance ??
+                  0
+              ) || 0;
+            total += bal;
+          } catch {}
+        }
+
+        const next = { ...cache, [customerId]: total };
+        writeBalanceCache(next);
+        return total;
+      } catch {
+        return 0;
       }
-    } catch {}
-
-    // 2) create Main Vault
-    const c2 = await fetch(`/api/mock/customers/${customerId}/vaults`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "Main Vault" }),
-    }).catch(() => null);
-    const j2 = await c2?.json().catch(() => null);
-    if (!c2 || !c2.ok || !j2?.data) {
-      // fallback to localStorage mock if API route not present
-      const raw = localStorage.getItem("lw_mock_db_v1");
-      if (raw) {
-        try {
-          const db = JSON.parse(raw);
-          const exist: Vault | undefined = db.vaults?.find(
-            (v: Vault) => v.customerId === customerId
-          );
-          if (exist) return exist;
-        } catch {}
-      }
-      throw new Error("Could not create/find a vault");
     }
-    return j2.data as Vault;
-  }
 
-  /* Submit quick action */
-  const submitQuick = async () => {
-    if (!activeCustomer) return;
-    const amt = Number(amount);
-    if (!amt || amt <= 0) return;
+    async function enrich(list: Customer[]) {
+      if (!list.length) return;
+      setEnriching(true);
 
-    try {
-      const v = await ensureDefaultVault(activeCustomer.id);
+      const ids = list.map((c) => c.id).filter(Boolean);
+      const CONCURRENCY = 4;
+      let i = 0;
 
-      const endpoint = sheetMode === "deposit" ? "deposit" : "withdraw";
-      const r = await fetch(`/api/mock/vaults/${v.id}/${endpoint}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: amt }),
-      }).catch(() => null);
-
-      if (!r || !r.ok) {
-        // Local fallback: update localStorage
-        try {
-          const raw = localStorage.getItem("lw_mock_db_v1");
-          if (raw) {
-            const db = JSON.parse(raw);
-            const target = db.vaults.find((vv: Vault) => vv.id === v.id);
-            if (sheetMode === "deposit") target.balance += amt;
-            else {
-              if (target.balance < amt) throw new Error("Insufficient balance");
-              target.balance -= amt;
-            }
-            localStorage.setItem("lw_mock_db_v1", JSON.stringify(db));
-          }
-        } catch (e) {
-          console.error(e);
+      async function worker() {
+        while (i < ids.length) {
+          const idx = i++;
+          const cid = ids[idx];
+          const bal = await getTotalBalanceFromAPI(cid);
+          if (cancelled) return;
+          setBeneficiaries((prev) =>
+            prev.map((c) => (c.id === cid ? { ...c, vaultBalance: bal } : c))
+          );
+          setSearchResults((prev) =>
+            prev.map((c) => (c.id === cid ? { ...c, vaultBalance: bal } : c))
+          );
         }
       }
 
-      // Close sheet
-      setAmount("");
-      setSheetOpen(false);
-
-      // Show bottom toast
-      const verb = sheetMode === "deposit" ? "deposited" : "withdrawn";
-      setToast({
-        open: true,
-        title: `Successfully ${verb}`,
-        desc: `${N(amt)} ${verb} for ${activeCustomer.firstName} ${
-          activeCustomer.lastName
-        }.`,
-      });
-      // auto-hide
-      setTimeout(() => setToast((t) => ({ ...t, open: false })), 2300);
-    } catch (e: any) {
-      alert(e?.message || "Something went wrong");
+      await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+      if (!cancelled) setEnriching(false);
     }
+
+    if (beneficiaries.length) enrich(beneficiaries);
+    return () => {
+      cancelled = true;
+    };
+  }, [beneficiaries.length]);
+
+  /* ---------- 2) Number-only search ---------- */
+  useEffect(() => {
+    if (debounceRef.current) window.clearTimeout(debounceRef.current);
+
+    const qDigits = search.replace(/\D/g, "").trim();
+    if (!qDigits) {
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+
+    debounceRef.current = window.setTimeout(async () => {
+      setSearching(true);
+      try {
+        // Still call upstream (if it supports query), but we’ll filter locally by number anyway
+        const qs = new URLSearchParams({
+          page: "1",
+          limit: "100",
+          query: qDigits,
+          sort: "createdAt:DESC",
+        }).toString();
+
+        const res = await fetch(`/api/v1/agent/customers?${qs}`, {
+          cache: "no-store",
+          credentials: "include",
+        });
+
+        const text = await res.text();
+        let json: any = {};
+        try {
+          json = JSON.parse(text || "{}");
+        } catch {}
+
+        if (!res.ok) {
+          throw new Error(json?.message || json?.error || `HTTP ${res.status}`);
+        }
+
+        const rows = extractArray(json);
+        const mapped = rows.map(mapUserLikeRow);
+
+        const cache = readBalanceCache();
+        const withCached = mapped.map((c) =>
+          cache[c.id] != null ? { ...c, vaultBalance: cache[c.id] } : c
+        );
+
+        const combined = uniq(withCached, (c) => c.id);
+        setSearchResults(combined);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 350) as unknown as number;
+  }, [search]);
+
+  /* ---------- Load vaults for picker ---------- */
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadVaults(cid: string) {
+      try {
+        setVaultsLoading(true);
+        setVaultsErr(null);
+        setVaults([]);
+        setSelectedVaultId(null);
+
+        const listRes = await fetch(
+          `/api/v1/agent/customers/${cid}/vaults?status=ONGOING`,
+          { cache: "no-store", credentials: "include" }
+        );
+        if (!listRes.ok)
+          throw new Error(`Vaults HTTP ${listRes.status} for ${cid}`);
+        const listJ = await listRes.json();
+        const apiVaults: APIVault[] = extractArray(listJ);
+
+        const enriched = await Promise.all(
+          (apiVaults || []).map(async (v): Promise<VaultRow> => {
+            const apiId = v.id || v.vaultId || v._id || "";
+            let detail: any = {};
+            if (apiId) {
+              try {
+                const vr = await fetch(
+                  `/api/v1/agent/customers/${cid}/vaults/${apiId}`,
+                  { cache: "no-store", credentials: "include" }
+                );
+                if (vr.ok) {
+                  const vj = await vr.json();
+                  detail = vj?.data ?? vj ?? {};
+                }
+              } catch {}
+            }
+
+            const currentBalance =
+              Number(
+                detail?.availableBalance ??
+                  detail?.currentAmount ??
+                  detail?.currentBalance ??
+                  0
+              ) || 0;
+
+            return {
+              id: apiId || String(v.id || v.vaultId || v._id || ""),
+              name: v.name || detail?.name || "Personal Vault",
+              balance: currentBalance,
+              target: Number(v.targetAmount ?? detail?.targetAmount ?? 0) || 0,
+              daily: Number(v.amount ?? detail?.amount ?? 0) || 0,
+            };
+          })
+        );
+
+        if (!cancelled) setVaults(enriched);
+      } catch (e: any) {
+        if (!cancelled)
+          setVaultsErr(e?.message || "Failed to load customer vaults.");
+      } finally {
+        if (!cancelled) setVaultsLoading(false);
+      }
+    }
+
+    if (pickerOpen && selectedCustomerId) loadVaults(selectedCustomerId);
+    return () => {
+      cancelled = true;
+    };
+  }, [pickerOpen, selectedCustomerId]);
+
+  /* ---------- Which list to show (filter ONLY by phone) ---------- */
+  const visible = useMemo(() => {
+    const qDigits = search.replace(/\D/g, "").trim();
+
+    if (qDigits) {
+      return (searchResults || []).filter((c) => {
+        const phone = (c.phoneNumber || c.phone || "").replace(/\D/g, "");
+        // compare against phone stripped of +234/234/leading 0
+        const normalized = displayPhoneLocal(phone);
+        return normalized.includes(qDigits);
+      });
+    }
+    return beneficiaries;
+  }, [search, searchResults, beneficiaries]);
+
+  const navDisabled = isRouting;
+
+  const refresh = () => routeRefresh();
+
+  const goToVaultOverview = (customerId: string) => {
+    setActiveCustomer(customerId);
+    routePush(`/customer/vault?customerId=${encodeURIComponent(customerId)}`);
   };
-
-  /* Route to vault details */
-  const goCheckVault = () => router.push("./customer/vault");
-
-  /* Onboard flow */
-  const onboard = () => router.push("./onboard");
+  const goToPersonalVault = (customerId: string) => {
+    setActiveCustomer(customerId);
+    routePush(
+      `/customer/vault/personal-vault?customerId=${encodeURIComponent(
+        customerId
+      )}`
+    );
+  };
 
   return (
     <div className="min-h-screen bg-white flex items-start justify-center p-0 md:p-4">
+      {/* global route loader */}
+      <LoadingOverlay show={isRouting} label="Loading…" />
+
       <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-3xl md:shadow-xl overflow-hidden">
         {/* Header */}
-        <div className="bg-white px-6 pt-8 pb-6 border-b border-gray-100">
-          <h1 className="text-xl font-bold text-black mb-4">Customers</h1>
+        <div className="bg-white px-4 pt-8 pb-6 border-b border-gray-100">
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-xl font-bold text-black">Customers</h1>
+            <button
+              onClick={refresh}
+              disabled={navDisabled}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-700 hover:text-black disabled:opacity-60 disabled:cursor-not-allowed"
+              aria-label="Refresh"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Refresh
+            </button>
+          </div>
 
-          {/* Search */}
+          {/* Search (number only) */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-black w-4 h-4" />
             <input
-              type="text"
+              type="tel"
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by phone number or name"
+              onChange={(e) => setSearch(e.target.value.replace(/\D/g, ""))}
+              placeholder="Search by phone number"
               className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
             />
+            {search && (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-500">
+                {searching ? "Searching..." : `${visible.length} result(s)`}
+              </span>
+            )}
           </div>
+
+          {errorMsg && !search && (
+            <p className="mt-3 text-[12px] text-rose-600" role="alert">
+              {errorMsg}
+            </p>
+          )}
         </div>
 
-        {/* Filter row */}
-        <div className="px-6 py-4 border-b border-gray-100">
-          <span className="text-sm font-bold text-black">All Users</span>
+        {/* NEW: “My Beneficiaries” header row with View all */}
+        <div className="px-4 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-extrabold text-black">
+              My Beneficiaries
+            </span>
+            {enriching && (
+              <span className="text-xs text-gray-500">
+                (updating balances…)
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => routePush("/customer/all")}
+            disabled={navDisabled}
+            className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-800 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-md disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            View all
+            <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
 
-        {/* List / Empty / Loading */}
-        <div className="px-6 py-4">
-          {loading ? (
+        {/* Body: list / empty / loading */}
+        <div className="px-4 py-4">
+          {searching && (
+            <div className="mb-3 inline-flex items-center gap-2 text-xs text-gray-600">
+              <Spinner className="w-4 h-4 text-gray-700" />
+              Searching…
+            </div>
+          )}
+
+          {loading && !search ? (
             <div className="space-y-3">
               {Array.from({ length: 3 }).map((_, i) => (
                 <div
@@ -243,86 +778,135 @@ export default function CustomerPage() {
                 />
               ))}
             </div>
-          ) : filtered.length === 0 ? (
+          ) : visible.length === 0 ? (
             <div className="text-center py-12">
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Search className="w-8 h-8 text-gray-400" />
               </div>
               <p className="text-gray-500 text-sm font-medium">
-                No customers onboarded yet
+                {search
+                  ? "No users match your phone number"
+                  : "No customers with deposits yet"}
               </p>
-              <p className="text-gray-400 text-xs mt-1">
-                Start onboarding customers to see them here
-              </p>
+              {!search && (
+                <p className="text-gray-400 text-xs mt-1">
+                  Onboard a customer to see them here.
+                </p>
+              )}
             </div>
           ) : (
-            <div className="space-y-4">
-              {filtered.map((c) => {
-                const initials =
-                  (c.firstName?.[0] || "") + (c.lastName?.[0] || "");
+            <div className="space-y-3">
+              {visible.map((c) => {
+                const rawPhone = c.phoneNumber || c.phone || "";
+                const phone = displayPhoneLocal(rawPhone);
+                const vb =
+                  typeof c.vaultBalance === "number" ? c.vaultBalance : 0;
+
                 return (
-                  <div key={c.id} className="bg-gray-50 rounded-xl p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-black text-white rounded-full flex items-center justify-center text-sm font-bold">
-                          {initials.toUpperCase()}
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-gray-900 text-sm">
-                            {c.firstName} {c.lastName}
-                          </h3>
-                          <span className="inline-block px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium mt-1">
-                            Active
-                          </span>
-                        </div>
+                  <button
+                    key={c.id}
+                    onClick={() => goToPersonalVault(c.id)}
+                    disabled={navDisabled}
+                    className="w-full text-left rounded-xl border border-gray-200 bg-white p-4 shadow-sm active:scale-[0.995] transition disabled:opacity-60 disabled:cursor-not-allowed"
+                    aria-label={`Open ${c.firstName} ${c.lastName} personal vault`}
+                  >
+                    {/* Top: avatar/photo + name */}
+                    <div className="flex items-center gap-3 mb-3">
+                      <Avatar customer={c} size={40} />
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">
+                          {c.firstName} {c.lastName}
+                        </p>
+                        {c.email ? (
+                          <p className="text-[11px] text-gray-500 truncate">
+                            {c.email}
+                          </p>
+                        ) : null}
                       </div>
                     </div>
 
-                    {/* Quick facts (balance is vault-specific; we can show “—” here) */}
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                      <div>
-                        <p className="text-xs text-gray-500 font-medium">
-                          Vault Balance
-                        </p>
-                        <p className="font-bold text-gray-900 text-sm">—</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500 font-medium">
-                          Phone No
-                        </p>
-                        <p className="font-bold text-gray-900 text-sm">
-                          {c.phone}
-                        </p>
-                      </div>
+                    {/* Middle: balance + phone (phone shown without +234/234/leading 0) */}
+                    <div className="flex items-center justify-between text-xs">
+                      <p className="text-gray-600">
+                        Vault Balance:{" "}
+                        <span
+                          className="font-semibold"
+                          style={{ color: C.deposit }}
+                        >
+                          {fmtNairaCompact(vb)}
+                        </span>
+                      </p>
+                      <p className="text-gray-600">
+                        Phone No:{" "}
+                        <span className="font-semibold text-gray-900">
+                          {phone}
+                        </span>
+                      </p>
                     </div>
 
-                    <div className="flex gap-2">
+                    {/* Actions row */}
+                    <div className="mt-3 flex items-center gap-8 text-[13px] font-semibold">
                       <button
-                        className="flex items-center gap-1.5 px-3 py-2 bg-green-100 text-green-700 rounded-lg text-xs font-semibold flex-1 justify-center"
-                        onClick={() => openQuickAction("deposit", c)}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openPicker("deposit", c.id);
+                        }}
+                        className="inline-flex items-center gap-1.5"
+                        style={{ color: C.deposit }}
+                        disabled={navDisabled}
                       >
-                        <DollarSign className="w-3.5 h-3.5" strokeWidth={2.5} />
+                        <Image
+                          src="/uploads/mdi_instant-deposit.png"
+                          alt="Deposit"
+                          width={16}
+                          height={16}
+                          className="w-4 h-4"
+                        />
                         Deposit
                       </button>
+
                       <button
-                        className="flex items-center gap-1.5 px-3 py-2 bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold flex-1 justify-center"
-                        onClick={goCheckVault}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          goToVaultOverview(c.id);
+                        }}
+                        className="inline-flex items-center gap-1.5"
+                        style={{ color: C.vault }}
+                        disabled={navDisabled}
                       >
-                        <Eye className="w-3.5 h-3.5" strokeWidth={2.5} />
+                        <Image
+                          src="/uploads/fluent_vault-24-filled.png"
+                          alt="Check vault"
+                          width={16}
+                          height={16}
+                          className="w-4 h-4"
+                        />
                         Check vault
                       </button>
+
                       <button
-                        className="flex items-center gap-1.5 px-3 py-2 bg-red-100 text-red-700 rounded-lg text-xs font-semibold flex-1 justify-center"
-                        onClick={() => openQuickAction("withdraw", c)}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openPicker("withdraw", c.id);
+                        }}
+                        className="inline-flex items-center gap-1.5"
+                        style={{ color: C.withdraw }}
+                        disabled={navDisabled}
                       >
-                        <ArrowUpRight
-                          className="w-3.5 h-3.5"
-                          strokeWidth={2.5}
+                        <Image
+                          src="/uploads/ph_hand-withdraw-fill.png"
+                          alt="Withdraw"
+                          width={16}
+                          height={16}
+                          className="w-4 h-4"
                         />
                         Withdraw
                       </button>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -330,24 +914,21 @@ export default function CustomerPage() {
         </div>
 
         {/* Tabs */}
-        <BottomTabs
-          value="customers"
-          onChange={(t) => console.log("tab:", t)}
-          className="mt-8"
-        />
+        <BottomTabs value="customers" onChange={() => {}} className="mt-6" />
       </div>
 
       {/* Floating Onboard Button */}
       <div
         className="fixed right-4 z-50 pointer-events-none"
-        style={{ top: `calc(env(safe-area-inset-top) + 500px)` }}
+        style={{ top: `calc(env(safe-area-inset-top) + 600px)` }}
       >
         <button
           type="button"
-          onClick={onboard}
+          onClick={() => routePush("/onboard-form")}
           aria-label="Onboard new user"
+          disabled={navDisabled}
           className="pointer-events-auto inline-flex items-center gap-2 rounded-sm bg-black px-5 py-3
-               text-white text-[12px] font-semibold shadow-xl shadow-black/40 active:scale-[0.98] transition"
+               text-white text-[12px] font-semibold shadow-xl shadow-black/40 active:scale-[0.98] transition disabled:opacity-60 disabled:cursor-not-allowed"
         >
           <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-black">
             <Plus className="h-4 w-4" strokeWidth={2.5} />
@@ -356,95 +937,136 @@ export default function CustomerPage() {
         </button>
       </div>
 
-      {/* Bottom Sheet for quick deposit/withdraw */}
-      {sheetOpen && activeCustomer && (
+      {/* ===== Vault Picker Modal (Deposit / Withdraw) ===== */}
+      {pickerOpen && (
         <div className="fixed inset-0 z-50">
           {/* backdrop */}
           <div
             className="absolute inset-0 bg-black/40"
-            onClick={closeSheet}
-            aria-hidden
+            onClick={() => setPickerOpen(false)}
           />
           {/* sheet */}
-          <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-2xl p-5 shadow-2xl">
-            <div className="mx-auto h-1 w-12 rounded-full bg-gray-200 mb-3" />
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <p className="text-sm text-gray-500">
-                  {sheetMode === "deposit" ? "Quick Deposit" : "Quick Withdraw"}
-                </p>
-                <h3 className="text-base font-semibold text-gray-900">
-                  {activeCustomer.firstName} {activeCustomer.lastName}
-                </h3>
-              </div>
-              <button
-                onClick={closeSheet}
-                className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center"
-                aria-label="Close"
-              >
-                <X className="w-4 h-4 text-gray-700" />
-              </button>
-            </div>
+          <div className="absolute inset-x-0 bottom-0 bg-white rounded-3xl p-5 shadow-2xl">
+            <div className="mx-auto h-1.5 w-16 rounded-full bg-gray-200 mb-3" />
 
-            <div className="mt-3">
-              <label className="block text-xs text-gray-600 mb-1">
-                Amount (NGN)
-              </label>
-              <input
-                inputMode="numeric"
-                pattern="[0-9]*"
-                placeholder="e.g. 5000"
-                value={amount}
-                onChange={(e) =>
-                  setAmount(e.target.value.replace(/[^\d]/g, ""))
-                }
-                className="w-full h-12 rounded-xl border border-gray-200 px-3 text-sm outline-none focus:ring-2 focus:ring-black"
-              />
-            </div>
+            <h3 className="text-base font-semibold text-gray-900 mb-4">
+              Choose Preferred Vault
+            </h3>
+
+            {vaultsErr && (
+              <p className="text-[12px] text-rose-600 mb-3">{vaultsErr}</p>
+            )}
+
+            {vaultsLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-20 rounded-xl bg-gray-50 animate-pulse"
+                  />
+                ))}
+              </div>
+            ) : vaults.length === 0 ? (
+              <p className="text-sm text-gray-500">No vaults yet.</p>
+            ) : (
+              <div className="space-y-3 max-h-[55vh] overflow-auto pr-1">
+                {vaults.map((v) => {
+                  const pct = v.target
+                    ? Math.min(100, Math.round((v.balance / v.target) * 100))
+                    : 0;
+                  const isActive = selectedVaultId === v.id;
+                  return (
+                    <button
+                      key={v.id}
+                      onClick={() => setSelectedVaultId(v.id)}
+                      className={`w-full text-left rounded-xl border p-3 bg-white flex items-center gap-3 ${
+                        isActive ? "border-black" : "border-gray-200"
+                      }`}
+                    >
+                      <div className="shrink-0">
+                        <Image
+                          src="/uploads/Little wheel personal vault bw 1.png"
+                          alt="Vault"
+                          width={56}
+                          height={56}
+                          className="w-14 h-14 object-contain"
+                          priority
+                        />
+                      </div>
+
+                      <div className="flex-1">
+                        <p className="text-[13px] font-semibold text-gray-900 leading-tight">
+                          {v.name}
+                        </p>
+                        <p className="text-[11px] text-gray-600">
+                          Amount: <strong>{fmtNaira2(v.daily)}</strong> (DAILY)
+                        </p>
+
+                        <div className="mt-2 flex items-center gap-2">
+                          <div className="h-2 flex-1 rounded-full bg-gray-200 overflow-hidden">
+                            <div
+                              className="h-full rounded-full"
+                              style={{
+                                width: `${pct}%`,
+                                backgroundColor: "#10B981",
+                              }}
+                            />
+                          </div>
+                          <span className="text-[11px] text-gray-600">
+                            {isFinite(pct) ? pct : 0}%
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="text-right text-[12px] font-semibold">
+                        <span className="text-red-600">
+                          {fmtNaira2(v.balance)}
+                        </span>
+                        <span className="text-gray-400">/</span>
+                        <span className="text-green-600">
+                          {fmtNaira2(v.target)}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             <button
-              onClick={submitQuick}
-              className="mt-4 w-full h-12 rounded-xl bg-black text-white font-semibold active:scale-[0.99] transition"
+              onClick={proceed}
+              disabled={!selectedVaultId || !selectedCustomerId || navDisabled}
+              className={`mt-4 w-full h-12 rounded-2xl font-semibold ${
+                selectedVaultId && selectedCustomerId && !navDisabled
+                  ? "bg-black text-white"
+                  : "bg-gray-200 text-gray-500 cursor-not-allowed"
+              }`}
             >
-              {sheetMode === "deposit" ? "Deposit" : "Withdraw"}
+              Select and Proceed
             </button>
 
-            <p className="mt-3 text-[11px] text-gray-500">
-              A “Main Vault” will be created automatically if none exists yet.
-            </p>
+            <button
+              onClick={() => {
+                setPickerOpen(false);
+                if (selectedCustomerId) {
+                  setActiveCustomer(selectedCustomerId);
+                  routePush(
+                    `/customer/vault/create?customerId=${encodeURIComponent(
+                      selectedCustomerId
+                    )}`
+                  );
+                } else {
+                  routePush("/customer/vault/create");
+                }
+              }}
+              disabled={navDisabled}
+              className="mt-3 w-full text-center text-[13px] font-semibold text-black underline disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              Create New Vault
+            </button>
           </div>
         </div>
       )}
-
-      {/* Bottom Toast Notification */}
-      <div
-        className={`fixed inset-x-0 bottom-0 z-50 transition-transform duration-300 ${
-          toast.open ? "translate-y-0" : "translate-y-full"
-        }`}
-      >
-        <div className="mx-auto mb-4 w-[92%] max-w-sm rounded-2xl bg-white shadow-xl border border-gray-200 p-4">
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5 h-7 w-7 rounded-full bg-green-100 flex items-center justify-center">
-              <Check className="w-4 h-4 text-green-600" />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-gray-900">
-                {toast.title}
-              </p>
-              {toast.desc && (
-                <p className="text-xs text-gray-600 mt-0.5">{toast.desc}</p>
-              )}
-            </div>
-            <button
-              onClick={() => setToast((t) => ({ ...t, open: false }))}
-              className="h-7 w-7 rounded-full bg-gray-100 flex items-center justify-center"
-              aria-label="Dismiss"
-            >
-              <X className="w-4 h-4 text-gray-700" />
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

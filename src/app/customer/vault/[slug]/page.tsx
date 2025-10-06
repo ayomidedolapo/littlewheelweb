@@ -1,445 +1,591 @@
+/* app/customer/vault/[slug]/page.tsx */
 "use client";
 
-import { useMemo, useState } from "react";
-import {
-  ArrowLeft,
-  Eye,
-  ChevronLeft,
-  ChevronRight,
-  X,
-  Check,
-  ArrowDownCircle,
-  ArrowUpRight,
-} from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft, X } from "lucide-react";
 
-/* money fmt */
-const NGN = (n: number) =>
-  `₦${(n || 0).toLocaleString("en-NG", { maximumFractionDigits: 0 })}`;
+/* ---------------- helpers ---------------- */
+const NGN = (v?: number) =>
+  `₦${Number(v || 0).toLocaleString("en-NG", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 
-/* calendar helpers (Mon-first) */
-type DayCell = { day: number | null; iso?: string };
-function makeMonthGrid(year: number, monthIndex: number): DayCell[] {
-  const first = new Date(year, monthIndex, 1);
-  const last = new Date(year, monthIndex + 1, 0);
-  const firstDow = ((first.getDay() + 6) % 7) + 1; // 1..7 (Mon-first)
-  const lead = firstDow - 1; // 0..6 leading blanks
-  const cells: DayCell[] = [];
-  for (let i = 0; i < lead; i++) cells.push({ day: null });
-  for (let d = 1; d <= last.getDate(); d++) {
-    const iso = new Date(year, monthIndex, d).toISOString();
-    cells.push({ day: d, iso });
-  }
-  while (cells.length % 7 !== 0) cells.push({ day: null });
-  return cells;
+const clampPct = (v?: number) =>
+  isFinite(v as number)
+    ? Math.max(0, Math.min(100, Math.round(v as number)))
+    : 0;
+
+function ordinal(n: number) {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+function fmtDate(d?: string | Date | null) {
+  if (!d) return "—";
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return "—";
+  return `${ordinal(dt.getDate())} ${dt.toLocaleString(undefined, {
+    month: "short",
+  })}, ${dt.getFullYear()}`;
+}
+const fmtDateTime = (iso: string) =>
+  new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(iso));
+
+/* normalize any list payload into an array */
+function extractArray(payload: any): any[] {
+  const d = payload?.data ?? payload;
+  if (Array.isArray(d)) return d;
+  if (Array.isArray(d?.items)) return d.items;
+  if (Array.isArray(d?.records)) return d.records;
+  if (Array.isArray(d?.vaults)) return d.vaults;
+  if (Array.isArray(d?.content)) return d.content;
+  if (Array.isArray(d?.data)) return d.data;
+  return [];
 }
 
-export default function VaultViewPage() {
+/** Try cookie first (browser), then localStorage */
+function getAuthToken(): string {
+  try {
+    const m = document.cookie.match(
+      /(?:^|;\s*)(authToken|lw_token|token)\s*=\s*([^;]+)/
+    );
+    if (m?.[2]) return decodeURIComponent(m[2]);
+  } catch {}
+  try {
+    return (
+      localStorage.getItem("lw_token") ||
+      localStorage.getItem("authToken") ||
+      localStorage.getItem("token") ||
+      ""
+    );
+  } catch {
+    return "";
+  }
+}
+
+/* ---------- types ---------- */
+type VaultDetail = {
+  id?: string;
+  vaultId?: string;
+  _id?: string;
+  name?: string;
+  targetAmount?: number;
+  amount?: number; // daily plan amount
+  frequency?: string; // DAILY / WEEKLY / ...
+  duration?: string; // ONE_MONTH / etc
+  startDate?: string;
+  start_at?: string;
+  createdAt?: string;
+  maturityDate?: string;
+  endDate?: string;
+
+  currentAmount?: number;
+  currentBalance?: number;
+  balance?: number;
+};
+
+type Tx = {
+  id: string;
+  note: string;
+  amount: number;
+  at: string;
+  isCredit: boolean;
+  vaultId?: string;
+};
+
+export default function VaultDetailPage() {
   const router = useRouter();
+  const params = useParams<{ slug: string }>();
+  const sp = useSearchParams();
 
-  // Demo vault state (tweak freely)
-  const vaultName = "Junior School fee";
-  const amountSaved = 30000;
-  const amountLeft = 10500;
-  const progressPct = 15;
+  const [loading, setLoading] = useState(true);
+  const [txLoading, setTxLoading] = useState(false);
 
-  // Calendar state (default July 2025)
-  const [year, setYear] = useState(2025);
-  const [month, setMonth] = useState(6); // 0=Jan .. 6=Jul
-  const days = useMemo(() => makeMonthGrid(year, month), [year, month]);
-  const monthLabel = useMemo(
-    () =>
-      new Date(year, month, 1).toLocaleString("en-US", {
-        month: "long",
-        year: "numeric",
-      }),
-    [year, month]
-  );
-  const prevMonth = () => {
-    const d = new Date(year, month, 1);
-    d.setMonth(d.getMonth() - 1);
-    setYear(d.getFullYear());
-    setMonth(d.getMonth());
-  };
-  const nextMonth = () => {
-    const d = new Date(year, month, 1);
-    d.setMonth(d.getMonth() + 1);
-    setYear(d.getFullYear());
-    setMonth(d.getMonth());
-  };
+  const [error, setError] = useState<string | null>(null);
+  const [detail, setDetail] = useState<VaultDetail | null>(null);
+  const [txs, setTxs] = useState<Tx[]>([]);
 
-  // Demo marked days
-  const savedDays = new Set([1, 2, 3, 4, 5, 6]); // green
-  const missedDays = new Set([7]); // red
+  // close modal state
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const [closeErr, setCloseErr] = useState<string | null>(null);
 
-  // Recent tx (demo)
-  const txs = [
-    {
-      id: "t1",
-      type: "withdraw",
-      note: "Withdraw",
-      at: "Mar 4th, 02:46:32",
-      amount: -10000,
-    },
-    {
-      id: "t2",
-      type: "deposit",
-      note: "Saved",
-      at: "Mar 4th, 02:46:32",
-      amount: +20000,
-    },
-  ];
+  // stable token ref
+  const tokenRef = useRef<string>("");
+  if (!tokenRef.current && typeof window !== "undefined") {
+    tokenRef.current = getAuthToken();
+  }
 
-  // Bottom sheets
-  const [showAllTx, setShowAllTx] = useState(false);
+  const customerId =
+    sp.get("customerId") ||
+    (typeof window !== "undefined"
+      ? sessionStorage.getItem("lw_active_customer_id") ||
+        sessionStorage.getItem("lw_onboarding_customer_id") ||
+        ""
+      : "");
 
-  // Close flow (new)
-  const [closeSheetOpen, setCloseSheetOpen] = useState(false);
-  const [closeReason, setCloseReason] = useState("");
-  const [closeSuccessOpen, setCloseSuccessOpen] = useState(false);
+  // The "authoritative" vault id comes from query; we may also derive from loaded detail.
+  const queryVaultId = sp.get("vaultId") || "";
+  const resolvedVaultId =
+    queryVaultId || detail?.id || detail?.vaultId || detail?._id || "";
 
-  const openCloseSheet = () => setCloseSheetOpen(true);
-  const cancelCloseSheet = () => {
-    setCloseSheetOpen(false);
-    setCloseReason("");
-  };
-  const confirmCloseVault = () => {
-    // You can validate closeReason here if you want it required
-    setCloseSheetOpen(false);
-    setCloseSuccessOpen(true);
-  };
-  const finishClose = () => {
-    setCloseSuccessOpen(false);
-    router.back(); // or router.push('/customer/vault')
-  };
+  /* ---------------- load vault detail ---------------- */
+  useEffect(() => {
+    if (!customerId) {
+      setError("Missing customerId.");
+      setLoading(false);
+      return;
+    }
+    const idFromQuery = sp.get("vaultId");
+    if (!idFromQuery) {
+      setError("Missing vaultId.");
+      setLoading(false);
+      return;
+    }
 
-  return (
-    <div className="min-h-screen bg-white flex items-start justify-center p-0 md:p-4">
-      <style jsx>{`
-        @keyframes slideUp {
-          from {
-            transform: translateY(100%);
+    const ac = new AbortController();
+
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await fetch(
+          `/api/v1/agent/customers/${customerId}/vaults/${idFromQuery}`,
+          {
+            cache: "no-store",
+            signal: ac.signal,
+            headers: tokenRef.current
+              ? { "x-lw-auth": tokenRef.current }
+              : undefined,
           }
-          to {
-            transform: translateY(0);
+        );
+        if (!res.ok) throw new Error(`Vault HTTP ${res.status}`);
+
+        const j = await res.json().catch(() => ({}));
+        const d: VaultDetail = j?.data ?? j ?? {};
+        setDetail(d);
+      } catch (e: any) {
+        if (e?.name === "AbortError") return;
+        setError(e?.message || "Failed to load vault detail.");
+      } finally {
+        setLoading(false);
+      }
+    })();
+
+    return () => ac.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerId, sp]);
+
+  /* ---------------- load contributions (customer-wide endpoint, then filter) ---------------- */
+  useEffect(() => {
+    if (!customerId) return;
+
+    const ac = new AbortController();
+
+    (async () => {
+      try {
+        setTxLoading(true);
+
+        const res = await fetch(
+          `/api/v1/agent/customers/${customerId}/vaults/contributions`,
+          {
+            headers: tokenRef.current
+              ? { "x-lw-auth": tokenRef.current }
+              : undefined,
+            cache: "no-store",
+            signal: ac.signal,
           }
-        }
-        .sheet {
-          animation: slideUp 260ms cubic-bezier(0.22, 1, 0.36, 1);
-        }
-        .gridBG {
-          background-image: linear-gradient(
-              rgba(255, 255, 255, 0.08) 1px,
-              transparent 1px
-            ),
-            linear-gradient(
-              90deg,
-              rgba(255, 255, 255, 0.08) 1px,
-              transparent 1px
+        );
+
+        if (!res.ok) throw new Error(`Contributions HTTP ${res.status}`);
+
+        const j = await res.json().catch(() => ({}));
+        const rows = extractArray(j);
+
+        let mapped: Tx[] = (rows || []).map((r: any, idx: number) => {
+          const rid =
+            r.id ||
+            r._id ||
+            r.txId ||
+            r.reference ||
+            `contrib:${idx}:${r.createdAt || r.date || ""}`;
+
+          const amount =
+            Number(r.amount ?? r.value ?? r.contribution ?? 0) || 0;
+
+          const created =
+            r.createdAt || r.date || r.at || new Date().toISOString();
+
+          const type = String(
+            r.type || r.direction || r.kind || "CREDIT"
+          ).toUpperCase();
+
+          const isCredit = type.includes("CREDIT") || type.includes("DEPOSIT");
+          const note =
+            r.note || r.description || (isCredit ? "Saved" : "Withdrawal");
+
+          const vId = r.vaultId || r.vault_id || r.vault?.id;
+
+          return {
+            id: rid,
+            note,
+            amount: Math.abs(amount),
+            at: new Date(created).toISOString(),
+            isCredit,
+            vaultId: vId,
+          };
+        });
+
+        // If any of the records have vaultId, filter by the currently viewed vault.
+        if (resolvedVaultId) {
+          const hasVaultIds = mapped.some((m) => !!m.vaultId);
+          if (hasVaultIds) {
+            mapped = mapped.filter(
+              (m) => String(m.vaultId) === String(resolvedVaultId)
             );
-          background-size: 64px 64px, 64px 64px;
-          background-position: 0 0, 0 0;
+          }
         }
-      `}</style>
 
-      <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-3xl md:shadow-xl overflow-hidden relative">
-        {/* Header */}
-        <div className="px-4 pt-4 pb-2">
+        mapped.sort(
+          (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()
+        );
+
+        setTxs(mapped);
+      } catch (e: any) {
+        if (e?.name === "AbortError") return;
+        setTxs([]);
+      } finally {
+        setTxLoading(false);
+      }
+    })();
+
+    return () => ac.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerId, resolvedVaultId]);
+
+  /* ---------------- derived fields ---------------- */
+  const name = detail?.name || "Personal Savings";
+  const target = Number(detail?.targetAmount ?? (detail as any)?.target ?? 0);
+  const daily = Number(detail?.amount ?? 0);
+  const liveBalance = Number(
+    detail?.currentAmount ??
+      detail?.currentBalance ??
+      (detail as any)?.balance ??
+      0
+  );
+  const progress = useMemo(
+    () => clampPct(target ? (liveBalance / target) * 100 : 0),
+    [liveBalance, target]
+  );
+
+  const duration = (detail?.duration || "—").toString().replace(/_/g, " ");
+  const frequency = (detail?.frequency || "DAILY")
+    .toString()
+    .replace(/_/g, " ");
+  const startedAt =
+    detail?.startDate || (detail as any)?.start_at || detail?.createdAt;
+  const maturity = detail?.maturityDate || detail?.endDate || null;
+
+  /* ---------------- close vault action (uses new route handler) ---------------- */
+  const doCloseVault = async () => {
+    if (!customerId || !resolvedVaultId) return;
+    try {
+      setClosing(true);
+      setCloseErr(null);
+      const res = await fetch(
+        `/api/v1/agent/customers/${customerId}/vaults/${resolvedVaultId}/close`,
+        {
+          method: "DELETE",
+          headers: tokenRef.current
+            ? { "x-lw-auth": tokenRef.current }
+            : undefined,
+        }
+      );
+      if (!res.ok) throw new Error(`Close HTTP ${res.status}`);
+
+      setConfirmOpen(false);
+      router.replace(
+        `/customer/vault?customerId=${encodeURIComponent(customerId)}`
+      );
+    } catch (e: any) {
+      setCloseErr(e?.message || "Failed to close vault.");
+    } finally {
+      setClosing(false);
+    }
+  };
+
+  /* ---------------- UI ---------------- */
+  return (
+    <div className="min-h-screen bg-[#F4F6FA] flex items-start justify-center">
+      {/* wider container so content isn't compressed */}
+      <div className="w-full max-w-[480px] min-h-screen bg-[#F4F6FA] md:min-h-0 md:rounded-3xl md:shadow-xl overflow-hidden">
+        {/* Top bar */}
+        <div className="px-4 pt-4 pb-2 bg-[#F4F6FA]">
           <button
             onClick={() => router.back()}
             className="inline-flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back
           </button>
         </div>
 
-        {/* Hero Card */}
-        <div className="px-4">
-          <div className="relative rounded-2xl bg-black text-white p-5 gridBG">
-            {/* vault image top-right */}
-            <div className="absolute right-3 top-3 h-9 w-9 rounded-lg backdrop-blur flex items-center justify-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/uploads/Little wheel personal vault bw 1.png"
-                alt="Vault"
-                className="h-25 w-25 object-contain"
-              />
-            </div>
-
-            <div className="flex items-center gap-1 text-[12px] text-white/85">
-              <span>Amount Saved</span>
-              <Eye className="w-3.5 h-3.5 opacity-80" />
-            </div>
-            <div className="mt-1 text-[28px] leading-none font-extrabold tracking-tight">
-              {NGN(amountSaved)}
-            </div>
-
-            {/* name + amount-left row */}
-            <div className="mt-3 flex items-center justify-between">
-              <span className="inline-flex rounded-full px-3 py-1 bg-white/10 ring-1 ring-white/15 text-[12px]">
-                {vaultName}
-              </span>
-              <span className="text-[13px] text-white/90">
-                Amount left: <strong>{NGN(amountLeft)}</strong>
-              </span>
-            </div>
-
-            {/* progress */}
-            <div className="mt-3">
-              <div className="h-2 w-full rounded-full bg-white overflow-hidden">
-                <div
-                  className="h-full bg-green-500 rounded-full"
-                  style={{ width: `${progressPct}%`, opacity: 0.95 }}
-                />
-              </div>
-              <div className="text-right text-[12px] mt-1">{progressPct}%</div>
-            </div>
-          </div>
+        {/* Page title */}
+        <div className="px-4 pb-2">
+          <h1 className="text-[15px] font-semibold text-gray-900">{name}</h1>
         </div>
 
-        {/* Calendar */}
-        <div className="px-4 mt-4">
-          <div className="rounded-2xl border border-gray-200 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 bg-white">
-              <div className="flex items-center gap-2">
-                <span className="text-[13px] font-semibold">{monthLabel}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={prevMonth}
-                  className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={nextMonth}
-                  className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
+        {loading ? (
+          /* ---------- Skeleton ---------- */
+          <div className="px-4 space-y-3">
+            <div className="h-20 rounded-2xl bg-white shadow-sm border border-gray-100">
+              <div className="h-full w-full animate-pulse rounded-2xl bg-gray-100" />
             </div>
-
-            <div className="px-3 py-3 bg-white">
-              {/* Week headers (Mon-first) */}
-              <div className="grid grid-cols-7 text-[11px] text-gray-500 px-1 mb-2">
-                {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((d) => (
-                  <div key={d} className="text-center">
-                    {d}
+            <div className="rounded-2xl bg-white shadow-sm border border-gray-100 p-4 space-y-3">
+              <div className="h-4 w-2/5 bg-gray-100 animate-pulse rounded" />
+              <div className="grid grid-cols-2 gap-3">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="space-y-2">
+                    <div className="h-3 w-20 bg-gray-100 animate-pulse rounded" />
+                    <div className="h-4 w-28 bg-gray-100 animate-pulse rounded" />
                   </div>
                 ))}
               </div>
+            </div>
+            <div className="h-44 rounded-2xl bg-white shadow-sm border border-gray-100">
+              <div className="h-full w-full animate-pulse rounded-2xl bg-gray-100" />
+            </div>
+            <div className="h-12 mx-4 mt-4 rounded-2xl bg-rose-100 animate-pulse" />
+            <div className="h-20" />
+          </div>
+        ) : (
+          <>
+            {/* ---------- Top vault card ---------- */}
+            <div className="px-4">
+              <div className="rounded-2xl bg-white border border-gray-100 shadow-sm p-3">
+                <div className="flex items-start gap-3">
+                  {/* vault icon */}
+                  <div className="shrink-0">
+                    <Image
+                      src="/uploads/Little wheel personal vault bw 1.png"
+                      alt="Vault"
+                      width={48}
+                      height={48}
+                      className="w-12 h-12 object-contain"
+                      priority
+                    />
+                  </div>
 
-              {/* Days */}
-              <div className="grid grid-cols-7 gap-2">
-                {days.map((c, i) => {
-                  const d = c.day;
-                  const base =
-                    "h-10 rounded-xl border text-sm flex items-center justify-center";
-                  if (d === null)
-                    return (
+                  {/* middle */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-semibold text-gray-900 leading-tight truncate">
+                      {new Date(startedAt || new Date()).toLocaleString(
+                        undefined,
+                        {
+                          month: "long",
+                        }
+                      )}{" "}
+                      {new Date(startedAt || new Date()).getDate()}
+                    </p>
+                    <p className="text-[11px] text-gray-600">
+                      Amount: <strong>{NGN(daily)}</strong>
+                    </p>
+
+                    {/* progress bar */}
+                    <div className="mt-2 h-2 rounded-full bg-gray-200 overflow-hidden">
                       <div
-                        key={`b${i}`}
-                        className="h-10 rounded-xl bg-gray-50 border border-gray-100"
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${progress}%`,
+                          backgroundColor: "#94A3B8",
+                        }}
                       />
-                    );
-                  const saved = savedDays.has(d);
-                  const missed = missedDays.has(d);
-                  const cls = saved
-                    ? "border-emerald-200 bg-emerald-100 text-emerald-800 font-semibold"
-                    : missed
-                    ? "border-red-200 bg-red-100 text-red-700 font-semibold"
-                    : "border-gray-200 bg-gray-50 text-gray-800";
-                  return (
-                    <div key={i} className={`${base} ${cls}`}>
-                      {d}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Recent Transactions */}
-        <div className="px-4 mt-5 pb-24">
-          {/* extra bottom space for sticky button */}
-          <div className="rounded-2xl border border-gray-200 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100">
-              <h3 className="text-[13px] font-semibold">Recent Transactions</h3>
-              <button
-                onClick={() => setShowAllTx(true)}
-                className="text-[12px] text-gray-600"
-              >
-                See all
-              </button>
-            </div>
-
-            <div className="bg-white">
-              {txs.map((t, i) => {
-                const isLast = i === txs.length - 1;
-                const positive = t.amount > 0;
-                return (
-                  <div
-                    key={t.id}
-                    className={`px-4 py-3 flex items-center justify-between ${
-                      !isLast ? "border-b border-gray-100" : ""
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-full bg-gray-50 flex items-center justify-center ring-1 ring-gray-200">
-                        {positive ? (
-                          <ArrowDownCircle className="w-5 h-5 text-emerald-600" />
-                        ) : (
-                          <ArrowUpRight className="w-5 h-5 text-red-500" />
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-[13px] font-medium text-gray-900">
-                          {t.note}
-                        </p>
-                        <p className="text-[11px] text-gray-500">{t.at}</p>
-                      </div>
-                    </div>
-
-                    <div
-                      className={`text-[13px] font-semibold ${
-                        positive ? "text-emerald-600" : "text-red-600"
-                      }`}
-                    >
-                      {positive ? "+" : "−"}
-                      {NGN(Math.abs(t.amount))}
                     </div>
                   </div>
-                );
-              })}
 
-              {/* Demo “Close vault” pill aligned like screenshot */}
-              <div className="px-4 pb-3"></div>
-            </div>
-          </div>
-        </div>
-
-        {/* Sticky Close Button (always visible while scrolling) */}
-        <div
-          className="fixed left-1/2 -translate-x-1/2 z-50"
-          style={{ bottom: "calc(env(safe-area-inset-bottom) + 24px)" }}
-        >
-          <button
-            onClick={openCloseSheet}
-            className="w-[92vw] max-w-sm h-12 rounded-2xl bg-black text-white font-semibold shadow-xl active:scale-[0.99] transition"
-          >
-            Close Vault
-          </button>
-        </div>
-      </div>
-
-      {/* SEE ALL TX – bottom sheet */}
-      {showAllTx && (
-        <div className="fixed inset-0 z-50">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setShowAllTx(false)}
-          />
-          <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-3xl p-5 shadow-2xl sheet">
-            <div className="mx-auto h-1.5 w-16 rounded-full bg-gray-200 mb-3" />
-            <h4 className="text-base font-semibold mb-3">All Transactions</h4>
-            <div className="max-h-[55vh] overflow-auto space-y-3 pr-1">
-              {txs.concat(txs, txs).map((t, i) => (
-                <div
-                  key={`${t.id}-${i}`}
-                  className="flex items-center justify-between border border-gray-100 rounded-xl px-3 py-3"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-full bg-gray-50 flex items-center justify-center ring-1 ring-gray-200">
-                      {t.amount > 0 ? (
-                        <ArrowDownCircle className="w-5 h-5 text-emerald-600" />
-                      ) : (
-                        <ArrowUpRight className="w-5 h-5 text-red-500" />
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-[13px] font-medium text-gray-900">
-                        {t.note}
-                      </p>
-                      <p className="text-[11px] text-gray-500">{t.at}</p>
-                    </div>
-                  </div>
-                  <div
-                    className={`text-[13px] font-semibold ${
-                      t.amount > 0 ? "text-emerald-600" : "text-red-600"
-                    }`}
-                  >
-                    {t.amount > 0 ? "+" : "−"}
-                    {NGN(Math.abs(t.amount))}
+                  {/* right totals — single straight line */}
+                  <div className="shrink-0 text-right leading-tight text-[12px]">
+                    <p className="whitespace-nowrap font-bold">
+                      <span className="text-rose-600">{NGN(liveBalance)}</span>
+                      <span className="text-gray-400">/</span>
+                      <span className="text-emerald-600">{NGN(target)}</span>
+                    </p>
+                    <p className="text-[10px] text-gray-500 mt-1">
+                      {progress}%
+                    </p>
                   </div>
                 </div>
-              ))}
+              </div>
             </div>
-          </div>
-        </div>
-      )}
 
-      {/* CLOSE VAULT – bottom sheet (matches your red design) */}
-      {closeSheetOpen && (
+            {/* ---------- Stats card ---------- */}
+            <div className="px-4 mt-3">
+              <div className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase">
+                      Target Amount
+                    </p>
+                    <p className="text-[14px] font-bold text-gray-900 mt-1">
+                      {NGN(target)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase">
+                      Amount
+                    </p>
+                    <p className="text-[14px] font-bold text-gray-900 mt-1">
+                      {NGN(daily)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase">
+                      Duration
+                    </p>
+                    <p className="text-[12px] font-bold text-gray-900 mt-1">
+                      {duration || "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase">
+                      Frequency
+                    </p>
+                    <p className="text-[12px] font-bold text-gray-900 mt-1">
+                      {frequency || "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase">
+                      Start Date
+                    </p>
+                    <p className="text-[12px] font-bold text-gray-900 mt-1">
+                      {fmtDate(startedAt)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase">
+                      Maturity Date
+                    </p>
+                    <p className="text-[12px] font-bold text-gray-900 mt-1">
+                      {fmtDate(maturity)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ---------- Transactions card ---------- */}
+            <div className="px-4 mt-3">
+              <div className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4">
+                <p className="text-[13px] font-semibold text-gray-900 mb-2">
+                  Transactions
+                </p>
+
+                {txLoading ? (
+                  <div className="h-28 rounded-xl bg-gray-100 animate-pulse" />
+                ) : txs.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8">
+                    <Image
+                      src="/uploads/Empty State.png"
+                      alt="No transactions"
+                      width={160}
+                      height={160}
+                      className="w-40 h-40 object-contain"
+                      priority
+                    />
+                    <p className="text-[12px] text-gray-500 mt-2">
+                      No transactions yet.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-100">
+                    {txs.map((t) => (
+                      <div
+                        key={t.id}
+                        className="flex items-center justify-between py-3"
+                      >
+                        <div>
+                          <p className="text-[13px] font-medium text-gray-900">
+                            {t.note}
+                          </p>
+                          <p className="text-[11px] text-gray-500">
+                            {fmtDateTime(t.at)}
+                          </p>
+                        </div>
+                        <div
+                          className={`text-[13px] font-semibold ${
+                            t.isCredit ? "text-emerald-600" : "text-rose-600"
+                          }`}
+                        >
+                          {t.isCredit ? "+" : "−"}
+                          {NGN(t.amount)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ---------- Close Vault button ---------- */}
+            <div className="px-4 py-5">
+              <button
+                onClick={() => setConfirmOpen(true)}
+                className="w-full h-12 rounded-2xl bg-rose-100 text-rose-700 font-semibold active:scale-[0.99] transition"
+              >
+                Close Vault
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* ===== Close Vault Confirmation (bottom sheet) ===== */}
+      {confirmOpen && (
         <div className="fixed inset-0 z-50">
+          {/* backdrop */}
           <div
             className="absolute inset-0 bg-black/40"
-            onClick={cancelCloseSheet}
+            onClick={() => !closing && setConfirmOpen(false)}
           />
-          <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-3xl p-6 shadow-2xl sheet">
+          {/* sheet */}
+          <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-3xl p-5 shadow-2xl">
             <div className="mx-auto h-1.5 w-16 rounded-full bg-gray-200 mb-3" />
-            <h3 className="text-lg font-semibold text-gray-900">
-              Close this Vault
-            </h3>
-            <p className="text-[13px] text-gray-600 mt-1">
-              All funds in this vault will be withdrawn and service fee will be
-              deducted.
-            </p>
-
-            <label className="block text-[12px] font-medium text-gray-800 mt-4 mb-2">
-              Reason for closing this vault
-            </label>
-            <textarea
-              rows={4}
-              value={closeReason}
-              onChange={(e) => setCloseReason(e.target.value)}
-              placeholder=""
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black resize-none"
-            />
-
-            <button
-              onClick={confirmCloseVault}
-              className="mt-4 w-full h-12 rounded-2xl bg-red-600 text-white font-semibold hover:bg-red-700 active:scale-[0.99] transition"
-            >
-              Close vault
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* CLOSE SUCCESS – bottom sheet */}
-      {closeSuccessOpen && (
-        <div className="fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-black/40" onClick={finishClose} />
-          <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-3xl p-6 shadow-2xl sheet">
-            <div className="mx-auto h-1.5 w-16 rounded-full bg-gray-200 mb-4" />
-            <div className="mx-auto mb-4 h-20 w-20 rounded-full bg-gray-50 ring-gray-50 flex items-center justify-center">
-              <Check className="w-9 h-9 text-gray-500" />
+            <div className="flex items-start justify-between mb-2">
+              <h3 className="text-base font-semibold text-gray-900">
+                Are you sure you want to close this vault?
+              </h3>
+              <button
+                onClick={() => !closing && setConfirmOpen(false)}
+                className="p-1 rounded hover:bg-gray-100"
+              >
+                <X className="w-5 h-5 text-gray-600" />
+              </button>
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 text-center">
-              Vault closed
-            </h3>
-            <p className="text-sm text-gray-600 text-center mt-1">
-              You’ve successfully closed this vault and can proceed to withdraw
-              your savings.
+            <p className="text-[12px] text-gray-600 mb-4">
+              Note: This action cannot be undone.
             </p>
+
+            {closeErr && (
+              <p className="text-[12px] text-rose-600 mb-3">{closeErr}</p>
+            )}
+
             <button
-              onClick={finishClose}
-              className="mt-6 w-full h-12 rounded-2xl bg-black text-white font-semibold hover:bg-black/90"
+              onClick={doCloseVault}
+              disabled={closing}
+              className={`w-full h-12 rounded-2xl font-semibold ${
+                closing ? "bg-rose-200 text-white" : "bg-rose-600 text-white"
+              }`}
             >
-              Done
+              {closing ? "Closing..." : "Close Vault"}
             </button>
           </div>
         </div>

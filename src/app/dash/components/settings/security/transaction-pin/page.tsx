@@ -2,18 +2,35 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, HelpCircle, X, Check } from "lucide-react";
+import {
+  ChevronLeft,
+  HelpCircle,
+  X,
+  Check,
+  Eye,
+  EyeOff,
+  AlertCircle,
+} from "lucide-react";
 
 const PIN_LEN = 4;
 
 export default function SetTransactionPinPage() {
   const router = useRouter();
 
+  // main flow
   const [stage, setStage] = useState<"enter" | "confirm">("enter");
-  const [pin, setPin] = useState<string>("");
-  const [confirmPin, setConfirmPin] = useState<string>("");
+  const [pin, setPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // password sheet
+  const [pwOpen, setPwOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [pwError, setPwError] = useState<string | null>(null);
+
+  // success sheet
   const [showSuccess, setShowSuccess] = useState(false);
 
   const displayTitle = useMemo(
@@ -32,15 +49,16 @@ export default function SetTransactionPinPage() {
   const activeValue = stage === "enter" ? pin : confirmPin;
   const setActiveValue = stage === "enter" ? setPin : setConfirmPin;
 
+  /* ---------- input helpers ---------- */
   function addDigit(d: string) {
-    if (submitting) return;
+    if (submitting || pwOpen) return;
     if (!/^\d$/.test(d)) return;
     if (activeValue.length >= PIN_LEN) return;
     setActiveValue(activeValue + d);
   }
 
   function backspace() {
-    if (submitting) return;
+    if (submitting || pwOpen) return;
     if (activeValue.length === 0) return;
     setActiveValue(activeValue.slice(0, -1));
     setErrorMsg(null);
@@ -56,18 +74,19 @@ export default function SetTransactionPinPage() {
     }
   }
 
-  // Keyboard support
+  // Keyboard support for keypad
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (pwOpen) return; // don't type into PIN while password sheet is open
       if (e.key >= "0" && e.key <= "9") addDigit(e.key);
       else if (e.key === "Backspace") backspace();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeValue, submitting, stage]);
+  }, [activeValue, submitting, stage, pwOpen]);
 
-  // When 4 digits entered
+  // When PIN length reaches 4
   useEffect(() => {
     if (activeValue.length !== PIN_LEN) return;
 
@@ -79,35 +98,73 @@ export default function SetTransactionPinPage() {
       return;
     }
 
-    if (stage === "confirm") {
-      if (confirmPin !== pin) {
-        setErrorMsg("PINs do not match. Please try again.");
-        setTimeout(() => setConfirmPin(""), 200);
-        return;
-      }
-      submitPin(pin);
+    // stage === "confirm"
+    if (confirmPin !== pin) {
+      setErrorMsg("PINs do not match. Please try again.");
+      setTimeout(() => setConfirmPin(""), 200);
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeValue]);
 
-  async function submitPin(finalPin: string) {
+    // open password sheet to collect password before calling API
+    setPwOpen(true);
+    setPwError(null);
+    setPassword("");
+  }, [activeValue, stage, confirmPin, pin]);
+
+  /* ---------- submit to backend ---------- */
+  async function submitPin(finalPin: string, acctPassword: string) {
     try {
       setSubmitting(true);
-      setErrorMsg(null);
+      setPwError(null);
 
-      // TODO: replace with your real API call
-      await new Promise((r) => setTimeout(r, 1000));
+      // Optional bearer from client storage (your Auth middleware also reads cookies)
+      const token =
+        typeof window !== "undefined"
+          ? localStorage.getItem("authToken")
+          : null;
 
-      setShowSuccess(true); // open bottom sheet
+      const res = await fetch("/api/v1/settings/set-transaction-pin", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          pin: finalPin,
+          password: acctPassword,
+        }),
+      });
+
+      const text = await res.text();
+      let json: any = {};
+      try {
+        json = JSON.parse(text || "{}");
+      } catch {}
+
+      if (!res.ok) {
+        const msg =
+          json?.message ||
+          json?.error ||
+          `Couldn’t set PIN (HTTP ${res.status})`;
+        throw new Error(msg);
+      }
+
+      // success
+      setPwOpen(false);
+      setShowSuccess(true);
       setSubmitting(false);
-    } catch {
-      setErrorMsg("Network error. Please try again.");
+    } catch (err) {
       setSubmitting(false);
-      setConfirmPin("");
+      const msg =
+        err instanceof Error ? err.message : "Network error. Please try again.";
+      setPwError(msg);
     }
   }
 
-  // PIN box
+  const canConfirmPassword = password.trim().length >= 5 && !submitting;
+
+  /* ---------- UI bits ---------- */
   const PinBox = ({
     value,
     isActive,
@@ -129,7 +186,6 @@ export default function SetTransactionPinPage() {
     </div>
   );
 
-  // Keypad button
   const KeypadButton = ({
     children,
     onClick,
@@ -141,7 +197,7 @@ export default function SetTransactionPinPage() {
   }) => (
     <button
       onClick={onClick}
-      disabled={submitting}
+      disabled={submitting || pwOpen}
       className={`h-14 w-14 rounded-full flex items-center justify-center font-medium text-lg transition active:scale-95
         ${
           variant === "delete"
@@ -182,10 +238,10 @@ export default function SetTransactionPinPage() {
         {/* PIN boxes */}
         <div className="flex justify-center gap-4 mb-2">
           {Array.from({ length: PIN_LEN }).map((_, i) => {
-            const val = (stage === "enter" ? pin : confirmPin)[i] || "";
+            const v = (stage === "enter" ? pin : confirmPin)[i] || "";
             const isActive =
               (stage === "enter" ? pin : confirmPin).length === i;
-            return <PinBox key={i} value={val} isActive={isActive} />;
+            return <PinBox key={i} value={v} isActive={isActive} />;
           })}
         </div>
 
@@ -211,12 +267,102 @@ export default function SetTransactionPinPage() {
           </div>
         </div>
 
-        {submitting && (
+        {submitting && !pwOpen && (
           <div className="mt-6 text-center text-sm text-gray-600 inline-flex items-center gap-2">
             <span className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-            Setting up your PIN...
+            Saving your PIN…
           </div>
         )}
+      </div>
+
+      {/* Bottom-sheet: Ask for Account Password */}
+      <div
+        className={`fixed inset-0 z-50 ${
+          pwOpen ? "pointer-events-auto" : "pointer-events-none"
+        }`}
+        aria-hidden={!pwOpen}
+      >
+        <div
+          className={`absolute inset-0 bg-black/60 transition-opacity ${
+            pwOpen ? "opacity-100" : "opacity-0"
+          }`}
+          onClick={() => !submitting && setPwOpen(false)}
+        />
+        <div
+          className={`absolute left-0 right-0 bottom-0 transition-transform duration-300 ease-out ${
+            pwOpen ? "translate-y-0" : "translate-y-full"
+          }`}
+        >
+          <div className="mx-auto w-full max-w-sm bg-white rounded-t-3xl p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">
+              Confirm with Password
+            </h3>
+            <p className="text-[13px] text-gray-600 mb-4">
+              Enter your account password to finish setting your Transaction
+              PIN.
+            </p>
+
+            <label className="block text-[12px] text-gray-700 mb-1">
+              Account Password
+            </label>
+            <div className="relative">
+              <input
+                type={showPw ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && canConfirmPassword) {
+                    submitPin(pin, password);
+                  }
+                }}
+                className="w-full h-11 rounded-xl border border-gray-200 px-3 pr-10 text-[14px] outline-none"
+                placeholder="•••••"
+                autoFocus
+                disabled={submitting}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPw((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                aria-label={showPw ? "Hide password" : "Show password"}
+              >
+                {showPw ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+
+            {pwError && (
+              <div className="mt-3 text-sm text-red-600 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
+                <span>{pwError}</span>
+              </div>
+            )}
+
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button
+                onClick={() => !submitting && setPwOpen(false)}
+                className="h-11 rounded-xl bg-gray-100 text-gray-800 font-semibold hover:bg-gray-200 disabled:opacity-60"
+                disabled={submitting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => submitPin(pin, password)}
+                disabled={!canConfirmPassword}
+                className={`h-11 rounded-xl font-semibold text-white ${
+                  canConfirmPassword
+                    ? "bg-black hover:bg-black/90"
+                    : "bg-black/30 cursor-not-allowed"
+                }`}
+              >
+                {submitting ? "Saving…" : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Bottom-sheet Success */}
@@ -226,14 +372,12 @@ export default function SetTransactionPinPage() {
         }`}
         aria-hidden={!showSuccess}
       >
-        {/* Dim backdrop */}
         <div
           className={`absolute inset-0 bg-black/60 transition-opacity ${
             showSuccess ? "opacity-100" : "opacity-0"
           }`}
           onClick={() => setShowSuccess(false)}
         />
-        {/* Sheet */}
         <div
           className={`absolute left-0 right-0 bottom-0 transition-transform duration-300 ease-out
                       ${showSuccess ? "translate-y-0" : "translate-y-full"}`}
@@ -246,12 +390,12 @@ export default function SetTransactionPinPage() {
               Success
             </h3>
             <p className="text-sm text-gray-600 text-center mb-6">
-              You&apos;ve successfully set your Transaction Pin.
+              You&apos;ve successfully set your Transaction PIN.
             </p>
             <button
               onClick={() => {
                 setShowSuccess(false);
-                router.push("/dash"); // <-- route to /dash
+                router.push("/dash");
               }}
               className="w-full h-12 rounded-2xl bg-black text-white font-semibold hover:bg-black/90"
             >

@@ -1,3 +1,4 @@
+// app/api/auth/login/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 const BASE_V1 =
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Try common token shapes
+    // Extract common token shapes
     const token =
       data?.token ||
       data?.access_token ||
@@ -39,26 +40,46 @@ export async function POST(req: NextRequest) {
       data?.jwt ||
       null;
 
-    // Cookie flags: allow local dev (no Secure on http://localhost)
+    if (!token) {
+      return NextResponse.json(
+        { success: false, message: "No token returned from backend" },
+        { status: 502 }
+      );
+    }
+
+    // Cookie flags — support local dev over http
     const isHttps =
       req.headers.get("x-forwarded-proto") === "https" ||
-      req.nextUrl.protocol === "https:";
+      req.nextUrl.protocol === "https:" ||
+      process.env.NODE_ENV === "production";
 
-    const cookieParts = [
-      `lw_token=${token ?? ""}`,
+    const maxAge = 60 * 60 * 24 * 7; // 7 days
+    const cookieBase = [
       "Path=/",
       "HttpOnly",
       "SameSite=Lax",
-      token ? "" : "Max-Age=0", // clear if no token
       isHttps ? "Secure" : "",
-    ].filter(Boolean);
+      `Max-Age=${maxAge}`,
+    ]
+      .filter(Boolean)
+      .join("; ");
 
-    const headers: Record<string, string> = {};
-    // Set cookie only if we have (or want to clear) a token key
-    headers["Set-Cookie"] = cookieParts.join("; ");
+    // Canonical cookie + legacy alias for backward-compat
+    const cookies = [
+      `lw_auth=${encodeURIComponent(token)}; ${cookieBase}`,
+      `lw_token=${encodeURIComponent(token)}; ${cookieBase}`, // legacy alias
+    ];
 
-    return NextResponse.json(
-      { success: true, token, user: data?.user || data?.data?.user || null },
+    const headers = new Headers();
+    headers.append("Set-Cookie", cookies[0]);
+    headers.append("Set-Cookie", cookies[1]);
+
+    return new NextResponse(
+      JSON.stringify({
+        success: true,
+        token, // optional to return; client doesn't need to store it
+        user: data?.user || data?.data?.user || null,
+      }),
       { status: 200, headers }
     );
   } catch (e: any) {

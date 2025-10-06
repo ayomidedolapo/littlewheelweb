@@ -1,158 +1,327 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import {
-  ChevronLeft,
-  ChevronDown,
-  HelpCircle,
-  Copy,
-  Check,
-} from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, ChevronDown, Copy, Check } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 
-/** --- Minimal bank list (trim or extend freely). I included popular banks + fintechs. --- */
-type Bank = { name: string; code: string; logo?: string };
-const BANKS: Bank[] = [
-  { name: "Access Bank", code: "044" },
-  { name: "Access Bank (Diamond)", code: "063" },
-  { name: "FBN (First Bank)", code: "011" },
-  { name: "GTBank", code: "058" },
-  { name: "UBA", code: "033" },
-  { name: "Zenith Bank", code: "057" },
-  { name: "FCMB", code: "214" },
-  { name: "Fidelity Bank", code: "070" },
-  { name: "Keystone Bank", code: "082" },
-  { name: "Polaris Bank", code: "076" },
-  { name: "Sterling Bank", code: "232" },
-  { name: "Union Bank", code: "032" },
-  { name: "Unity Bank", code: "215" },
-  { name: "Wema Bank", code: "035" },
-  { name: "Jaiz Bank", code: "301" },
-  { name: "Stanbic IBTC", code: "221" },
-  { name: "EcoBank", code: "050" },
-  // Digital / MFB
-  { name: "Kuda MFB", code: "50211" },
-  { name: "Moniepoint MFB", code: "50515" },
-  { name: "Opay (Paycom)", code: "999992" },
-  { name: "PalmPay", code: "999991" },
-  { name: "Rubies MFB", code: "125" },
-  { name: "VFD MFB", code: "566" },
-  { name: "Titan Trust Bank", code: "102" },
-  { name: "Providus Bank", code: "101" },
-  { name: "PremiumTrust Bank", code: "105" },
-  { name: "Globus Bank", code: "103" },
-];
+/* ---------------- Types ---------------- */
+type Bank = { name: string; code: string | number; logo?: string };
+type SavedBank = { bank: Bank; accountNumber: string; accountName: string };
 
-type SavedBank = {
-  bank: Bank;
-  accountNumber: string;
-  accountName: string;
-};
+/* ---------------- Helpers ---------------- */
+function bankLogoUrl(name: string, provided?: string) {
+  if (provided) return provided;
+  const key = name.trim().toLowerCase();
+  const override: Record<string, string> = {
+    "access bank": "https://nigerianbanks.xyz/logo/access-bank.png",
+    "access bank (diamond)":
+      "https://nigerianbanks.xyz/logo/access-bank-diamond.png",
+    "alat by wema": "https://nigerianbanks.xyz/logo/alat-by-wema.png",
+    "ecobank nigeria": "https://nigerianbanks.xyz/logo/ecobank-nigeria.png",
+    "first bank of nigeria":
+      "https://nigerianbanks.xyz/logo/first-bank-of-nigeria.png",
+    "first city monument bank":
+      "https://nigerianbanks.xyz/logo/first-city-monument-bank.png",
+    "guaranty trust bank":
+      "https://nigerianbanks.xyz/logo/guaranty-trust-bank.png",
+    "kuda bank": "https://nigerianbanks.xyz/logo/kuda-bank.png",
+    "moniepoint mfb": "https://nigerianbanks.xyz/logo/moniepoint-mfb-ng.png",
+    opay: "https://nigerianbanks.xyz/logo/paycom.png",
+    paycom: "https://nigerianbanks.xyz/logo/paycom.png",
+    palmpay: "https://nigerianbanks.xyz/logo/palmpay.png",
+    "polaris bank": "https://nigerianbanks.xyz/logo/polaris-bank.png",
+    "stanbic ibtc bank": "https://nigerianbanks.xyz/logo/stanbic-ibtc-bank.png",
+    "standard chartered bank":
+      "https://nigerianbanks.xyz/logo/standard-chartered-bank.png",
+    "sterling bank": "https://nigerianbanks.xyz/logo/sterling-bank.png",
+    "taj bank": "https://nigerianbanks.xyz/logo/taj-bank.png",
+    "union bank of nigeria":
+      "https://nigerianbanks.xyz/logo/union-bank-of-nigeria.png",
+    "united bank for africa":
+      "https://nigerianbanks.xyz/logo/united-bank-for-africa.png",
+    "wema bank": "https://nigerianbanks.xyz/logo/wema-bank.png",
+    "zenith bank": "https://nigerianbanks.xyz/logo/zenith-bank.png",
+  };
+  if (override[key]) return override[key];
+  return `https://nigerianbanks.xyz/logo/${name
+    .toLowerCase()
+    .replace(/\s+/g, "-")}.png`;
+}
+
+function toTitle(s: string) {
+  return s
+    .toLowerCase()
+    .split(" ")
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+function maskAcct(num: string) {
+  const d = (num || "").replace(/\D/g, "");
+  if (d.length <= 4) return d;
+  return "******" + d.slice(-4);
+}
 
 export default function WithdrawalBank() {
   const router = useRouter();
 
-  // form state
+  // entry state (for editing/changing)
   const [bank, setBank] = useState<Bank | null>(null);
   const [acct, setAcct] = useState("");
-  const [pin, setPin] = useState("");
-  const [acctName, setAcctName] = useState("");
-  const [resolving, setResolving] = useState(false);
 
-  // saved state (view mode)
+  // resolved name + resolving state
+  const [resolvedName, setResolvedName] = useState("");
+  const [resolving, setResolving] = useState(false);
+  const resolveAbort = useRef<AbortController | null>(null);
+
+  // saved card
   const [saved, setSaved] = useState<SavedBank | null>(null);
 
-  // UI state
+  // ui
   const [pickerOpen, setPickerOpen] = useState(false);
   const [successOpen, setSuccessOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Pull any existing saved details
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem("lw_withdrawal_bank");
-      if (raw) setSaved(JSON.parse(raw));
-    } catch {}
-  }, []);
+  // Token for proxy headers (raw JWT)
+  const tokenHeader =
+    typeof window !== "undefined"
+      ? localStorage.getItem("authToken") ||
+        localStorage.getItem("lw_token") ||
+        ""
+      : "";
 
-  // Auto-resolve account name when bank + 10-digit account number
+  /* Load saved display from backend (fallback to local cache) */
   useEffect(() => {
-    const canResolve = bank && acct.replace(/\D/g, "").length === 10;
-    if (!canResolve) {
-      setAcctName("");
-      return;
-    }
     let cancelled = false;
-    (async () => {
-      setResolving(true);
-      setError(null);
+
+    async function loadSaved() {
       try {
-        // 👉 Replace this with your real "name enquiry" endpoint.
-        await new Promise((r) => setTimeout(r, 600));
-        if (!cancelled) {
-          // Dummy “resolved” name using simple deterministic string (pretend backend response)
-          const fake = "KAZEEM ABIONA ADESINA";
-          setAcctName(fake);
+        // optimistic: local cache
+        try {
+          const raw = localStorage.getItem("lw_withdrawal_bank");
+          if (raw && !cancelled) setSaved(JSON.parse(raw));
+        } catch {}
+
+        // authoritative
+        const r = await fetch("/api/v1/settings/withdrawal-method", {
+          cache: "no-store",
+          headers: tokenHeader ? { "x-lw-auth": tokenHeader } : undefined,
+          credentials: "include",
+        });
+
+        const text = await r.text();
+        let j: any = {};
+        try {
+          j = JSON.parse(text || "{}");
+        } catch {}
+
+        if (!r.ok) return;
+
+        const d = j?.data || j?.method || j;
+        const bankName =
+          d?.bankName || d?.bank?.name || d?.bank_name || d?.bank || "";
+        const bankCode =
+          d?.bankCode || d?.bank?.code || d?.bank_code || d?.code || "";
+        const logoUrl =
+          d?.logoUrl || d?.bank?.logo || d?.logo || d?.bank_logo || "";
+        const accountNumber =
+          d?.accountNumber || d?.account_number || d?.account || "";
+        const accountName = d?.accountName || d?.account_name || d?.name || "";
+
+        if (bankName && accountNumber) {
+          const s: SavedBank = {
+            bank: {
+              name: bankName,
+              code: bankCode,
+              logo: bankLogoUrl(bankName, logoUrl),
+            },
+            accountNumber: String(accountNumber),
+            accountName: String(accountName || ""),
+          };
+          if (!cancelled) {
+            setSaved(s);
+            try {
+              localStorage.setItem("lw_withdrawal_bank", JSON.stringify(s));
+            } catch {}
+          }
         }
-      } catch {
-        if (!cancelled) setError("Couldn’t resolve account name. Try again.");
-      } finally {
-        if (!cancelled) setResolving(false);
-      }
-    })();
+      } catch {}
+    }
+
+    loadSaved();
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // clear name when editing
+  useEffect(() => {
+    setResolvedName("");
+    setError(null);
   }, [bank, acct]);
 
-  const hasAllInputs =
-    !!bank && acct.length === 10 && acctName && pin.length === 4;
+  // ► Resolve name as soon as bank chosen + 10 digits typed (before confirm)
+  useEffect(() => {
+    const digits = acct.replace(/\D/g, "");
+    if (!bank || digits.length !== 10) {
+      resolveAbort.current?.abort();
+      return;
+    }
+
+    const t = setTimeout(async () => {
+      try {
+        setResolving(true);
+        resolveAbort.current?.abort();
+        const ac = new AbortController();
+        resolveAbort.current = ac;
+
+        const r = await fetch(
+          `/api/v1/payments/resolve-account-number?accountNumber=${digits}&bankCode=${bank.code}`,
+          {
+            headers: tokenHeader ? { "x-lw-auth": tokenHeader } : undefined,
+            credentials: "include",
+            signal: ac.signal,
+          }
+        );
+
+        const json = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          const msg = json?.message || json?.error || `HTTP ${r.status}`;
+          throw new Error(msg);
+        }
+
+        const name =
+          json?.data?.accountName ||
+          json?.data?.account_name ||
+          json?.accountName ||
+          json?.account_name ||
+          "";
+
+        setResolvedName(name || "");
+      } catch (e: any) {
+        if (e?.name !== "AbortError") {
+          setResolvedName("");
+          setError(e instanceof Error ? e.message : "Name resolve failed");
+        }
+      } finally {
+        setResolving(false);
+      }
+    }, 350);
+
+    return () => clearTimeout(t);
+  }, [bank, acct, tokenHeader]);
+
+  const canSubmitBase = !!bank && acct.replace(/\D/g, "").length === 10;
+  const canSubmit = canSubmitBase && !!resolvedName && !resolving && !saving;
 
   async function onConfirm() {
-    setError(null);
-
-    // Verify 4-digit transaction PIN (read what you saved on the PIN page)
-    const stored = localStorage.getItem("lw_tx_pin");
-    if (!stored) {
-      setError("You haven’t set a Transaction PIN. Please set it first.");
-      return;
-    }
-    if (pin !== stored) {
-      setError("Transaction PIN is incorrect.");
-      return;
-    }
-
-    // Call your “save bank” endpoint here…
-    await new Promise((r) => setTimeout(r, 700));
-
-    const s: SavedBank = {
-      bank: bank!,
-      accountNumber: acct,
-      accountName: acctName,
-    };
-    setSaved(s);
     try {
-      localStorage.setItem("lw_withdrawal_bank", JSON.stringify(s));
-    } catch {}
+      setError(null);
+      if (!canSubmit) return;
 
-    // Reset entry controls and show success bottom sheet
-    setPin("");
-    setSuccessOpen(true);
+      setSaving(true);
+      const logoUrl = bankLogoUrl(bank!.name, bank?.logo);
+
+      const payload = {
+        bankName: bank!.name,
+        logoUrl,
+        bankCode: bank!.code,
+        accountNumber: acct,
+        accountName: resolvedName,
+      };
+
+      const res = await fetch("/api/v1/settings/withdrawal-method", {
+        method: saved ? "PATCH" : "POST", // if you already had one, PATCH; else POST
+        headers: {
+          "Content-Type": "application/json",
+          ...(tokenHeader ? { "x-lw-auth": tokenHeader } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = json?.message || json?.error || `HTTP ${res.status}`;
+        throw new Error(msg);
+      }
+
+      // Refresh saved card from backend
+      try {
+        const g = await fetch("/api/v1/settings/withdrawal-method", {
+          cache: "no-store",
+          headers: tokenHeader ? { "x-lw-auth": tokenHeader } : undefined,
+          credentials: "include",
+        });
+        const gj = await g.json().catch(() => ({}));
+        if (g.ok) {
+          const d = gj?.data || gj?.method || gj;
+          const s: SavedBank = {
+            bank: {
+              name: d?.bankName || bank!.name,
+              code: d?.bankCode || bank!.code,
+              logo: bankLogoUrl(
+                d?.bankName || bank!.name,
+                d?.logoUrl || bank!.logo
+              ),
+            },
+            accountNumber: d?.accountNumber || acct,
+            accountName: d?.accountName || resolvedName,
+          };
+          setSaved(s);
+          try {
+            localStorage.setItem("lw_withdrawal_bank", JSON.stringify(s));
+          } catch {}
+        }
+      } catch {}
+
+      // Reset edit state
+      setBank(null);
+      setAcct("");
+      setResolvedName("");
+      setSuccessOpen(true);
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Failed to save withdrawal method"
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function startChangeBank() {
-    // clear inputs; keep current saved card at top like your mock
-    setBank(null);
-    setAcct("");
-    setAcctName("");
-    setPin("");
-  }
+  const copy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const el = document.createElement("textarea");
+      el.value = text;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+    }
+  };
+
+  /* ===================== RENDER ===================== */
+
+  // Two modes:
+  // 1) No saved yet -> show full setup (bank select + acct input)
+  // 2) Saved exists ->
+  //    - show saved card
+  //    - show ONLY bank select first
+  //    - once bank is picked, reveal acct input + confirm
+  const hasSaved = !!saved;
+  const showAcctInput =
+    !hasSaved /* first-time setup */ || (!!hasSaved && !!bank); // reveal only after bank is chosen when editing
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Header */}
       <div className="max-w-sm mx-auto px-5 pt-4">
+        {/* Header */}
         <button
           onClick={() => router.back()}
           className="flex items-center gap-2 text-gray-700 hover:text-black"
@@ -164,33 +333,36 @@ export default function WithdrawalBank() {
         <h1 className="mt-4 text-[22px] font-extrabold text-black">
           Withdrawal Bank
         </h1>
-        <p className="mt-2 text-[13px] text-gray-700 leading-relaxed">
+        <p className="mt-2 text-[13px] text-gray-700">
           Your funds will be sent here instantly when you withdraw from Little
           Wheel.
         </p>
 
-        {/* Saved card (when a bank has been confirmed) */}
-        {saved && (
+        {/* Saved card (if exists) */}
+        {hasSaved && (
           <div className="mt-5">
             <div className="w-full rounded-xl bg-black text-white px-4 py-3 flex items-center justify-between">
               <div className="flex items-start gap-3">
-                {/* optional logo; using text fallback */}
-                <div className="mt-[2px] w-6 h-6 rounded bg-white/10 flex items-center justify-center text-[10px] uppercase">
-                  {bankLogoText(saved.bank.name)}
+                <div className="mt-[2px] w-6 h-6 rounded bg-white overflow-hidden flex items-center justify-center">
+                  <Image
+                    src={bankLogoUrl(saved!.bank.name, saved!.bank.logo)}
+                    alt={saved!.bank.name}
+                    width={24}
+                    height={24}
+                    className="object-contain"
+                  />
                 </div>
                 <div>
                   <div className="text-[13px] font-semibold leading-tight">
-                    {toTitle(saved.accountName)}
+                    {toTitle(saved!.accountName || "—")}
                   </div>
                   <div className="text-[12px] text-white/70 mt-0.5">
-                    {saved.accountNumber}
+                    {maskAcct(saved!.accountNumber)}
                   </div>
                 </div>
               </div>
               <button
-                onClick={() => {
-                  navigator.clipboard?.writeText(saved.accountNumber);
-                }}
+                onClick={() => copy(saved!.accountNumber)}
                 className="p-2 rounded-lg hover:bg-white/10 transition"
                 aria-label="Copy account number"
               >
@@ -198,140 +370,152 @@ export default function WithdrawalBank() {
               </button>
             </div>
 
-            {/* Change bank select (starts new flow) */}
+            {/* Change bank → only a selector first */}
             <div className="mt-4">
               <label className="block text-[12px] text-gray-700 mb-1">
-                Change your bank
+                {bank ? "Change to" : "Change your bank"}
               </label>
               <button
-                onClick={() => {
-                  startChangeBank();
-                  setPickerOpen(true);
-                }}
+                onClick={() => setPickerOpen(true)}
                 className="w-full h-11 px-3 rounded-xl border border-gray-200 text-left text-[13px] flex items-center justify-between"
               >
-                <span className={bank ? "text-gray-900" : "text-gray-400"}>
-                  Select Bank
-                </span>
+                <div className="flex items-center gap-2">
+                  {bank ? (
+                    <Image
+                      src={bankLogoUrl(bank.name, bank.logo)}
+                      alt={bank.name}
+                      width={18}
+                      height={18}
+                      className="object-contain"
+                    />
+                  ) : null}
+                  <span className={bank ? "text-gray-900" : "text-gray-400"}>
+                    {bank ? bank.name : "Select Bank"}
+                  </span>
+                </div>
                 <ChevronDown className="w-4 h-4 text-gray-500" />
               </button>
             </div>
           </div>
         )}
 
-        {/* Entry form (for new add OR when changing bank) */}
-        {!saved || (saved && (!bank || acct || acctName || pin)) ? (
-          <div className="mt-5">
-            {/* Bank name */}
-            {!saved && (
-              <label className="block text-[12px] text-gray-700 mb-1">
-                Bank name
-              </label>
-            )}
-            {!bank ? (
-              <button
-                onClick={() => setPickerOpen(true)}
-                className="w-full h-11 px-3 rounded-xl border border-gray-200 text-left text-[13px] flex items-center justify-between"
-              >
-                <span className="text-gray-400">Select Bank</span>
-                <ChevronDown className="w-4 h-4 text-gray-500" />
-              </button>
-            ) : (
-              <button
-                onClick={() => setPickerOpen(true)}
-                className="w-full h-11 px-3 rounded-xl border border-gray-200 text-left text-[13px] flex items-center justify-between"
-              >
-                <span className="text-gray-900">{bank.name}</span>
-                <ChevronDown className="w-4 h-4 text-gray-500" />
-              </button>
-            )}
+        {/* Entry / Edit form */}
+        {!hasSaved && (
+          <label className="block mt-5 text-[12px] text-gray-700 mb-1">
+            Bank name
+          </label>
+        )}
 
-            {/* Account number */}
-            <div className="mt-5">
-              <label className="block text-[12px] text-gray-700 mb-1">
-                Account Number
-              </label>
-              <input
-                type="tel"
-                inputMode="numeric"
-                maxLength={10}
-                placeholder="e.g 3120221108"
-                value={acct}
-                onChange={(e) =>
-                  setAcct(e.target.value.replace(/\D/g, "").slice(0, 10))
-                }
-                className="w-full h-11 px-3 rounded-xl border border-gray-200 text-[13px] outline-none"
-              />
+        {/* Bank selector (shown in both modes) */}
+        {!hasSaved && (
+          <button
+            onClick={() => setPickerOpen(true)}
+            className="w-full h-11 px-3 rounded-xl border border-gray-200 text-left text-[13px] flex items-center justify-between"
+          >
+            <div className="flex items-center gap-2">
+              {bank ? (
+                <Image
+                  src={bankLogoUrl(bank.name, bank.logo)}
+                  alt={bank.name}
+                  width={18}
+                  height={18}
+                  className="object-contain"
+                />
+              ) : null}
+              <span className={bank ? "text-gray-900" : "text-gray-400"}>
+                {bank ? bank.name : "Select Bank"}
+              </span>
             </div>
+            <ChevronDown className="w-4 h-4 text-gray-500" />
+          </button>
+        )}
 
-            {/* Black name chip – only when resolved */}
-            {acctName && (
-              <div className="mt-3">
-                <div className="w-full h-10 rounded-lg bg-black text-white text-[12px] font-semibold flex items-center px-4">
-                  {toTitle(acctName)}
+        {/* Account number (only:
+              - always for first-time setup, OR
+              - after user picks a bank when editing an existing one) */}
+        {showAcctInput && (
+          <div className="mt-5">
+            <label className="block text-[12px] text-gray-700 mb-1">
+              Account Number
+            </label>
+            <input
+              type="tel"
+              inputMode="numeric"
+              maxLength={10}
+              placeholder="e.g 3120221108"
+              value={acct}
+              onChange={(e) =>
+                setAcct(e.target.value.replace(/\D/g, "").slice(0, 10))
+              }
+              className="w-full h-11 px-3 rounded-xl border border-gray-200 text-[13px] outline-none"
+            />
+          </div>
+        )}
+
+        {/* Resolve chip (only after we have a name) */}
+        {showAcctInput && resolvedName && (
+          <div className="mt-3 w-full rounded-xl bg-black text-white px-4 py-3 flex items-center justify-between">
+            <div className="flex items-start gap-3">
+              <div className="mt-[2px] w-6 h-6 rounded bg-white overflow-hidden flex items-center justify-center">
+                {bank && (
+                  <Image
+                    src={bankLogoUrl(bank.name, bank.logo)}
+                    alt={bank.name}
+                    width={24}
+                    height={24}
+                    className="object-contain"
+                  />
+                )}
+              </div>
+              <div>
+                <div className="text-[13px] font-semibold leading-tight">
+                  {toTitle(resolvedName)}
+                </div>
+                <div className="text-[12px] text-white/70 mt-0.5">
+                  {maskAcct(acct)}
                 </div>
               </div>
-            )}
-
-            {/* Transaction PIN */}
-            <div className="mt-6">
-              <label className="block text-[12px] text-gray-700 mb-1">
-                Your 4-DIGIT Transaction PIN
-              </label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={4}
-                  placeholder="1234"
-                  value={pin}
-                  onChange={(e) =>
-                    setPin(e.target.value.replace(/\D/g, "").slice(0, 4))
-                  }
-                  className="flex-1 h-11 w-5 px-3 rounded-xl border border-gray-200 text-[13px] outline-none"
-                />
-                <a
-                  href="/dash/components/settings/security/transaction-pin"
-                  className="text-[13px] underline underline-offset-2 text-gray-800"
-                >
-                  Or Set Transaction PIN
-                </a>
-              </div>
             </div>
-
-            {/* Note box */}
-            <div className="mt-8 rounded-xl bg-gray-50 border border-gray-100 p-3">
-              <div className="text-[11px] font-semibold text-gray-700 mb-1">
-                NOTE
-              </div>
-              <p className="text-[11px] text-gray-600 leading-relaxed">
-                Kindly ensure that your bank account name is the same with your
-                Little Wheel name. Thanks for your continuous understanding.
-              </p>
-            </div>
-
-            {/* Error */}
-            {error && (
-              <p className="mt-3 text-[12px] text-red-600" role="alert">
-                {error}
-              </p>
-            )}
-
-            {/* Confirm */}
             <button
-              onClick={onConfirm}
-              disabled={!hasAllInputs || resolving}
-              className={`mt-5 mb-8 w-full h-12 rounded-xl font-semibold text-white transition
-                ${
-                  hasAllInputs && !resolving
-                    ? "bg-black hover:bg-black/90"
-                    : "bg-black/30 cursor-not-allowed"
-                }`}
+              onClick={() => copy(acct)}
+              className="p-2 rounded-lg hover:bg-white/10 transition"
+              aria-label="Copy account number"
             >
-              {resolving ? "Resolving…" : "Confirm Bank"}
+              <Copy className="w-4 h-4 text-white" />
             </button>
           </div>
-        ) : null}
+        )}
+
+        {/* Error */}
+        {error && (
+          <p className="mt-3 text-[12px] text-red-600" role="alert">
+            {error}
+          </p>
+        )}
+
+        {/* Confirm button (only when the acct input is showing) */}
+        {showAcctInput && (
+          <button
+            onClick={onConfirm}
+            disabled={
+              !(!!bank && acct.replace(/\D/g, "").length === 10) ||
+              !resolvedName ||
+              resolving ||
+              saving
+            }
+            className={`mt-5 mb-8 w-full h-12 rounded-xl font-semibold text-white transition ${
+              !!bank &&
+              acct.replace(/\D/g, "").length === 10 &&
+              resolvedName &&
+              !resolving &&
+              !saving
+                ? "bg-black hover:bg-black/90"
+                : "bg-black/30 cursor-not-allowed"
+            }`}
+          >
+            {saving ? "Saving…" : resolving ? "Resolving…" : "Confirm Bank"}
+          </button>
+        )}
       </div>
 
       {/* Bank picker bottom sheet */}
@@ -342,8 +526,7 @@ export default function WithdrawalBank() {
             setPickerOpen(false);
             setBank(b);
             setAcct("");
-            setAcctName("");
-            setPin("");
+            setResolvedName("");
           }}
         />
       )}
@@ -359,23 +542,7 @@ export default function WithdrawalBank() {
   );
 }
 
-/* ---------- Helpers & small components ---------- */
-
-function toTitle(s: string) {
-  return s
-    .toLowerCase()
-    .split(" ")
-    .filter(Boolean)
-    .map((w) => w[0].toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
-function bankLogoText(name: string) {
-  const parts = name.split(" ");
-  const first = parts[0]?.[0] || "";
-  const second = parts[1]?.[0] || "";
-  return (first + second).toUpperCase();
-}
+/* ---------------- Picker & Success ---------------- */
 
 function BankPickerSheet({
   onClose,
@@ -385,20 +552,54 @@ function BankPickerSheet({
   onPick: (b: Bank) => void;
 }) {
   const [q, setQ] = useState("");
+  const [banks, setBanks] = useState<Bank[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  const tokenHeader =
+    typeof window !== "undefined"
+      ? localStorage.getItem("authToken") ||
+        localStorage.getItem("lw_token") ||
+        ""
+      : "";
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        setErr(null);
+
+        const r = await fetch("/api/v1/payments/bank-list", {
+          headers: tokenHeader ? { "x-lw-auth": tokenHeader } : undefined,
+          credentials: "include",
+        });
+
+        const json = await r.json().catch(() => ({}));
+
+        const raw = json?.data || json;
+        if (Array.isArray(raw)) setBanks(raw as Bank[]);
+        else if (Array.isArray(json)) setBanks(json as Bank[]);
+        else throw new Error("Unexpected bank list response");
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : "Failed to load banks");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [tokenHeader]);
+
   const list = useMemo(() => {
     const t = q.trim().toLowerCase();
-    if (!t) return BANKS;
-    return BANKS.filter((b) => b.name.toLowerCase().includes(t));
-  }, [q]);
+    if (!t) return banks;
+    return banks.filter((b) => String(b.name).toLowerCase().includes(t));
+  }, [q, banks]);
 
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="absolute left-0 right-0 bottom-0 bg-white rounded-t-2xl shadow-2xl">
         <div className="mx-auto max-w-sm p-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="h-1 w-12 rounded-full bg-gray-200 mx-auto" />
-          </div>
+          <div className="h-1 w-12 rounded-full bg-gray-200 mx-auto mb-2" />
           <h3 className="text-[15px] font-semibold mb-3">Select Bank</h3>
 
           <div className="mb-3">
@@ -410,22 +611,39 @@ function BankPickerSheet({
             />
           </div>
 
-          <div className="max-h-[50vh] overflow-y-auto -mx-2">
-            {list.map((b) => (
-              <button
-                key={b.code + b.name}
-                onClick={() => onPick(b)}
-                className="w-full text-left px-2 py-3 border-b border-gray-100 hover:bg-gray-50"
-              >
-                <span className="text-[13px] text-gray-900">{b.name}</span>
-              </button>
-            ))}
-            {list.length === 0 && (
-              <div className="px-2 py-6 text-[13px] text-gray-500">
-                No banks found.
-              </div>
-            )}
-          </div>
+          {loading ? (
+            <div className="px-2 py-6 text-[13px] text-gray-500">
+              Loading banks…
+            </div>
+          ) : err ? (
+            <div className="px-2 py-6 text-[13px] text-red-600">
+              Error: {err}
+            </div>
+          ) : (
+            <div className="max-h-[50vh] overflow-y-auto -mx-2">
+              {list.map((b) => (
+                <button
+                  key={`${b.code}-${b.name}`}
+                  onClick={() => onPick(b)}
+                  className="w-full text-left px-2 py-3 border-b border-gray-100 hover:bg-gray-50 flex items-center gap-2"
+                >
+                  <Image
+                    src={bankLogoUrl(String(b.name), b.logo)}
+                    alt={String(b.name)}
+                    width={18}
+                    height={18}
+                    className="object-contain"
+                  />
+                  <span className="text-[13px] text-gray-900">{b.name}</span>
+                </button>
+              ))}
+              {list.length === 0 && (
+                <div className="px-2 py-6 text-[13px] text-gray-500">
+                  No banks found.
+                </div>
+              )}
+            </div>
+          )}
 
           <button
             onClick={onClose}
@@ -463,7 +681,6 @@ function SuccessSheet({
         }`}
         onClick={onClose}
       />
-
       <div
         className={`absolute left-0 right-0 bottom-0 bg-white rounded-t-3xl shadow-2xl p-6 transition-transform duration-300 ${
           open ? "translate-y-0" : "translate-y-full"

@@ -1,24 +1,25 @@
+/* app/login/page.tsx (or wherever you mount it) */
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Eye, EyeOff, Phone as PhoneIcon } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 
 function toNgE164(localish: string) {
-  // take whatever the user typed and make +234XXXXXXXXXX
   const d = localish.replace(/\D/g, "");
-  const local = d.startsWith("0") ? d.slice(1) : d; // drop leading 0 if present
+  const local = d.startsWith("0") ? d.slice(1) : d;
   return `+234${local}`;
 }
 
 export default function MobileLogin() {
   const router = useRouter();
 
-  const [phone, setPhone] = useState(""); // local digits only
-  const [password, setPassword] = useState(""); // 5-digit pin
+  const [phone, setPhone] = useState(""); // local digits only (10/11)
+  const [password, setPassword] = useState(""); // 5-digit PIN
   const [showPassword, setShowPassword] = useState(false);
   const [sending, setSending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   // persistent device token
   const [deviceToken, setDeviceToken] = useState("web-client");
@@ -47,16 +48,33 @@ export default function MobileLogin() {
 
   const gotoSignup = () => router.push("/agent-signup");
 
+  // Persists server-side HttpOnly cookie for cross-device sessions
+  async function persistAuthCookie(token: string) {
+    const resp = await fetch("/api/auth/persist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // cookies are set by the route; no need to include credentials here
+      body: JSON.stringify({ token }),
+    });
+    if (!resp.ok) {
+      const t = await resp.text().catch(() => "");
+      throw new Error(`Persist cookie failed (${resp.status}): ${t}`);
+    }
+  }
+
   const handleLogin = async () => {
     if (!formValid || sending) return;
     setSending(true);
+    setErr(null);
 
     const e164 = toNgE164(phone);
 
     try {
+      // 1) Call your backend-facing login route
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        // no token yet, so no credentials needed; the route will talk to your backend
         body: JSON.stringify({
           phoneNumber: e164,
           password,
@@ -65,7 +83,7 @@ export default function MobileLogin() {
       });
 
       const raw = await res.text();
-      const data = (() => {
+      const data: any = (() => {
         try {
           return JSON.parse(raw);
         } catch {
@@ -79,24 +97,39 @@ export default function MobileLogin() {
           data?.message ||
           data?.error ||
           "Login failed";
-        alert(String(msg));
+        setErr(String(msg));
         setSending(false);
         return;
       }
 
-      // keep a client-side copy of the token for calls where you add x-lw-auth
+      // 2) Extract token from whatever your backend returns
       const token =
         data?.token ||
         data?.access_token ||
         data?.data?.token ||
         data?.data?.access_token ||
+        data?.jwt ||
         null;
-      if (token) localStorage.setItem("lw_token", token);
 
-      router.replace("/dash"); // ← change if your post-login route is different
-    } catch (e) {
-      console.error(e);
-      alert("Network error. Please try again.");
+      if (!token) {
+        setErr("No token returned from backend.");
+        setSending(false);
+        return;
+      }
+
+      // 3) Persist HttpOnly cookie so all future requests are authenticated (cross-device)
+      await persistAuthCookie(token);
+
+      // (Optional) keep a client copy ONLY for legacy pages still reading localStorage
+      try {
+        localStorage.setItem("authToken", token);
+        localStorage.setItem("lw_token", token);
+      } catch {}
+
+      // 4) Go to app home (your authenticated area)
+      router.replace("/dash");
+    } catch (e: any) {
+      setErr(e?.message || "Network error. Please try again.");
       setSending(false);
     }
   };
@@ -132,9 +165,15 @@ export default function MobileLogin() {
             </span>
           </div>
 
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
             Welcome Back
           </h1>
+
+          {err && (
+            <p className="mb-3 text-[12px] text-rose-600" role="alert">
+              {err}
+            </p>
+          )}
 
           {/* Phone */}
           <div className="mb-5">
@@ -150,7 +189,7 @@ export default function MobileLogin() {
                     alt="Nigeria Flag"
                     width={24}
                     height={24}
-                    className="w-full h-full object-cotain"
+                    className="w-full h-full"
                   />
                 </div>
                 <span className="text-gray-700 font-bold text-sm">+234</span>
@@ -158,7 +197,6 @@ export default function MobileLogin() {
 
               <div className="flex-1">
                 <div className="flex items-center bg-gray-100 rounded-xl px-3 py-3">
-                  <PhoneIcon className="w-4 h-4 text-black mr-2" />
                   <input
                     type="tel"
                     placeholder="000-0000-000"
@@ -169,8 +207,9 @@ export default function MobileLogin() {
                     }}
                     inputMode="numeric"
                     pattern="[0-9]*"
-                    className="flex-1 bg-transparent text-gray-700 placeholder-gray-400  outline-none text-sm"
+                    className="flex-1 bg-transparent text-gray-700 placeholder-gray-400 outline-none text-sm"
                     onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                    aria-invalid={!phoneValid}
                   />
                 </div>
               </div>
@@ -192,13 +231,15 @@ export default function MobileLogin() {
                   const v = e.target.value.replace(/\D/g, "").slice(0, 5);
                   setPassword(v);
                 }}
-                className="w-full bg-gray-100 rounded-xl px-3 py-3 text-gray-700 placeholder-gray-400 outline-none pr-10  text-sm tracking-widest"
+                className="w-full bg-gray-100 rounded-xl px-3 py-3 text-gray-700 placeholder-gray-400 outline-none pr-10 text-sm tracking-widest"
                 onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                aria-invalid={!pinValid}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((s) => !s)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600"
+                aria-label={showPassword ? "Hide PIN" : "Show PIN"}
               >
                 {showPassword ? (
                   <EyeOff className="w-4 h-4" />

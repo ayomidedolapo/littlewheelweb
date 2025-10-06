@@ -1,137 +1,410 @@
+/* app/customer/personal-vault/page.tsx */
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Image from "next/image";
 import {
   ArrowLeft,
-  Eye,
   ChevronLeft,
   ChevronRight,
-  X,
-  Check,
-  ArrowDownCircle,
-  ArrowUpRight,
+  CheckCircle2,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 
-/* money fmt */
-const NGN = (n: number) =>
-  `₦${(n || 0).toLocaleString("en-NG", { maximumFractionDigits: 0 })}`;
+/* ---------- helpers ---------- */
+const NGN = (v: number) =>
+  `₦${(v || 0).toLocaleString("en-NG", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 
-/* calendar helpers (Mon-first) */
-type DayCell = { day: number | null; iso?: string };
-function makeMonthGrid(year: number, monthIndex: number): DayCell[] {
-  const first = new Date(year, monthIndex, 1);
-  const last = new Date(year, monthIndex + 1, 0);
-  // JS: 0=Sun..6=Sat -> convert to Mon-first (Mon=1..Sun=7)
-  const firstDow = ((first.getDay() + 6) % 7) + 1; // 1..7
-  const lead = firstDow - 1; // 0..6 leading blanks
-  const cells: DayCell[] = [];
-  for (let i = 0; i < lead; i++) cells.push({ day: null });
-  for (let d = 1; d <= last.getDate(); d++) {
-    const iso = new Date(year, monthIndex, d).toISOString();
-    cells.push({ day: d, iso });
+function getActiveCustomerId(sp: URLSearchParams): string | null {
+  const q = sp.get("customerId");
+  if (q) return q;
+  try {
+    return (
+      sessionStorage.getItem("lw_active_customer_id") ||
+      sessionStorage.getItem("lw_onboarding_customer_id") ||
+      null
+    );
+  } catch {
+    return null;
   }
-  // pad to full weeks
-  while (cells.length % 7 !== 0) cells.push({ day: null });
-  return cells;
 }
 
-export default function VaultViewPage() {
+function extractArray(payload: any): any[] {
+  const d = payload?.data ?? payload;
+  if (Array.isArray(d)) return d;
+  if (Array.isArray(d?.items)) return d.items;
+  if (Array.isArray(d?.records)) return d.records;
+  if (Array.isArray(d?.vaults)) return d.vaults;
+  if (Array.isArray(d?.content)) return d.content;
+  if (Array.isArray(d?.data)) return d.data;
+  return [];
+}
+
+function getAuthToken(): string {
+  try {
+    const m = document.cookie.match(
+      /(?:^|;\s*)(authToken|lw_token|token)\s*=\s*([^;]+)/
+    );
+    if (m?.[2]) return decodeURIComponent(m[2]);
+  } catch {}
+  try {
+    return (
+      localStorage.getItem("lw_token") ||
+      localStorage.getItem("authToken") ||
+      localStorage.getItem("token") ||
+      ""
+    );
+  } catch {
+    return "";
+  }
+}
+
+/* ---------- types ---------- */
+type CustomerLite = {
+  id: string;
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  phoneNumber?: string;
+};
+
+type Tx = {
+  id: string;
+  note: string;
+  amount: number;
+  at: string; // iso
+  isCredit: boolean;
+};
+
+type APIVault = {
+  id?: string;
+  vaultId?: string;
+  _id?: string;
+  name?: string;
+  targetAmount?: number;
+  amount?: number;
+};
+
+type VaultRow = {
+  id: string; // REAL api id
+  name: string;
+  balance: number;
+  target: number;
+  daily: number;
+};
+
+export default function PersonalVaultCustomerPage() {
   const router = useRouter();
+  const sp = useSearchParams();
 
-  // Demo vault state (tweak freely)
-  const vaultName = "Junior School fee";
-  const amountSaved = 30000;
-  const amountLeft = 10500;
-  const progressPct = 15;
+  // stable token
+  const tokenRef = useRef<string>("");
+  if (!tokenRef.current && typeof window !== "undefined") {
+    tokenRef.current = getAuthToken();
+  }
+  const token = tokenRef.current;
 
-  // Calendar state (default July 2025)
-  const [year, setYear] = useState(2025);
-  const [month, setMonth] = useState(6); // 0=Jan .. 6=Jul
-  const days = useMemo(() => makeMonthGrid(year, month), [year, month]);
-  const monthLabel = useMemo(
-    () =>
-      new Date(year, month, 1).toLocaleString("en-US", {
-        month: "long",
-        year: "numeric",
-      }),
-    [year, month]
-  );
-  const prevMonth = () => {
-    const d = new Date(year, month, 1);
-    d.setMonth(d.getMonth() - 1);
-    setYear(d.getFullYear());
-    setMonth(d.getMonth());
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [customer, setCustomer] = useState<CustomerLite | null>(null);
+  const [totalSaved, setTotalSaved] = useState<number>(0);
+
+  const [txs, setTxs] = useState<Tx[]>([]);
+  const [txLoading, setTxLoading] = useState(false);
+
+  /* ---- Deposit/Withdraw picker state (same behavior as customers page) ---- */
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [flow, setFlow] = useState<"deposit" | "withdraw">("deposit");
+  const [selectedVaultId, setSelectedVaultId] = useState<string | null>(null);
+  const [vaults, setVaults] = useState<VaultRow[]>([]);
+  const [vaultsLoading, setVaultsLoading] = useState(false);
+  const [vaultsErr, setVaultsErr] = useState<string | null>(null);
+
+  const openPicker = (mode: "deposit" | "withdraw") => {
+    setFlow(mode);
+    setSelectedVaultId(null);
+    setPickerOpen(true);
   };
-  const nextMonth = () => {
-    const d = new Date(year, month, 1);
-    d.setMonth(d.getMonth() + 1);
-    setYear(d.getFullYear());
-    setMonth(d.getMonth());
+
+  const proceed = () => {
+    const customerId = getActiveCustomerId(sp);
+    if (!customerId || !selectedVaultId) return;
+    const q = new URLSearchParams();
+    q.set("customerId", customerId);
+    q.set("vaultId", selectedVaultId);
+    router.push(
+      flow === "deposit"
+        ? `/customer/vault/deposit?${q.toString()}`
+        : `/customer/vault/withdraw?${q.toString()}`
+    );
   };
 
-  // Demo marked days
-  const savedDays = new Set([1, 2, 3, 4, 5, 6]); // green
-  const missedDays = new Set([7]); // red
+  /* calendar state */
+  const today = new Date();
+  const [year, setYear] = useState<number>(today.getFullYear());
+  const [month, setMonth] = useState<number>(today.getMonth()); // 0-11
 
-  // Recent tx (demo)
-  const txs = [
-    {
-      id: "t1",
-      type: "withdraw",
-      note: "Withdraw",
-      at: "Mar 4th, 02:46:32",
-      amount: -10000,
-    },
-    {
-      id: "t2",
-      type: "deposit",
-      note: "Saved",
-      at: "Mar 4th, 02:46:32",
-      amount: +20000,
-    },
-  ];
+  const highlighted = useMemo(() => {
+    const d = today;
+    return { y: d.getFullYear(), m: d.getMonth(), d: d.getDate() };
+  }, []);
 
-  // Bottom sheets
-  const [showAllTx, setShowAllTx] = useState(false);
-  const [confirmClose, setConfirmClose] = useState(false);
-  const closeVault = () => {
-    setConfirmClose(false);
-    // do your API action later; for now navigate back
-    router.back();
-  };
+  const daysInView = useMemo(() => {
+    const first = new Date(year, month, 1);
+    const startWeekday = (first.getDay() + 6) % 7; // Monday=0
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    const cells: Array<{ y: number; m: number; d: number; inMonth: boolean }> =
+      [];
+
+    for (let i = 0; i < startWeekday; i++) {
+      const dt = new Date(year, month, -i);
+      cells.unshift({
+        y: dt.getFullYear(),
+        m: dt.getMonth(),
+        d: dt.getDate(),
+        inMonth: false,
+      });
+    }
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      cells.push({ y: year, m: month, d, inMonth: true });
+    }
+
+    while (cells.length % 7 !== 0) {
+      const last = cells[cells.length - 1];
+      const dt = new Date(last.y, last.m, last.d + 1);
+      cells.push({
+        y: dt.getFullYear(),
+        m: dt.getMonth(),
+        d: dt.getDate(),
+        inMonth: false,
+      });
+    }
+    return cells;
+  }, [year, month]);
+
+  /* load CUSTOMER + TOTAL BALANCE */
+  useEffect(() => {
+    const customerId = getActiveCustomerId(sp);
+    if (!customerId) {
+      setError("Missing customerId (query or session).");
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const headers = token ? { "x-lw-auth": token } : undefined;
+
+        // Customer
+        try {
+          const rc = await fetch(`/api/v1/agent/customers/${customerId}`, {
+            cache: "no-store",
+            headers,
+          });
+          const jc = await rc.json().catch(() => ({}));
+          const c = jc?.data || jc || {};
+          if (!cancelled) {
+            setCustomer({
+              id: customerId,
+              firstName: c.firstName,
+              lastName: c.lastName,
+              phone: c.phone || c.phoneNumber,
+              phoneNumber: c.phoneNumber || c.phone,
+            });
+            try {
+              sessionStorage.setItem("lw_active_customer_id", customerId);
+            } catch {}
+          }
+        } catch {}
+
+        // Total saved across vaults
+        try {
+          const balRes = await fetch(
+            `/api/v1/agent/customers/${customerId}/vaults/balance`,
+            {
+              cache: "no-store",
+              headers,
+            }
+          );
+          const balJ = await balRes.json().catch(() => ({}));
+          const bal = Number(balJ?.data?.balance ?? balJ?.balance ?? 0) || 0;
+          if (!cancelled) setTotalSaved(bal);
+        } catch {}
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message || "Failed to load details.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sp, token]);
+
+  /* recent contributions (unfiltered) */
+  useEffect(() => {
+    const customerId = getActiveCustomerId(sp);
+    if (!customerId) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        setTxLoading(true);
+        const headers = token ? { "x-lw-auth": token } : undefined;
+
+        const res = await fetch(
+          `/api/v1/agent/customers/${customerId}/vaults/contributions`,
+          {
+            cache: "no-store",
+            headers,
+          }
+        );
+        if (!res.ok) throw new Error(`Contributions HTTP ${res.status}`);
+
+        const j = await res.json().catch(() => ({}));
+        const rows = extractArray(j);
+
+        const mapped: Tx[] = (rows || [])
+          .slice(0, 10)
+          .map((r: any, idx: number) => {
+            const id =
+              r.id ||
+              r._id ||
+              r.txId ||
+              r.reference ||
+              `contrib:${idx}:${r.createdAt || r.date || ""}`;
+            const amount =
+              Number(r.amount ?? r.value ?? r.contribution ?? 0) || 0;
+            const created =
+              r.createdAt || r.date || r.at || new Date().toISOString();
+            const type = String(
+              r.type || r.direction || r.kind || "CREDIT"
+            ).toUpperCase();
+            const isCredit =
+              type.includes("CREDIT") || type.includes("DEPOSIT");
+            const note =
+              r.note || r.description || (isCredit ? "Saved" : "Withdrawal");
+
+            return {
+              id,
+              note,
+              amount: Math.abs(amount),
+              at: new Date(created).toISOString(),
+              isCredit,
+            };
+          });
+
+        mapped.sort(
+          (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()
+        );
+        if (!cancelled) setTxs(mapped);
+      } catch {
+        if (!cancelled) setTxs([]);
+      } finally {
+        if (!cancelled) setTxLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sp, token]);
+
+  /* Load vaults when picker opens (same logic as customers page) */
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const customerId = getActiveCustomerId(sp);
+    if (!customerId) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        setVaultsLoading(true);
+        setVaultsErr(null);
+        setVaults([]);
+        setSelectedVaultId(null);
+
+        const headers = token ? { "x-lw-auth": token } : undefined;
+
+        // 1) list ONGOING vaults
+        const listRes = await fetch(
+          `/api/v1/agent/customers/${customerId}/vaults?status=ONGOING`,
+          {
+            headers,
+            cache: "no-store",
+          }
+        );
+        if (!listRes.ok) throw new Error(`Vaults HTTP ${listRes.status}`);
+        const listJ = await listRes.json();
+        const apiVaults: APIVault[] = extractArray(listJ);
+
+        // 2) enrich balances by REAL id
+        const enriched = await Promise.all(
+          (apiVaults || []).map(async (v): Promise<VaultRow> => {
+            const apiId = v.id || v.vaultId || v._id || "";
+            let detail: any = {};
+            if (apiId) {
+              try {
+                const vr = await fetch(
+                  `/api/v1/agent/customers/${customerId}/vaults/${apiId}`,
+                  { headers, cache: "no-store" }
+                );
+                if (vr.ok) {
+                  const vj = await vr.json();
+                  detail = vj?.data ?? vj ?? {};
+                }
+              } catch {}
+            }
+            const currentBalance =
+              Number(detail?.currentAmount ?? detail?.currentBalance ?? 0) || 0;
+
+            return {
+              id: apiId,
+              name: v.name || detail?.name || "Personal Vault",
+              balance: currentBalance,
+              target: Number(v.targetAmount ?? detail?.targetAmount ?? 0) || 0,
+              daily: Number(v.amount ?? detail?.amount ?? 0) || 0,
+            };
+          })
+        );
+
+        if (!cancelled) setVaults(enriched);
+      } catch (e: any) {
+        if (!cancelled) setVaultsErr(e?.message || "Failed to load vaults.");
+      } finally {
+        if (!cancelled) setVaultsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pickerOpen, sp, token]);
+
+  const fullName =
+    `${customer?.firstName || ""} ${customer?.lastName || ""}`.trim() || "—";
+  const plan = "₦0 daily"; // ← requested copy
+  const withdrawalDateText = "—";
+  const regPhone = customer?.phoneNumber || customer?.phone || "—";
+
+  const pct = (b: number, t: number) =>
+    t ? Math.min(100, Math.round((b / t) * 100)) : 0;
 
   return (
-    <div className="min-h-screen bg-white flex items-start justify-center p-0 md:p-4">
-      <style jsx>{`
-        @keyframes slideUp {
-          from {
-            transform: translateY(100%);
-          }
-          to {
-            transform: translateY(0);
-          }
-        }
-        .sheet {
-          animation: slideUp 260ms cubic-bezier(0.22, 1, 0.36, 1);
-        }
-        .gridBG {
-          background-image: linear-gradient(
-              rgba(255, 255, 255, 0.08) 1px,
-              transparent 1px
-            ),
-            linear-gradient(
-              90deg,
-              rgba(255, 255, 255, 0.08) 1px,
-              transparent 1px
-            );
-          background-size: 64px 64px, 64px 64px;
-          background-position: 0 0, 0 0;
-        }
-      `}</style>
-
-      <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-3xl md:shadow-xl overflow-hidden relative">
-        {/* Header */}
+    <div className="min-h-screen bg-white flex items-start justify-center">
+      <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-3xl md:shadow-xl overflow-hidden">
+        {/* Back */}
         <div className="px-4 pt-4 pb-2">
           <button
             onClick={() => router.back()}
@@ -142,276 +415,355 @@ export default function VaultViewPage() {
           </button>
         </div>
 
-        {/* Hero Card */}
+        {/* Black summary card */}
         <div className="px-4">
-          <div className="relative rounded-2xl bg-black text-white p-5 gridBG">
-            {/* vault image top-right */}
-            <div className="absolute right-3 top-3 h-9 w-9 rounded-lg bg-white/10 backdrop-blur flex items-center justify-center ring-1 ring-white/20">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/uploads/Little wheel personal vault bw 1.png"
-                alt="Vault"
-                className="h-6 w-6 object-contain"
-              />
-            </div>
-
-            <div className="flex items-center gap-1 text-[12px] text-white/85">
-              <span>Amount Saved</span>
-              <Eye className="w-3.5 h-3.5 opacity-80" />
-            </div>
-            <div className="mt-1 text-[28px] leading-none font-extrabold tracking-tight">
-              {NGN(amountSaved)}
-            </div>
-
-            {/* name + amount-left row */}
-            <div className="mt-3 flex items-center justify-between">
-              <span className="inline-flex rounded-full px-3 py-1 bg-white/10 ring-1 ring-white/15 text-[12px]">
-                {vaultName}
-              </span>
-              <span className="text-[13px] text-white/90">
-                Amount left: <strong>{NGN(amountLeft)}</strong>
-              </span>
-            </div>
-
-            {/* progress */}
-            <div className="mt-3">
-              <div className="h-2 w-full rounded-full bg-white/15 overflow-hidden">
-                <div
-                  className="h-full bg-white rounded-full"
-                  style={{ width: `${progressPct}%`, opacity: 0.95 }}
-                />
+          <div className="rounded-2xl bg-black text-white p-4">
+            <div className="grid grid-cols-2 gap-y-3 gap-x-4">
+              <div>
+                <p className="text-[11px] text-white/70">Name</p>
+                <p className="text-[13px] font-semibold mt-0.5">
+                  {loading ? "…" : fullName}
+                </p>
               </div>
-              <div className="text-right text-[12px] mt-1">{progressPct}%</div>
+              <div className="text-right">
+                <p className="text-[11px] text-white/70">Total Saved</p>
+                <p className="text-[13px] font-extrabold mt-0.5">
+                  {loading ? "…" : NGN(totalSaved)}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-[11px] text-white/70">Saving Plan</p>
+                <p className="text-[13px] font-semibold mt-0.5">{plan}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[11px] text-white/70">Withdrawal Date</p>
+                <p className="text-[13px] font-semibold mt-0.5">
+                  {withdrawalDateText}
+                </p>
+              </div>
+
+              {/* STATUS */}
+              <div>
+                <p className="text-[11px] text-white/70">Status</p>
+                <p className="text-[13px] font-semibold mt-0.5 flex items-center gap-1.5">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  <span className="text-emerald-300">Active</span>
+                </p>
+              </div>
+
+              <div className="text-right">
+                <p className="text-[11px] text-white/70">Reg. Phone Number</p>
+                <p className="text-[13px] font-semibold mt-0.5">
+                  {loading ? "…" : regPhone}
+                </p>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Calendar */}
         <div className="px-4 mt-4">
-          <div className="rounded-2xl border border-gray-200 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 bg-white">
-              <div className="flex items-center gap-2">
-                <span className="text-[13px] font-semibold">{monthLabel}</span>
+          <div className="rounded-2xl border border-gray-200 bg-white p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-semibold">
+                  {new Date(year, month, 1).toLocaleString(undefined, {
+                    month: "short",
+                  })}{" "}
+                  <span className="text-gray-600">▼</span>
+                </div>
+                <div className="text-sm font-semibold">
+                  {year} <span className="text-gray-600">▼</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 <button
-                  onClick={prevMonth}
-                  className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center"
+                  onClick={() => {
+                    const m = month - 1;
+                    if (m < 0) {
+                      setMonth(11);
+                      setYear((y) => y - 1);
+                    } else setMonth(m);
+                  }}
+                  className="p-1 rounded hover:bg-gray-100"
                 >
-                  <ChevronLeft className="w-4 h-4" />
+                  <ChevronLeft className="w-5 h-5 text-gray-700" />
                 </button>
                 <button
-                  onClick={nextMonth}
-                  className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center"
+                  onClick={() => {
+                    const m = month + 1;
+                    if (m > 11) {
+                      setMonth(0);
+                      setYear((y) => y + 1);
+                    } else setMonth(m);
+                  }}
+                  className="p-1 rounded hover:bg-gray-100"
                 >
-                  <ChevronRight className="w-4 h-4" />
+                  <ChevronRight className="w-5 h-5 text-gray-700" />
                 </button>
               </div>
             </div>
 
-            <div className="px-3 py-3 bg-white">
-              {/* Week headers (Mon-first) */}
-              <div className="grid grid-cols-7 text-[11px] text-gray-500 px-1 mb-2">
-                {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((d) => (
-                  <div key={d} className="text-center">
-                    {d}
-                  </div>
-                ))}
-              </div>
-
-              {/* Days */}
-              <div className="grid grid-cols-7 gap-2">
-                {days.map((c, i) => {
-                  const d = c.day;
-                  const base =
-                    "h-10 rounded-xl border text-sm flex items-center justify-center";
-                  if (d === null)
-                    return (
-                      <div
-                        key={`b${i}`}
-                        className="h-10 rounded-xl bg-gray-50 border border-gray-100"
-                      />
-                    );
-                  const saved = savedDays.has(d);
-                  const missed = missedDays.has(d);
-                  const cls = saved
-                    ? "border-emerald-200 bg-emerald-100 text-emerald-800 font-semibold"
-                    : missed
-                    ? "border-red-200 bg-red-100 text-red-700 font-semibold"
-                    : "border-gray-200 bg-gray-50 text-gray-800";
-                  return (
-                    <div key={i} className={`${base} ${cls}`}>
-                      {d}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Recent Transactions */}
-        <div className="px-4 mt-5 pb-24">
-          {" "}
-          {/* extra bottom space for sticky button */}
-          <div className="rounded-2xl border border-gray-200 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100">
-              <h3 className="text-[13px] font-semibold">Recent Transactions</h3>
-              <button
-                onClick={() => setShowAllTx(true)}
-                className="text-[12px] text-gray-600"
-              >
-                See all
-              </button>
+            <div className="grid grid-cols-7 gap-2 text-[12px] text-gray-500 mb-2">
+              {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((d) => (
+                <div key={d} className="text-center">
+                  {d}
+                </div>
+              ))}
             </div>
 
-            <div className="bg-white">
-              {txs.map((t, i) => {
-                const isLast = i === txs.length - 1;
-                const positive = t.amount > 0;
+            <div className="grid grid-cols-7 gap-2">
+              {daysInView.map((cell, i) => {
+                const isHighlighted =
+                  cell.y === highlighted.y &&
+                  cell.m === highlighted.m &&
+                  cell.d === highlighted.d &&
+                  cell.inMonth;
+
                 return (
                   <div
-                    key={t.id}
-                    className={`px-4 py-3 flex items-center justify-between ${
-                      !isLast ? "border-b border-gray-100" : ""
+                    key={`${i}:${cell.y}-${cell.m}-${cell.d}`}
+                    className={`h-9 rounded-lg border text-sm flex items-center justify-center ${
+                      cell.inMonth
+                        ? "bg-white border-gray-200 text-gray-900"
+                        : "bg-white border-transparent text-gray-300"
+                    } ${
+                      isHighlighted
+                        ? "ring-2 ring-emerald-300 bg-emerald-100"
+                        : ""
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-full bg-gray-50 flex items-center justify-center ring-1 ring-gray-200">
-                        {positive ? (
-                          <ArrowDownCircle className="w-5 h-5 text-emerald-600" />
-                        ) : (
-                          <ArrowUpRight className="w-5 h-5 text-red-500" />
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-[13px] font-medium text-gray-900">
-                          {t.note}
-                        </p>
-                        <p className="text-[11px] text-gray-500">{t.at}</p>
-                      </div>
-                    </div>
-
-                    {/* red “Close vault” pill for the withdraw row (demo) */}
-                    {!positive ? (
-                      <div className="mr-3 hidden sm:block" />
-                    ) : null}
-
-                    <div
-                      className={`text-[13px] font-semibold ${
-                        positive ? "text-emerald-600" : "text-red-600"
-                      }`}
-                    >
-                      {positive ? "+" : "−"}
-                      {NGN(Math.abs(t.amount))}
-                    </div>
+                    {cell.d}
                   </div>
                 );
               })}
-
-              {/* Banner-like pill aligned like screenshot (shown on first row demo) */}
-              <div className="px-4 pb-3">
-                <div className="mt-2 inline-flex items-center gap-2 rounded-xl bg-red-50 text-red-600 px-3 py-2">
-                  <X className="w-4 h-4" />
-                  <span className="text-[12px] font-medium">Close vault</span>
-                </div>
-              </div>
             </div>
           </div>
         </div>
 
-        {/* Sticky Close Button (always visible while scrolling) */}
-        <div
-          className="fixed left-1/2 -translate-x-1/2 z-50"
-          style={{ bottom: "calc(env(safe-area-inset-bottom) + 24px)" }}
-        >
-          <button
-            onClick={() => setConfirmClose(true)}
-            className="w-[92vw] max-w-sm h-12 rounded-2xl bg-black text-white font-semibold shadow-xl active:scale-[0.99] transition"
-          >
-            Close Vault
-          </button>
+        {/* Recent Transactions header */}
+        <div className="px-4 mt-3">
+          <div className="flex items-center justify-between">
+            <p className="text-[13px] font-semibold text-gray-900">
+              Recent Transactions
+            </p>
+            <button
+              onClick={() => {
+                const customerId = getActiveCustomerId(sp);
+                const q = new URLSearchParams();
+                if (customerId) q.set("customerId", customerId);
+                router.push(`/customer/vault/transactions?${q.toString()}`);
+              }}
+              className="text-[12px] text-gray-600 underline"
+            >
+              See all
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* SEE ALL TX – bottom sheet */}
-      {showAllTx && (
-        <div className="fixed inset-0 z-50">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setShowAllTx(false)}
-          />
-          <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-3xl p-5 shadow-2xl sheet">
-            <div className="mx-auto h-1.5 w-16 rounded-full bg-gray-200 mb-3" />
-            <h4 className="text-base font-semibold mb-3">All Transactions</h4>
-            <div className="max-h-[55vh] overflow-auto space-y-3 pr-1">
-              {txs.concat(txs, txs).map((t, i) => (
+        {/* Recent Transactions list */}
+        <div className="px-4 mt-2">
+          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+            {txLoading ? (
+              <div className="h-16 bg-gray-50 animate-pulse" />
+            ) : txs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10">
+                <Image
+                  src="/uploads/Empty State.png"
+                  alt="No transactions yet"
+                  width={200}
+                  height={200}
+                  className="w-40 h-40 object-contain"
+                  priority
+                />
+                <p className="mt-3 text-sm text-gray-500">
+                  No transactions yet.
+                </p>
+              </div>
+            ) : (
+              txs.slice(0, 5).map((t, i) => (
                 <div
-                  key={`${t.id}-${i}`}
-                  className="flex items-center justify-between border border-gray-100 rounded-xl px-3 py-3"
+                  key={t.id}
+                  className={`flex items-center justify-between px-3 py-3 ${
+                    i !== Math.min(txs.length, 5) - 1
+                      ? "border-b border-gray-100"
+                      : ""
+                  }`}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-full bg-gray-50 flex items-center justify-center ring-1 ring-gray-200">
-                      {t.amount > 0 ? (
-                        <ArrowDownCircle className="w-5 h-5 text-emerald-600" />
-                      ) : (
-                        <ArrowUpRight className="w-5 h-5 text-red-500" />
-                      )}
+                    <div
+                      className={`h-8 w-8 rounded-full ${
+                        t.isCredit ? "bg-emerald-50" : "bg-rose-50"
+                      } flex items-center justify-center text-[11px] font-bold ${
+                        t.isCredit ? "text-emerald-700" : "text-rose-700"
+                      }`}
+                    >
+                      {t.isCredit ? "+" : "−"}
                     </div>
                     <div>
                       <p className="text-[13px] font-medium text-gray-900">
                         {t.note}
                       </p>
-                      <p className="text-[11px] text-gray-500">{t.at}</p>
+                      <p className="text-[11px] text-gray-500">
+                        {new Date(t.at).toLocaleString()}
+                      </p>
                     </div>
                   </div>
                   <div
                     className={`text-[13px] font-semibold ${
-                      t.amount > 0 ? "text-emerald-600" : "text-red-600"
+                      t.isCredit ? "text-emerald-600" : "text-rose-600"
                     }`}
                   >
-                    {t.amount > 0 ? "+" : "−"}
-                    {NGN(Math.abs(t.amount))}
+                    {NGN(t.amount)}
                   </div>
                 </div>
-              ))}
-            </div>
+              ))
+            )}
           </div>
         </div>
-      )}
 
-      {/* CONFIRM CLOSE – bottom sheet */}
-      {confirmClose && (
+        {/* Bottom actions → open picker like customers page */}
+        <div className="sticky bottom-0 mt-6 bg-white px-4 py-4">
+          <div className="grid grid-cols-2 gap-4">
+            <button
+              onClick={() => openPicker("withdraw")}
+              className="h-12 rounded-2xl font-semibold bg-gray-100 text-rose-600"
+            >
+              Withdraw
+            </button>
+            <button
+              onClick={() => openPicker("deposit")}
+              className="h-12 rounded-2xl font-semibold bg-black text-white"
+            >
+              Deposit
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ===== Vault Picker Modal (Deposit / Withdraw) ===== */}
+      {pickerOpen && (
         <div className="fixed inset-0 z-50">
+          {/* backdrop */}
           <div
             className="absolute inset-0 bg-black/40"
-            onClick={() => setConfirmClose(false)}
+            onClick={() => setPickerOpen(false)}
           />
-          <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-3xl p-6 shadow-2xl sheet">
-            <div className="mx-auto h-1.5 w-16 rounded-full bg-gray-200 mb-4" />
-            <div className="mx-auto mb-5 h-16 w-16 rounded-full bg-red-50 ring-2 ring-red-100 flex items-center justify-center">
-              <X className="w-7 h-7 text-red-600" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 text-center">
-              Close this vault?
+          {/* sheet */}
+          <div className="absolute inset-x-0 bottom-0 bg-white rounded-3xl p-5 shadow-2xl">
+            <div className="mx-auto h-1.5 w-16 rounded-full bg-gray-200 mb-3" />
+
+            <h3 className="text-base font-semibold text-gray-900 mb-4">
+              Choose Preferred Vault
             </h3>
-            <p className="text-sm text-gray-600 text-center mt-1">
-              You can reopen or create a new vault later.
-            </p>
-            <div className="mt-6 grid grid-cols-2 gap-3">
-              <button
-                onClick={() => setConfirmClose(false)}
-                className="h-12 rounded-xl border border-gray-300 text-gray-800 font-semibold"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={closeVault}
-                className="h-12 rounded-xl bg-black text-white font-semibold"
-              >
-                Close vault
-              </button>
-            </div>
+
+            {/* Error / Loading / Real list */}
+            {vaultsErr && (
+              <p className="text-[12px] text-rose-600 mb-3">{vaultsErr}</p>
+            )}
+
+            {vaultsLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-20 rounded-xl bg-gray-50 animate-pulse"
+                  />
+                ))}
+              </div>
+            ) : vaults.length === 0 ? (
+              <p className="text-sm text-gray-500">No vaults yet.</p>
+            ) : (
+              <div className="space-y-3 max-h-[55vh] overflow-auto pr-1">
+                {vaults.map((v) => {
+                  const progress = pct(v.balance, v.target);
+                  const isActive = selectedVaultId === v.id;
+                  return (
+                    <button
+                      key={v.id}
+                      onClick={() => setSelectedVaultId(v.id)}
+                      className={`w-full text-left rounded-xl border p-3 bg-white flex items-center gap-3 ${
+                        isActive ? "border-black" : "border-gray-200"
+                      }`}
+                    >
+                      <div className="shrink-0">
+                        <Image
+                          src="/uploads/Little wheel personal vault bw 1.png"
+                          alt="Vault"
+                          width={56}
+                          height={56}
+                          className="w-12 h-12 object-contain"
+                          priority
+                        />
+                      </div>
+
+                      <div className="flex-1">
+                        <p className="text-[13px] font-semibold text-gray-900 leading-tight">
+                          {v.name}
+                        </p>
+                        <p className="text-[11px] text-gray-600">
+                          Amount: <strong>{NGN(v.daily)}</strong> (DAILY)
+                        </p>
+
+                        <div className="mt-2 flex items-center gap-2">
+                          <div className="h-2 flex-1 rounded-full bg-gray-200 overflow-hidden">
+                            <div
+                              className="h-full rounded-full"
+                              style={{
+                                width: `${progress}%`,
+                                backgroundColor: "#10B981",
+                              }}
+                            />
+                          </div>
+                          <span className="text-[11px] text-gray-600">
+                            {isFinite(progress) ? progress : 0}%
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="text-right text-[12px] font-semibold">
+                        <span className="text-red-600">{NGN(v.balance)}</span>
+                        <span className="text-gray-400">/</span>
+                        <span className="text-green-600">{NGN(v.target)}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* CTA */}
+            <button
+              onClick={proceed}
+              disabled={!selectedVaultId}
+              className={`mt-4 w-full h-12 rounded-2xl font-semibold ${
+                selectedVaultId
+                  ? "bg-black text-white"
+                  : "bg-gray-200 text-gray-500 cursor-not-allowed"
+              }`}
+            >
+              Select and Proceed
+            </button>
+
+            <button
+              onClick={() => {
+                const customerId = getActiveCustomerId(sp);
+                setPickerOpen(false);
+                if (customerId) {
+                  router.push(
+                    `/customer/vault/create?customerId=${encodeURIComponent(
+                      customerId
+                    )}`
+                  );
+                } else {
+                  router.push("/customer/vault/create");
+                }
+              }}
+              className="mt-3 w-full text-center text-[13px] font-semibold text-black underline"
+            >
+              Create New Vault
+            </button>
           </div>
         </div>
       )}

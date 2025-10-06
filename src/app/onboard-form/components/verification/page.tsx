@@ -4,36 +4,29 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 
+const OTP_LEN = 4;
+
 export default function MobileVerification() {
   const router = useRouter();
 
-  // 👇 change this to validate against server/API if needed
-  const EXPECTED_CODE = "1644"; // matches your mock
-
-  const [code, setCode] = useState<string[]>(["", "", "", ""]);
+  const [code, setCode] = useState<string[]>(Array(OTP_LEN).fill(""));
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
-  const [timeLeft, setTimeLeft] = useState(305); // 5:05 in seconds
+  const [timeLeft, setTimeLeft] = useState(305);
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
   const inputsRef = useRef<Array<HTMLInputElement | null>>([]);
 
   const isComplete = useMemo(() => code.every((d) => d !== ""), [code]);
   const valueAsString = useMemo(() => code.join(""), [code]);
 
-  // countdown
   useEffect(() => {
     if (timeLeft <= 0) return;
     const t = setTimeout(() => setTimeLeft((s) => s - 1), 1000);
     return () => clearTimeout(t);
   }, [timeLeft]);
 
-  const formatTime = (s: number) => {
-    const m = Math.floor(s / 60);
-    const r = s % 60;
-    return `${m}:${r.toString().padStart(2, "0")}`;
-  };
-
-  // helpers
   const focusIndex = (i: number) => inputsRef.current[i]?.focus();
-
   const setDigit = (i: number, v: string) => {
     const next = [...code];
     next[i] = v;
@@ -42,12 +35,9 @@ export default function MobileVerification() {
 
   const handleChange = (index: number, raw: string) => {
     const v = raw.replace(/\D/g, "").slice(0, 1);
-    if (!v) {
-      setDigit(index, "");
-      return;
-    }
+    if (!v) return setDigit(index, "");
     setDigit(index, v);
-    if (index < 3) focusIndex(index + 1);
+    if (index < OTP_LEN - 1) focusIndex(index + 1);
   };
 
   const handleKeyDown = (
@@ -63,66 +53,129 @@ export default function MobileVerification() {
       e.preventDefault();
       focusIndex(index - 1);
     }
-    if ((e.key === "ArrowRight" || e.key === "ArrowDown") && index < 3) {
+    if (
+      (e.key === "ArrowRight" || e.key === "ArrowDown") &&
+      index < OTP_LEN - 1
+    ) {
       e.preventDefault();
       focusIndex(index + 1);
     }
   };
 
-  // paste support: paste "1234" into any box
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
-    const txt = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 4);
+    const txt = e.clipboardData
+      .getData("text")
+      .replace(/\D/g, "")
+      .slice(0, OTP_LEN);
     if (txt.length) {
       e.preventDefault();
       const next = txt
-        .padEnd(4, " ")
+        .padEnd(OTP_LEN, " ")
         .split("")
-        .slice(0, 4)
+        .slice(0, OTP_LEN)
         .map((c) => (/\d/.test(c) ? c : ""));
       setCode(next);
-      focusIndex(Math.min(txt.length, 3));
+      focusIndex(Math.min(txt.length, OTP_LEN - 1));
     }
   };
 
-  const handleSendAgain = () => {
-    setTimeLeft(305);
-    // TODO: hit your API to resend
-    setStatus("idle");
+  const handleSendAgain = async () => {
+    if (resending) return;
+    const token = sessionStorage.getItem("lw_reg_token");
+    if (!token) {
+      setErr("Missing registration token. Restart onboarding.");
+      return;
+    }
+    setResending(true);
+    setErr(null);
+    try {
+      const r = await fetch("/api/v1/agent/customers/resend-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ token }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j?.message || j?.error || `HTTP ${r.status}`);
+      }
+      setTimeLeft(305);
+      setStatus("idle");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to resend code.");
+    } finally {
+      setResending(false);
+    }
   };
 
-  const handleProceed = () => {
-    if (!isComplete) return;
-    if (valueAsString === EXPECTED_CODE) {
+  const handleProceed = async () => {
+    // If you re-enable OTP later, this will verify it.
+    if (!isComplete || submitting) return;
+    const token = sessionStorage.getItem("lw_reg_token");
+    if (!token) {
+      setErr("Missing registration token. Restart onboarding.");
+      return;
+    }
+
+    setSubmitting(true);
+    setErr(null);
+    try {
+      const res = await fetch(
+        "/api/v1/agent/customers/confirm-registration-otp",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ otp: valueAsString, token }),
+        }
+      );
+
+      const text = await res.text();
+      let json: any = {};
+      try {
+        json = JSON.parse(text || "{}");
+      } catch {}
+
+      if (!res.ok) {
+        setStatus("error");
+        const msg = json?.message || json?.error || `HTTP ${res.status}`;
+        throw new Error(msg);
+      }
+
       setStatus("success");
-      // simulate a brief success state then continue
+      const customerId =
+        json?.data?.customerId || json?.data?.id || json?.customerId || null;
+      if (customerId)
+        sessionStorage.setItem("lw_onboarding_customer_id", String(customerId));
+
       setTimeout(
         () => router.push("./onboard-form/components/personal-details"),
-        150
+        200
       );
-    } else {
-      setStatus("error");
-      // shake effect reset
-      setTimeout(() => setStatus("idle"), 600);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Verification failed.");
+      setTimeout(() => setStatus("idle"), 700);
+    } finally {
+      setSubmitting(false);
     }
+  };
+
+  // ✅ SKIP here: bypass OTP and move forward
+  const handleSkip = () => {
+    router.push("./personal-details");
   };
 
   const baseBox =
     "w-12 h-12 md:w-14 md:h-14 text-center text-xl md:text-2xl font-bold rounded-lg border-2 focus:outline-none transition-all duration-150";
-
   const colorForStatus = (filled: boolean) => {
     if (status === "success")
       return "border-green-500 bg-green-50 text-green-700";
     if (status === "error") return "border-red-500 bg-red-50 text-red-700";
-    // default (idle) → BLACK box
     return filled
       ? "border-black text-gray-900"
       : "border-black/70 text-gray-900";
   };
-
-  const proceedEnabled = isComplete;
-  const proceedBtn = proceedEnabled
-    ? "bg-black text-white hover:bg-black/90"
-    : "bg-gray-200 text-gray-500 cursor-not-allowed";
+  const proceedEnabled = isComplete && !submitting;
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-0 md:p-4">
@@ -143,33 +196,25 @@ export default function MobileVerification() {
           <h1 className="text-2xl font-bold text-gray-900 mb-3">
             Verify Mobile Number
           </h1>
-
           <p className="text-gray-600 text-sm mb-2">
             A verification code has been sent to their mobile number
           </p>
 
           <div className="mb-2">
-            <span className="text-gray-900 font-medium text-sm">
-              (+234-913-****-7937).{" "}
-            </span>
             <button
               onClick={handleSendAgain}
-              className="text-gray-900 text-sm underline hover:text-gray-700"
+              disabled={resending}
+              className="text-gray-900 text-sm underline hover:text-gray-700 disabled:opacity-60"
             >
-              Send code again
+              {resending ? "Sending…" : "Send code again"}
             </button>
           </div>
 
-          {/* Inputs */}
+          {/* 4 inputs */}
           <div
-            className={`flex justify-center gap-4 my-8 ${
+            className={`flex justify-center gap-3 my-8 ${
               status === "error" ? "animate-[shake_0.6s_ease]" : ""
             }`}
-            // tiny CSS keyframes (Tailwind inline)
-            style={{
-              // @ts-ignore
-              "--tw-translate-x": "0",
-            }}
           >
             {code.map((digit, i) => (
               <input
@@ -190,38 +235,50 @@ export default function MobileVerification() {
             ))}
           </div>
 
-          {/* Timer */}
-          <div className="text-center mb-6">
+          <div className="text-center mb-3">
             <span className="text-gray-600 text-sm">
-              {formatTime(timeLeft)} left
+              {Math.floor(timeLeft / 60)}:
+              {String(timeLeft % 60).padStart(2, "0")} left
             </span>
           </div>
+
+          {err && (
+            <p className="text-center text-xs text-red-600 mb-3" role="alert">
+              {err}
+            </p>
+          )}
+
+          {/* Primary actions */}
+          <button
+            onClick={handleProceed}
+            disabled={!proceedEnabled}
+            className={`w-full font-semibold py-4 px-6 rounded-xl transition-colors text-sm ${
+              proceedEnabled
+                ? "bg-black text-white hover:bg-black/90"
+                : "bg-gray-200 text-gray-500"
+            }`}
+          >
+            {submitting ? "Verifying…" : "Proceed"}
+          </button>
+
+          {/* Skip for now */}
+          <button
+            onClick={handleSkip}
+            className="w-full font-semibold py-4 px-6 rounded-xl border border-gray-300 text-gray-800 hover:bg-gray-50 text-sm mt-3"
+          >
+            Skip for now
+          </button>
 
           {/* Change number */}
           <button
             onClick={() => router.back()}
-            className="flex items-center justify-between w-full py-3 text-gray-700 hover:text-gray-900 mb-8"
+            className="flex items-center justify-between w-full py-3 text-gray-700 hover:text-gray-900 mt-6"
           >
             <span className="text-sm font-medium">Or Change phone number</span>
-            <ChevronRight className="w-4 h-4" />
           </button>
-
-          <div className="flex-1" />
-
-          {/* Proceed */}
-          <div className="pb-6 mt-auto">
-            <button
-              onClick={handleProceed}
-              disabled={!proceedEnabled}
-              className={`w-full font-semibold py-4 px-6 rounded-xl transition-colors text-sm ${proceedBtn}`}
-            >
-              Proceed
-            </button>
-          </div>
         </div>
       </div>
 
-      {/* inline keyframes for shake */}
       <style jsx>{`
         @keyframes shake {
           10% {

@@ -1,6 +1,7 @@
+/* app/customer/vault/page.tsx */
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   Plus,
@@ -8,139 +9,360 @@ import {
   CheckSquare,
   ChevronRight,
   Check,
-  X,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import Image from "next/image";
+import { useRouter, useSearchParams } from "next/navigation";
+
+/* ---------- types ---------- */
+type APIVault = {
+  id?: string;
+  vaultId?: string;
+  _id?: string;
+  name?: string;
+  targetAmount?: number;
+  amount?: number;
+};
 
 type Vault = {
-  id: string;
+  id: string; // REAL api id used for routing/fetching
   name: string;
   balance: number;
   target: number;
   daily: number;
 };
-type Tx = { id: string; note: string; amount: number; at: string };
 
-const NGN = (v: number) =>
+type Tx = {
+  id: string;
+  note: string;
+  amount: number;
+  at: string;
+  isCredit: boolean;
+};
+
+/* ---------- utils ---------- */
+const formatNGN = (v: number) =>
   `₦${(v || 0).toLocaleString("en-NG", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   })}`;
 
 const slugify = (s: string) =>
-  s
+  (s || "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
 
+const makeSafeSlug = (name: string, id: string) => {
+  const base = slugify(name || "vault");
+  const tail =
+    (id || "")
+      .toString()
+      .replace(/[^a-zA-Z0-9]/g, "")
+      .slice(-6) || "x";
+  return `${base}-${tail}`;
+};
+
+const fmtDateTime = (iso: string) =>
+  new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(iso));
+
+/* ------- state helpers ------- */
+function getActiveCustomerId(sp: URLSearchParams): string | null {
+  const q = sp.get("customerId");
+  if (q) return q;
+  try {
+    return (
+      sessionStorage.getItem("lw_active_customer_id") ||
+      sessionStorage.getItem("lw_onboarding_customer_id") ||
+      null
+    );
+  } catch {
+    return null;
+  }
+}
+
+/** Try cookie first (browser), then localStorage */
+function getAuthToken(): string {
+  try {
+    // cookie
+    const m = document.cookie.match(
+      /(?:^|;\s*)(authToken|lw_token|token)\s*=\s*([^;]+)/
+    );
+    if (m?.[2]) return decodeURIComponent(m[2]);
+  } catch {}
+  try {
+    return (
+      localStorage.getItem("lw_token") ||
+      localStorage.getItem("authToken") ||
+      localStorage.getItem("token") ||
+      ""
+    );
+  } catch {
+    return "";
+  }
+}
+
+/** fetch wrapper that auto-adds x-lw-auth when present */
+async function apiGet(url: string, token: string, signal?: AbortSignal) {
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (token) headers["x-lw-auth"] = token;
+  const r = await fetch(url, { headers, cache: "no-store", signal });
+  return r;
+}
+
+/* ============================ Page ============================ */
 export default function CustomerVaultPage() {
   const router = useRouter();
+  const sp = useSearchParams();
 
-  const [vaults, setVaults] = useState<Vault[]>([
-    {
-      id: "v1",
-      name: "Junior School fee",
-      balance: 120_000,
-      target: 250_000,
-      daily: 1_000,
-    },
-    {
-      id: "v2",
-      name: "House Rent",
-      balance: 120_000,
-      target: 250_000,
-      daily: 1_000,
-    },
-    {
-      id: "v3",
-      name: "Keke Installment",
-      balance: 120_000,
-      target: 250_000,
-      daily: 1_000,
-    },
-  ]);
+  const [loading, setLoading] = useState(true);
+  const [vaults, setVaults] = useState<Vault[]>([]);
+  const [totalBalance, setTotalBalance] = useState<number>(0);
+  const [error, setError] = useState<string | null>(null);
 
-  const [txs] = useState<Tx[]>([
-    {
-      id: "t1",
-      note: "Saved",
-      amount: 10_000,
-      at: new Date("2025-03-04T02:46:32Z").toISOString(),
-    },
-    {
-      id: "t2",
-      note: "Saved",
-      amount: 5_000,
-      at: new Date("2025-03-03T09:12:32Z").toISOString(),
-    },
-    {
-      id: "t3",
-      note: "Saved",
-      amount: 12_500,
-      at: new Date("2025-03-02T14:20:10Z").toISOString(),
-    },
-  ]);
+  const [txs, setTxs] = useState<Tx[]>([]);
+  const [txLoading, setTxLoading] = useState<boolean>(false);
 
-  const total = useMemo(
-    () => vaults.reduce((s, v) => s + v.balance, 0),
-    [vaults]
-  );
-  const withdrawable = useMemo(() => Math.max(total - 1_000, 0), [total]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [flow, setFlow] = useState<"deposit" | "withdraw">("deposit");
+  const [selectedVaultId, setSelectedVaultId] = useState<string | null>(null);
 
-  // Deposit/Withdraw sheet
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [mode, setMode] = useState<"deposit" | "withdraw">("deposit");
-  const [amount, setAmount] = useState("");
-  const [vaultId, setVaultId] = useState(vaults[0]?.id ?? "");
+  // stable token
+  const tokenRef = useRef<string>("");
+  if (!tokenRef.current && typeof window !== "undefined") {
+    tokenRef.current = getAuthToken();
+  }
 
-  // Tx “See all” sheet
-  const [txSheetOpen, setTxSheetOpen] = useState(false);
-
-  // Toast
-  const [toast, setToast] = useState<{
-    open: boolean;
-    title: string;
-    desc?: string;
-  }>({
-    open: false,
-    title: "",
-  });
-
-  const openAction = (m: "deposit" | "withdraw") => {
-    setMode(m);
-    setVaultId(vaults[0]?.id ?? "");
-    setAmount("");
-    setSheetOpen(true);
+  const openPicker = (mode: "deposit" | "withdraw") => {
+    setFlow(mode);
+    setSelectedVaultId(null);
+    setPickerOpen(true);
   };
 
-  const doAction = () => {
-    const v = vaults.find((x) => x.id === vaultId);
-    const amt = Number(amount);
-    if (!v || !amt || amt <= 0) return;
+  const proceed = () => {
+    if (!selectedVaultId) return;
+    setPickerOpen(false);
 
-    setVaults((prev) =>
-      prev.map((p) =>
-        p.id === v.id
-          ? {
-              ...p,
-              balance:
-                mode === "deposit"
-                  ? p.balance + amt
-                  : Math.max(p.balance - amt, 0),
-            }
-          : p
-      )
+    const customerId = getActiveCustomerId(sp);
+    const q = new URLSearchParams();
+    if (customerId) q.set("customerId", customerId);
+    q.set("vaultId", selectedVaultId);
+
+    router.push(
+      flow === "deposit"
+        ? `/customer/vault/deposit?${q.toString()}`
+        : `/customer/vault/withdraw?${q.toString()}`
     );
-
-    setSheetOpen(false);
-    setToast({
-      open: true,
-      title:
-        mode === "deposit" ? `Deposited ${NGN(amt)}` : `Withdrawn ${NGN(amt)}`,
-      desc: v.name,
-    });
-    setTimeout(() => setToast((t) => ({ ...t, open: false })), 2200);
   };
+
+  const pushWithCustomer = (path: string) => {
+    const customerId = getActiveCustomerId(sp);
+    const q = customerId ? `?customerId=${customerId}` : "";
+    router.push(`${path}${q}`);
+  };
+
+  const pushVaultDetail = (v: Vault) => {
+    const customerId = getActiveCustomerId(sp);
+    const q = new URLSearchParams();
+    if (customerId) q.set("customerId", customerId);
+    q.set("vaultId", v.id);
+    const slug = makeSafeSlug(v.name, v.id);
+    router.push(`/customer/vault/${encodeURIComponent(slug)}?${q.toString()}`);
+  };
+
+  const extractArray = (payload: any): any[] => {
+    const d = payload?.data ?? payload;
+    if (Array.isArray(d)) return d;
+    if (Array.isArray(d?.items)) return d.items;
+    if (Array.isArray(d?.records)) return d.records;
+    if (Array.isArray(d?.vaults)) return d.vaults;
+    if (Array.isArray(d?.content)) return d.content;
+    if (Array.isArray(d?.data)) return d.data;
+    return [];
+  };
+
+  /* --------- on mount: persist scoped customer --------- */
+  useEffect(() => {
+    const cid = sp.get("customerId");
+    if (cid) {
+      try {
+        sessionStorage.setItem("lw_active_customer_id", cid);
+        sessionStorage.removeItem("lw_onboarding_customer_id");
+      } catch {}
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* --------- load balance + vault list (parallel) ---------- */
+  useEffect(() => {
+    const customerId = getActiveCustomerId(sp);
+    if (!customerId) {
+      setLoading(false);
+      setError("Missing customerId (query or session).");
+      return;
+    }
+
+    const ac = new AbortController();
+    const { signal } = ac;
+
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const token = tokenRef.current;
+
+        const balUrl = `/api/v1/agent/customers/${customerId}/vaults/balance`;
+        const listUrl = `/api/v1/agent/customers/${customerId}/vaults?status=ONGOING`;
+
+        const [balRes, listRes] = await Promise.all([
+          apiGet(balUrl, token, signal),
+          apiGet(listUrl, token, signal),
+        ]);
+
+        if (!balRes.ok) throw new Error(`Balance HTTP ${balRes.status}`);
+        if (!listRes.ok) throw new Error(`Vaults HTTP ${listRes.status}`);
+
+        const [balJ, listJ] = await Promise.all([
+          balRes.json(),
+          listRes.json(),
+        ]);
+
+        const bal = Number(balJ?.data?.balance ?? balJ?.balance ?? 0);
+        setTotalBalance(Number.isFinite(bal) ? bal : 0);
+
+        const apiVaults = extractArray(listJ);
+
+        // Per-vault detail loads (limited concurrency)
+        const toVault = async (v: APIVault): Promise<Vault> => {
+          const apiId = v.id || v.vaultId || v._id || "";
+          let detail: any = {};
+          if (apiId) {
+            try {
+              const vr = await apiGet(
+                `/api/v1/agent/customers/${customerId}/vaults/${apiId}`,
+                token,
+                signal
+              );
+              if (vr.ok) {
+                const vj = await vr.json();
+                detail = vj?.data ?? vj ?? {};
+              }
+            } catch {}
+          }
+          const currentBalance =
+            Number(detail?.currentAmount ?? detail?.currentBalance ?? 0) || 0;
+
+          return {
+            id: apiId || `${customerId}:${slugify(v.name || "personal-vault")}`,
+            name: v.name || detail?.name || "Personal Vault",
+            balance: currentBalance,
+            target: Number(v.targetAmount ?? detail?.targetAmount ?? 0) || 0,
+            daily: Number(v.amount ?? detail?.amount ?? 0) || 0,
+          };
+        };
+
+        // Cap concurrency to avoid flooding (simple chunking)
+        const chunkSize = 6;
+        const chunks: APIVault[][] = [];
+        for (let i = 0; i < apiVaults.length; i += chunkSize) {
+          chunks.push(apiVaults.slice(i, i + chunkSize));
+        }
+        const enriched: Vault[] = [];
+        for (const chunk of chunks) {
+          const part = await Promise.all(
+            chunk.map((v: APIVault) => toVault(v))
+          );
+          enriched.push(...part);
+        }
+
+        setVaults(enriched);
+      } catch (e: any) {
+        if (e?.name === "AbortError") return;
+        setError(e?.message || "Failed to load vaults.");
+      } finally {
+        setLoading(false);
+      }
+    })();
+
+    return () => ac.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* ---- load recent contributions (transactions) ---- */
+  useEffect(() => {
+    const customerId = getActiveCustomerId(sp);
+    if (!customerId) return;
+
+    const ac = new AbortController();
+    const { signal } = ac;
+
+    (async () => {
+      try {
+        setTxLoading(true);
+        const res = await apiGet(
+          `/api/v1/agent/customers/${customerId}/vaults/contributions`,
+          tokenRef.current,
+          signal
+        );
+        if (!res.ok) throw new Error(`Contributions HTTP ${res.status}`);
+        const j = await res.json();
+        const rows = extractArray(j);
+
+        const mapped: Tx[] = (rows || []).map((r: any, idx: number) => {
+          const id =
+            r.id ||
+            r._id ||
+            r.txId ||
+            r.reference ||
+            `contrib:${idx}:${r.createdAt || r.date || ""}`;
+          const amount =
+            Number(r.amount ?? r.value ?? r.contribution ?? 0) || 0;
+          const created =
+            r.createdAt || r.date || r.at || new Date().toISOString();
+          const type = String(
+            r.type || r.direction || r.kind || "CREDIT"
+          ).toUpperCase();
+          const isCredit = type.includes("CREDIT") || type.includes("DEPOSIT");
+          const note =
+            r.note || r.description || (isCredit ? "Saved" : "Withdrawal");
+
+          return {
+            id,
+            note,
+            amount: Math.abs(amount),
+            at: new Date(created).toISOString(),
+            isCredit,
+          };
+        });
+
+        mapped.sort(
+          (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()
+        );
+
+        setTxs(mapped);
+      } catch (e: any) {
+        if (e?.name === "AbortError") return;
+        setTxs([]);
+      } finally {
+        setTxLoading(false);
+      }
+    })();
+
+    return () => ac.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const total = useMemo(() => totalBalance, [totalBalance]);
+  const withdrawable = useMemo(
+    () => Math.max(total - 1000, 0), // business rule placeholder
+    [total]
+  );
 
   return (
     <div className="min-h-screen bg-white flex items-start justify-center p-0 md:p-4">
@@ -156,7 +378,7 @@ export default function CustomerVaultPage() {
           </button>
         </div>
 
-        {/* ===== HERO (matched to screenshot) ===== */}
+        {/* HERO */}
         <div className="px-4 relative">
           <div
             className="relative rounded-2xl bg-black text-white p-5 overflow-hidden pb-8"
@@ -165,37 +387,36 @@ export default function CustomerVaultPage() {
                 "repeating-linear-gradient(0deg, rgba(255,255,255,.08) 0, rgba(255,255,255,.08) 1px, transparent 1px, transparent 64px), repeating-linear-gradient(90deg, rgba(255,255,255,.08) 0, rgba(255,255,255,.08) 1px, transparent 1px, transparent 64px)",
             }}
           >
-            {/* Add new → route to /customer/vault/create */}
             <button
-              onClick={() => router.push("/customer/vault/create")}
+              onClick={() => pushWithCustomer("/customer/vault/create")}
               className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-lg bg-white/95 px-3 py-1.5 text-xs font-semibold text-black shadow-sm hover:bg-white"
             >
               Add new <Plus className="h-4 w-4" />
             </button>
 
-            {/* Total Balance */}
             <div className="flex items-center gap-1 text-[12px] text-white/85 mb-1">
               <span>Total Balance</span>
               <Eye className="h-3.5 w-3.5 opacity-80" />
             </div>
             <div className="text-[28px] leading-none font-extrabold tracking-tight mb-6">
-              ₦30,000.00
+              {loading ? "…" : formatNGN(total)}
             </div>
 
-            {/* Withdrawable pill */}
             <div className="mb-6">
               <div className="inline-flex items-center rounded-full border border-white/10 bg-[#2A3F5D]/90 px-3 py-1 text-[12px] shadow-sm">
                 <span className="opacity-95">Withdrawable Amount:&nbsp;</span>
-                <span className="font-semibold">₦29,000.00</span>
+                <span className="font-semibold">
+                  {loading ? "…" : formatNGN(withdrawable)}
+                </span>
               </div>
             </div>
           </div>
 
-          {/* Segmented actions - positioned to overlap the bottom of the black card */}
+          {/* action buttons */}
           <div className="absolute bottom-[-1px] left-1/2 transform -translate-x-1/2  w-[86%] z-10">
             <div className="grid grid-cols-2 gap-0 overflow-hidden rounded-xl border h-[56px] border-gray-200 bg-white text-gray-900 shadow-lg">
               <button
-                onClick={() => openAction("deposit")}
+                onClick={() => openPicker("deposit")}
                 className="flex items-center justify-center gap-2 py-3 text-[13px] font-semibold hover:bg-black/5"
               >
                 <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-black text-white text-xs font-bold">
@@ -204,7 +425,7 @@ export default function CustomerVaultPage() {
                 Deposit
               </button>
               <button
-                onClick={() => openAction("withdraw")}
+                onClick={() => openPicker("withdraw")}
                 className="flex items-center justify-center gap-2 border-l border-gray-200 py-3 text-[13px] font-semibold hover:bg-black/5"
               >
                 <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-black text-white">
@@ -215,7 +436,6 @@ export default function CustomerVaultPage() {
             </div>
           </div>
 
-          {/* spacer to account for the overlapping buttons */}
           <div className="h-6" />
         </div>
 
@@ -225,80 +445,100 @@ export default function CustomerVaultPage() {
             <h2 className="text-[13px] font-semibold text-gray-900">
               Personal Vaults
             </h2>
-            <button className="text-[12px] text-gray-600 inline-flex items-center gap-1">
+            <button
+              onClick={() => pushWithCustomer("/customer/vault/vault-details")}
+              className="text-[12px] text-gray-600 inline-flex items-center gap-1"
+            >
               See all <ChevronRight className="w-4 h-4" />
             </button>
           </div>
 
-          <div className="space-y-3">
-            {vaults.map((v) => {
-              const pct = Math.min(
-                100,
-                Math.round((v.balance / v.target) * 100)
-              );
-              return (
-                <button
-                  key={v.id}
-                  onClick={() =>
-                    router.push(`/customer/vault/${slugify(v.name)}`)
-                  }
-                  aria-label={`Open ${v.name}`}
-                  className="w-full text-left flex items-stretch gap-3 rounded-xl border border-gray-200 p-3 bg-white hover:bg-gray-50 transition"
-                >
-                  {/* Left art */}
-                  <div className="shrink-0 flex items-center justify-center h-16 w-16">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src="/uploads/Little wheel personal vault bw 1.png"
-                      alt="Vault"
-                      className="h-12 w-12 object-contain"
-                    />
-                  </div>
+          {error && <p className="text-xs text-rose-600 mb-2">{error}</p>}
 
-                  {/* Right details */}
-                  <div className="flex-1">
-                    <div className="flex items-start justify-between">
-                      <p className="text-[13px] font-semibold text-gray-900 leading-tight">
-                        {v.name}
-                      </p>
-                      <p className="text-[12px] leading-tight">
-                        <span className="font-bold text-red-600">
-                          {NGN(v.balance)}
-                        </span>
-                        <span className="text-gray-400 font-normal">
-                          /{NGN(v.target)}
-                        </span>
-                      </p>
+          {loading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="h-20 rounded-xl bg-gray-50 animate-pulse"
+                />
+              ))}
+            </div>
+          ) : vaults.length === 0 ? (
+            <p className="text-sm text-gray-500">No vaults yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {vaults.map((v) => {
+                const pct = v.target
+                  ? Math.min(
+                      100,
+                      Math.max(0, Math.round((v.balance / v.target) * 100))
+                    )
+                  : 0;
+                return (
+                  <button
+                    key={v.id}
+                    onClick={() => pushVaultDetail(v)}
+                    aria-label={`Open ${v.name}`}
+                    className="w-full text-left flex items-stretch gap-3 rounded-xl border border-gray-200 p-3 bg-white hover:bg-gray-50 transition"
+                  >
+                    <div className="shrink-0 flex items-center justify-center h-16 w-16">
+                      <Image
+                        src="/uploads/Little wheel personal vault bw 1.png"
+                        alt="Vault"
+                        width={48}
+                        height={48}
+                        className="h-12 w-12 object-contain"
+                        priority
+                      />
                     </div>
 
-                    <p className="text-[11px] text-gray-500 mt-0.5">
-                      Savings: {NGN(v.daily)} daily
-                    </p>
-
-                    <div className="mt-2 flex items-center gap-2">
-                      <div className="h-2 flex-1 rounded-full bg-gray-200 overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-emerald-500 transition-all"
-                          style={{ width: `${pct}%` }}
-                        />
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between">
+                        <p className="text-[13px] font-semibold text-gray-900 leading-tight">
+                          {v.name}
+                        </p>
+                        <p className="text-[12px] leading-tight">
+                          <span className="font-bold text-red-600">
+                            {formatNGN(v.balance)}
+                          </span>
+                          <span className="text-gray-400 font-normal">
+                            /{formatNGN(v.target)}
+                          </span>
+                        </p>
                       </div>
-                      <span className="text-[11px] text-gray-600">{pct}%</span>
+
+                      <p className="text-[11px] text-gray-500 mt-0.5">
+                        Savings: {formatNGN(v.daily)} daily
+                      </p>
+
+                      <div className="mt-2 flex items-center gap-2">
+                        <div className="h-2 flex-1 rounded-full bg-gray-200 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-emerald-500 transition-all"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <span className="text-[11px] text-gray-600">
+                          {pct}%
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        {/* Recent Transactions */}
+        {/* Recent Transactions (live from contributions) */}
         <div className="px-4 mt-5 pb-6">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-[13px] font-semibold text-gray-900">
               Recent Transactions
             </h2>
             <button
-              onClick={() => setTxSheetOpen(true)}
+              onClick={() => pushWithCustomer("/customer/vault/transactions")}
               className="text-[12px] text-gray-600 inline-flex items-center gap-1"
             >
               See all <ChevronRight className="w-4 h-4" />
@@ -306,176 +546,163 @@ export default function CustomerVaultPage() {
           </div>
 
           <div className="rounded-xl border border-gray-200 overflow-hidden bg-white">
-            {txs.slice(0, 1).map((t, i) => (
-              <div
-                key={t.id}
-                className={`flex items-center justify-between px-3 py-3 ${
-                  i !== txs.length - 1 ? "border-b border-gray-100" : ""
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-full bg-emerald-50 flex items-center justify-center">
-                    <Check className="w-4 h-4 text-emerald-600" />
-                  </div>
-                  <div>
-                    <p className="text-[13px] font-medium text-gray-900">
-                      {t.note}
-                    </p>
-                    <p className="text-[11px] text-gray-500">
-                      {new Date(t.at).toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-[13px] font-semibold text-emerald-600">
-                  +{NGN(t.amount)}
-                </div>
+            {txLoading ? (
+              <div className="h-16 bg-gray-50 animate-pulse" />
+            ) : txs.length === 0 ? (
+              <div className="px-3 py-4 text-sm text-gray-500">
+                No transactions yet.
               </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Deposit/Withdraw sheet */}
-      {sheetOpen && (
-        <div className="fixed inset-0 z-50">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setSheetOpen(false)}
-          />
-          <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-2xl p-5 shadow-2xl">
-            <div className="mx-auto h-1 w-12 rounded-full bg-gray-200 mb-3" />
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <p className="text-sm text-gray-500">
-                  {mode === "deposit" ? "Deposit" : "Withdraw"} into vault
-                </p>
-                <h3 className="text-base font-semibold text-gray-900">
-                  Choose vault & amount
-                </h3>
-              </div>
-              <button
-                onClick={() => setSheetOpen(false)}
-                className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center"
-              >
-                <X className="w-4 h-4 text-gray-700" />
-              </button>
-            </div>
-
-            <label className="block text-xs text-gray-600 mb-1">Vault</label>
-            <select
-              value={vaultId}
-              onChange={(e) => setVaultId(e.target.value)}
-              className="w-full h-12 rounded-xl border border-gray-200 px-3 text-sm outline-none focus:ring-2 focus:ring-black bg-white"
-            >
-              {vaults.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name} · {NGN(v.balance)}
-                </option>
-              ))}
-            </select>
-
-            <label className="block text-xs text-gray-600 mt-3 mb-1">
-              Amount (NGN)
-            </label>
-            <input
-              inputMode="numeric"
-              pattern="[0-9]*"
-              placeholder="e.g. 5000"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ""))}
-              className="w-full h-12 rounded-xl border border-gray-200 px-3 text-sm outline-none focus:ring-2 focus:ring-black"
-            />
-
-            <button
-              onClick={doAction}
-              className="mt-4 w-full h-12 rounded-xl bg-black text-white font-semibold active:scale-[0.99] transition"
-            >
-              {mode === "deposit" ? "Deposit" : "Withdraw"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Transactions “See all” sheet (bottom) */}
-      {txSheetOpen && (
-        <div className="fixed inset-0 z-50">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setTxSheetOpen(false)}
-          />
-          <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-2xl p-5 shadow-2xl max-h-[70vh] overflow-y-auto">
-            <div className="mx-auto h-1 w-12 rounded-full bg-gray-200 mb-3" />
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-base font-semibold text-gray-900">
-                All Transactions
-              </h3>
-              <button
-                onClick={() => setTxSheetOpen(false)}
-                className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center"
-              >
-                <X className="w-4 h-4 text-gray-700" />
-              </button>
-            </div>
-
-            <div className="rounded-xl border border-gray-200 overflow-hidden">
-              {txs.map((t, i) => (
+            ) : (
+              txs.map((t, i) => (
                 <div
                   key={t.id}
-                  className={`flex items-center justify-between px-3 py-3 bg-white ${
+                  className={`flex items-center justify-between px-3 py-3 ${
                     i !== txs.length - 1 ? "border-b border-gray-100" : ""
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-full bg-emerald-50 flex items-center justify-center">
-                      <Check className="w-4 h-4 text-emerald-600" />
+                    <div
+                      className={`h-8 w-8 rounded-full ${
+                        t.isCredit ? "bg-emerald-50" : "bg-rose-50"
+                      } flex items-center justify-center`}
+                    >
+                      <Check
+                        className={`w-4 h-4 ${
+                          t.isCredit ? "text-emerald-600" : "text-rose-600"
+                        }`}
+                      />
                     </div>
                     <div>
                       <p className="text-[13px] font-medium text-gray-900">
                         {t.note}
                       </p>
                       <p className="text-[11px] text-gray-500">
-                        {new Date(t.at).toLocaleString()}
+                        {fmtDateTime(t.at)}
                       </p>
                     </div>
                   </div>
-                  <div className="text-[13px] font-semibold text-emerald-600">
-                    +{NGN(t.amount)}
+                  <div
+                    className={`text-[13px] font-semibold ${
+                      t.isCredit ? "text-emerald-600" : "text-rose-600"
+                    }`}
+                  >
+                    {t.isCredit ? "+" : "-"}
+                    {formatNGN(t.amount)}
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Toast */}
-      <div
-        className={`fixed inset-x-0 bottom-0 z-50 transition-transform duration-300 ${
-          toast.open ? "translate-y-0" : "translate-y-full"
-        }`}
-      >
-        <div className="mx-auto mb-4 w-[92%] max-w-sm rounded-2xl bg-white shadow-xl border border-gray-200 p-4">
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5 h-7 w-7 rounded-full bg-emerald-100 flex items-center justify-center">
-              <Check className="w-4 h-4 text-emerald-600" />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-gray-900">
-                {toast.title}
-              </p>
-              {toast.desc && (
-                <p className="text-xs text-gray-600 mt-0.5">{toast.desc}</p>
-              )}
-            </div>
-            <button
-              onClick={() => setToast((t) => ({ ...t, open: false }))}
-              className="h-7 w-7 rounded-full bg-gray-100 flex items-center justify-center"
-            >
-              <X className="w-4 h-4 text-gray-700" />
-            </button>
+              ))
+            )}
           </div>
         </div>
       </div>
+
+      {/* ===== Vault Picker Modal (Deposit / Withdraw) ===== */}
+      {pickerOpen && (
+        <div className="fixed inset-0 z-50">
+          {/* backdrop */}
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setPickerOpen(false)}
+          />
+          {/* sheet */}
+          <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-3xl p-5 shadow-2xl">
+            <div className="mx-auto h-1.5 w-16 rounded-full bg-gray-200 mb-3" />
+
+            <h3 className="text-base font-semibold text-gray-900 mb-4">
+              Choose Preferred Vault
+            </h3>
+
+            <div className="space-y-3 max-h=[55vh] max-h-[55vh] overflow-auto pr-1">
+              {vaults.map((v) => {
+                const pct = v.target
+                  ? Math.min(
+                      100,
+                      Math.max(0, Math.round((v.balance / v.target) * 100))
+                    )
+                  : 0;
+                const isActive = selectedVaultId === v.id;
+                return (
+                  <button
+                    key={v.id}
+                    onClick={() => setSelectedVaultId(v.id)}
+                    className={`w-full text-left rounded-xl border p-3 bg-white flex items-center gap-3 ${
+                      isActive ? "border-black" : "border-gray-200"
+                    }`}
+                  >
+                    <div className="shrink-0">
+                      <Image
+                        src="/uploads/Little wheel personal vault bw 1.png"
+                        alt="Vault"
+                        width={56}
+                        height={56}
+                        className="w-14 h-14 object-contain"
+                        priority
+                      />
+                    </div>
+
+                    <div className="flex-1">
+                      <p className="text-[13px] font-semibold text-gray-900 leading-tight">
+                        {v.name}
+                      </p>
+                      <p className="text-[11px] text-gray-600">
+                        Amount: <strong>{formatNGN(v.daily)}</strong> (DAILY)
+                      </p>
+
+                      <div className="mt-2 flex items-center gap-2">
+                        <div className="h-2 flex-1 rounded-full bg-gray-200 overflow-hidden">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${pct}%`,
+                              backgroundColor: "#10B981",
+                            }}
+                          />
+                        </div>
+                        <span className="text-[11px] text-gray-600">
+                          {pct}%
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="text-right text-[12px] font-semibold">
+                      <span className="text-red-600">
+                        {formatNGN(v.balance)}
+                      </span>
+                      <span className="text-gray-400">/</span>
+                      <span className="text-green-600">
+                        {formatNGN(v.target)}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* CTA */}
+            <button
+              onClick={proceed}
+              disabled={!selectedVaultId}
+              className={`mt-4 w-full h-12 rounded-2xl font-semibold ${
+                selectedVaultId
+                  ? "bg-black text-white"
+                  : "bg-gray-200 text-gray-500 cursor-not-allowed"
+              }`}
+            >
+              Select and Proceed
+            </button>
+
+            <button
+              onClick={() => {
+                setPickerOpen(false);
+                pushWithCustomer("/customer/vault/create");
+              }}
+              className="mt-3 w-full text-center text-[13px] font-semibold text-black underline"
+            >
+              Create New Vault
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
