@@ -1,8 +1,12 @@
+/* app/.../address/page.tsx */
 "use client";
 
 import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ChevronDown, Check } from "lucide-react";
+
+/** Where to go after saving the address */
+const NEXT_ROUTE = "/customer";
 
 /** All LGAs that make up Ibadan, Oyo State (11) */
 const IBADAN_LGAS = [
@@ -19,6 +23,36 @@ const IBADAN_LGAS = [
   "Ona Ara",
 ];
 
+/** Add a customer id to a persistent local list (no server required) */
+function addCustomerIdToList(id: string) {
+  if (!id) return;
+  try {
+    const raw = localStorage.getItem("lw_customer_ids");
+    const arr: string[] = raw ? JSON.parse(raw) : [];
+    if (!arr.includes(id)) {
+      arr.unshift(id);
+      // keep list bounded (optional)
+      localStorage.setItem(
+        "lw_customer_ids",
+        JSON.stringify(arr.slice(0, 100))
+      );
+    }
+  } catch {}
+}
+
+/** Pull auth token from storage so requests are not cookie-dependent */
+function getAuthToken() {
+  try {
+    return (
+      localStorage.getItem("lw_token") ||
+      localStorage.getItem("authToken") ||
+      ""
+    );
+  } catch {
+    return "";
+  }
+}
+
 export default function AddressPage() {
   const router = useRouter();
 
@@ -27,9 +61,12 @@ export default function AddressPage() {
     lga: "",
     city: "Ibadan",
     state: "Oyo",
+    country: "Nigeria",
   });
 
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const isIbadanOyo =
     form.city.trim().toLowerCase() === "ibadan" &&
@@ -47,7 +84,7 @@ export default function AddressPage() {
     return e;
   }, [form, isIbadanOyo]);
 
-  const isValid = Object.keys(errors).length === 0; // ✅ when true, step 3 turns green
+  const isValid = Object.keys(errors).length === 0;
 
   const onChange =
     (field: keyof typeof form) =>
@@ -82,13 +119,77 @@ export default function AddressPage() {
   const errorCls = "mt-1 text-xs text-red-600";
 
   const handleBack = () => router.back();
-  const handleContinue = () => {
+
+  async function handleContinue() {
     if (!isValid) {
       setTouched({ address: true, lga: true, city: true, state: true });
       return;
     }
-    router.push("/onboard-form/components/face-capturing");
-  };
+
+    const token = sessionStorage.getItem("lw_reg_token");
+    if (!token) {
+      setErrorMsg("Missing registration token. Please restart onboarding.");
+      return;
+    }
+
+    const auth = getAuthToken();
+
+    setSubmitting(true);
+    setErrorMsg(null);
+
+    try {
+      const res = await fetch("/api/v1/agent/customers/set-address", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(auth ? { "x-lw-auth": auth } : {}),
+        },
+        cache: "no-store",
+        // credentials: "include", // ← keep disabled unless your proxy needs it
+        body: JSON.stringify({
+          token,
+          country: form.country.trim() || "Nigeria",
+          state: form.state.trim(),
+          city: form.city.trim(),
+          lga: form.lga.trim(),
+          address: form.address.trim(),
+        }),
+      });
+
+      const text = await res.text();
+      let json: any = {};
+      try {
+        json = JSON.parse(text || "{}");
+      } catch {}
+
+      if (!res.ok) {
+        const msg = json?.message || json?.error || `HTTP ${res.status}`;
+        throw new Error(msg);
+      }
+
+      // Try to capture the customer id from the response, else fall back to the session key.
+      const customerIdFromApi =
+        json?.data?.customerId || json?.data?.id || json?.customerId || "";
+      const lastFromSession = sessionStorage.getItem(
+        "lw_onboarding_customer_id"
+      );
+
+      const finalId = String(customerIdFromApi || lastFromSession || "");
+      if (finalId) {
+        // Maintain the session key as before
+        sessionStorage.setItem("lw_onboarding_customer_id", finalId);
+        // Persist into the local list for the Customers page (no server needed)
+        addCustomerIdToList(finalId);
+      }
+
+      // ✅ Go to the customer page after success
+      router.push(NEXT_ROUTE);
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "Failed to save address.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   // previous steps already done in your flow
   const isPhoneVerified = true;
@@ -210,9 +311,15 @@ export default function AddressPage() {
                   <p className={errorCls}>{errors.state}</p>
                 )}
               </div>
+
+              {errorMsg && (
+                <p className="text-xs text-red-600" role="alert">
+                  {errorMsg}
+                </p>
+              )}
             </div>
 
-            {/* Steps (turn Step 3 green when isValid) */}
+            {/* Steps */}
             <aside className="md:col-span-1">
               <div className="mb-15 mt-20">
                 <h3 className="text-gray-900 font-semibold text-sm mb-4 underline">
@@ -220,7 +327,6 @@ export default function AddressPage() {
                 </h3>
 
                 <div className="space-y-3">
-                  {/* Step 1 */}
                   <div className="flex items-center gap-3">
                     <div
                       className={`w-5 h-5 rounded-full flex items-center justify-center ${
@@ -234,7 +340,6 @@ export default function AddressPage() {
                     </span>
                   </div>
 
-                  {/* Step 2 */}
                   <div className="flex items-center gap-3">
                     <div
                       className={`w-5 h-5 rounded-full flex items-center justify-center ${
@@ -248,7 +353,6 @@ export default function AddressPage() {
                     </span>
                   </div>
 
-                  {/* Step 3 – dynamic green when valid */}
                   <div className="flex items-center gap-3">
                     <div
                       className={`w-5 h-5 rounded-full flex items-center justify-center ${
@@ -266,7 +370,6 @@ export default function AddressPage() {
                     </span>
                   </div>
 
-                  {/* Step 4 */}
                   <div className="flex items-center gap-3">
                     <div className="w-5 h-5 bg-gray-400 rounded-full flex items-center justify-center">
                       <Check className="w-3 h-3 text-white" />
@@ -280,18 +383,18 @@ export default function AddressPage() {
             </aside>
           </div>
 
-          {/* Footer – turns black when valid (with hover) */}
+          {/* Footer */}
           <div className="mt-8">
             <button
               onClick={handleContinue}
-              disabled={!isValid}
+              disabled={!isValid || submitting}
               className={`w-full md:w-auto px-6 py-4 rounded-xl text-sm font-semibold transition-colors ${
-                isValid
+                isValid && !submitting
                   ? "bg-black text-white hover:bg-black/90"
                   : "bg-gray-200 text-gray-500 cursor-not-allowed"
               }`}
             >
-              Save and Continue
+              {submitting ? "Saving…" : "Save and Continue"}
             </button>
           </div>
         </div>

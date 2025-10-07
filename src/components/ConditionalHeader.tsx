@@ -4,8 +4,9 @@ import Header from "./header";
 
 export default function ConditionalHeader() {
   const pathname = usePathname();
-  const hiddenRoutes =
-    pathname === "/home" || pathname.startsWith("/activators");
 
-  return hiddenRoutes ? null : <Header />;
+  // Show header only on /home and /agent routes
+  const showHeader = pathname === "/" || pathname === "/";
+
+  return showHeader ? <Header /> : null;
 }

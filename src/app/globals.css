@@ -153,3 +153,8 @@
 * {
   -ms-overflow-style: none;
 }
+
+/* reserves space for the tab bar using the height it measured */
+.pb-bottom-tabs {
+  padding-bottom: calc(var(--lw-tabbar-h, 64px) + env(safe-area-inset-bottom));
+}

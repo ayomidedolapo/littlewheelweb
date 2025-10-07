@@ -1,36 +1,102 @@
+/* app/.../mobile-signup/page.tsx */
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { ArrowLeft, Phone, Check } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 
+/* ---------- helpers ---------- */
+function toNgE164(localish: string) {
+  const d = localish.replace(/\D/g, "");
+  const local = d.startsWith("0") ? d.slice(1) : d;
+  return `+234${local}`;
+}
+
+/** Pull auth token so the request works across devices (not cookie-bound) */
+function getAuthToken() {
+  try {
+    return (
+      localStorage.getItem("lw_token") ||
+      localStorage.getItem("authToken") ||
+      ""
+    );
+  } catch {
+    return "";
+  }
+}
+
+/* ---------- component ---------- */
 export default function MobileSignup() {
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  const handleBack = () => {
-    // Navigate back to previous page
-    router.back();
-  };
+  const isFormValid = useMemo(() => {
+    const d = phoneNumber.replace(/\D/g, "");
+    return d.length >= 10 && d.length <= 11;
+  }, [phoneNumber]);
 
-  const handleVerify = () => {
-    if (isFormValid) {
-      // Navigate to verification component
+  const isPhoneVerified = isFormValid;
+
+  const handleBack = () => router.back();
+
+  const handleVerify = async () => {
+    if (!isFormValid || sending) return;
+    setSending(true);
+    setError(null);
+    try {
+      const e164 = toNgE164(phoneNumber);
+      const auth = getAuthToken();
+
+      // Start onboarding (creates registration token)
+      const res = await fetch("/api/v1/agent/customers", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(auth ? { "x-lw-auth": auth } : {}),
+        },
+        cache: "no-store",
+        // credentials: "include", // ← leave off unless your proxy strictly needs cookies
+        body: JSON.stringify({ phoneNumber: e164 }),
+      });
+
+      const text = await res.text();
+      let json: any = {};
+      try {
+        json = JSON.parse(text || "{}");
+      } catch {}
+
+      if (!res.ok) {
+        const msg = json?.message || json?.error || `HTTP ${res.status}`;
+        throw new Error(msg);
+      }
+
+      const regToken =
+        json?.data?.token ||
+        json?.data?.registrationToken ||
+        json?.token ||
+        json?.registrationToken ||
+        null;
+
+      if (!regToken) {
+        throw new Error("Missing registration token.");
+      }
+
+      sessionStorage.setItem("lw_reg_token", String(regToken));
       router.push("./onboard-form/components/verification");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to start onboarding.");
+    } finally {
+      setSending(false);
     }
   };
 
-  const isFormValid = phoneNumber.length >= 10;
-
-  // Step completion logic - first step is completed when phone number is valid
-  const isPhoneVerified = isFormValid; // This will be true when form is valid
-
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-0 md:p-4">
-      {/* Mobile Container - Full screen on mobile, centered card on desktop */}
       <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-2xl md:shadow-xl overflow-hidden">
-        {/* Header with Back Button */}
+        {/* Header */}
         <div className="flex items-center p-4 pt-8 bg-white">
           <button
             onClick={handleBack}
@@ -41,26 +107,22 @@ export default function MobileSignup() {
           </button>
         </div>
 
-        {/* Main Content */}
+        {/* Main */}
         <div className="px-4 py-6 bg-white">
-          {/* Title */}
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
             Let&apos;s Get Started
           </h1>
-
-          {/* Subtitle */}
           <p className="text-gray-600 text-sm mb-8">
             Enter their phone number to get things rolling
           </p>
 
-          {/* Mobile Number Section */}
+          {/* Phone input */}
           <div className="mb-8">
             <label className="text-gray-700 font-bold mb-2 block text-sm">
               Mobile Number
             </label>
 
             <div className="flex gap-2">
-              {/* Country Code with Nigeria Flag */}
               <div className="flex items-center bg-gray-100 rounded-xl px-3 py-3 min-w-fit">
                 <div className="w-5 h-5 rounded-full overflow-hidden mr-2 flex items-center justify-center bg-white">
                   <Image
@@ -68,13 +130,12 @@ export default function MobileSignup() {
                     alt="Nigeria Flag"
                     width={24}
                     height={24}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-contain"
                   />
                 </div>
                 <span className="text-gray-700 font-bold text-sm">+234</span>
               </div>
 
-              {/* Phone Number Input */}
               <div className="flex-1">
                 <div className="flex items-center bg-gray-100 rounded-xl px-3 py-3">
                   <Phone className="w-4 h-4 text-black mr-2" />
@@ -84,21 +145,7 @@ export default function MobileSignup() {
                     value={phoneNumber}
                     onChange={(e) => {
                       const value = e.target.value.replace(/\D/g, "");
-                      if (value.length <= 11) {
-                        setPhoneNumber(value);
-                      }
-                    }}
-                    onKeyPress={(e) => {
-                      if (
-                        !/[0-9]/.test(e.key) &&
-                        e.key !== "Backspace" &&
-                        e.key !== "Delete" &&
-                        e.key !== "Tab" &&
-                        e.key !== "ArrowLeft" &&
-                        e.key !== "ArrowRight"
-                      ) {
-                        e.preventDefault();
-                      }
+                      if (value.length <= 11) setPhoneNumber(value);
                     }}
                     inputMode="numeric"
                     pattern="[0-9]*"
@@ -107,16 +154,21 @@ export default function MobileSignup() {
                 </div>
               </div>
             </div>
+
+            {error && (
+              <p className="mt-3 text-xs text-red-600" role="alert">
+                {error}
+              </p>
+            )}
           </div>
 
-          {/* Steps to Onboard New Users */}
+          {/* Steps */}
           <div className="mb-15 mt-20">
             <h3 className="text-gray-900 font-semibold text-sm mb-4 underline">
               Steps to Onboard New Users
             </h3>
 
             <div className="space-y-3">
-              {/* Step 1 - Verify Phone Number */}
               <div className="flex items-center gap-3">
                 <div
                   className={`w-5 h-5 rounded-full flex items-center justify-center ${
@@ -130,7 +182,6 @@ export default function MobileSignup() {
                 </span>
               </div>
 
-              {/* Step 2 - Add Personal Details */}
               <div className="flex items-center gap-3">
                 <div className="w-5 h-5 bg-gray-400 rounded-full flex items-center justify-center">
                   <Check className="w-3 h-3 text-white" />
@@ -140,7 +191,6 @@ export default function MobileSignup() {
                 </span>
               </div>
 
-              {/* Step 3 - Add User Address */}
               <div className="flex items-center gap-3">
                 <div className="w-5 h-5 bg-gray-400 rounded-full flex items-center justify-center">
                   <Check className="w-3 h-3 text-white" />
@@ -148,7 +198,6 @@ export default function MobileSignup() {
                 <span className="text-gray-600 text-sm">Add User Address</span>
               </div>
 
-              {/* Step 4 - Face Capturing */}
               <div className="flex items-center gap-3">
                 <div className="w-5 h-5 bg-gray-400 rounded-full flex items-center justify-center">
                   <Check className="w-3 h-3 text-white" />
@@ -158,21 +207,19 @@ export default function MobileSignup() {
             </div>
           </div>
 
-          {/* Flexible Spacer */}
-          <div className="flex-1 min-h-[60px]"></div>
-
-          {/* Verify Button */}
+          {/* Verify button */}
+          <div className="flex-1 min-h-[60px]" />
           <div className="pb-6">
             <button
               onClick={handleVerify}
               className={`w-full font-semibold py-4 px-6 rounded-xl transition-colors duration-200 text-sm ${
-                isFormValid
-                  ? "bg-black hover:bg-gray-500 text-white"
+                isFormValid && !sending
+                  ? "bg-black hover:bg-black/90 text-white"
                   : "bg-gray-300 text-gray-500 cursor-not-allowed"
               }`}
-              disabled={!isFormValid}
+              disabled={!isFormValid || sending}
             >
-              Verify
+              {sending ? "Sending…" : "Verify"}
             </button>
           </div>
         </div>

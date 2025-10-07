@@ -4,8 +4,9 @@ import Footer from "./footer";
 
 export default function ConditionalFooter() {
   const pathname = usePathname();
-  const hiddenRoutes =
-    pathname === "/home" || pathname.startsWith("/activators");
 
-  return hiddenRoutes ? null : <Footer />;
+  // Show footer only on /home and /agent routes
+  const showFooter = pathname === "/" || pathname === "/";
+
+  return showFooter ? <Footer /> : null;
 }

@@ -1,25 +1,71 @@
 "use client";
 
-import { useState, useId } from "react";
+import { useEffect, useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Info, X, Plus } from "lucide-react";
 
+/* ---------- money ---------- */
 const NGN = new Intl.NumberFormat("en-NG", {
   style: "currency",
   currency: "NGN",
   minimumFractionDigits: 2,
 });
 
+/* ---------- tiny spinner ---------- */
+function Spinner({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={`animate-spin ${className}`}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <circle
+        className="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+        fill="none"
+      />
+      <path
+        className="opacity-90"
+        fill="currentColor"
+        d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"
+      />
+    </svg>
+  );
+}
+
+/* ---------- full-screen overlay during navigation ---------- */
+function LoadingOverlay({ show }: { show: boolean }) {
+  if (!show) return null;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed inset-0 z-[60] bg-black/35 backdrop-blur-[1px] flex items-center justify-center"
+    >
+      <div className="rounded-xl bg-white px-4 py-3 shadow-2xl flex items-center gap-3">
+        <Spinner className="w-5 h-5 text-black" />
+        <span className="text-[13px] font-semibold text-gray-900">
+          Loading…
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function CommissionSummary({
   total = 60000,
   withdrawablePct = 0.7,
   onWithdraw,
-  onOnboard,
+  onOnboard, // (optional) custom handler for the floating CTA
 }: {
   total?: number;
-  withdrawablePct?: number; // e.g. 0.7 for 70%
-  onWithdraw?: () => void;
-  onOnboard?: () => void; // handler for the floating CTA
+  withdrawablePct?: number;
+  onWithdraw?: () => void | Promise<void>;
+  onOnboard?: () => void | Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const tooltipId = useId();
@@ -27,24 +73,76 @@ export default function CommissionSummary({
 
   const pctLabel = `${Math.round(withdrawablePct * 100)}% withdrawable`;
 
+  // navigation/loading states
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [navOverlay, startTransition] = useTransition();
+  const [forceOverlay, setForceOverlay] = useState(false);
+
+  // keep overlay visible for at least ~500ms so it feels intentional
+  useEffect(() => {
+    if (!navOverlay) return;
+    setForceOverlay(true);
+    const t = setTimeout(() => setForceOverlay(false), 500);
+    return () => clearTimeout(t);
+  }, [navOverlay]);
+
+  const goOnboard = async () => {
+    // If a custom handler is supplied, await it with overlay; otherwise navigate.
+    if (onOnboard) {
+      setForceOverlay(true);
+      try {
+        await Promise.resolve(onOnboard());
+      } finally {
+        // Give a tiny grace so UI doesn't flicker
+        setTimeout(() => setForceOverlay(false), 400);
+      }
+      return;
+    }
+    // Show overlay while Next.js navigates (component will unmount soon after)
+    startTransition(() => {
+      router.push("./onboard");
+    });
+  };
+
+  const doWithdraw = async () => {
+    if (!onWithdraw) return;
+    setIsWithdrawing(true);
+    try {
+      await Promise.resolve(onWithdraw());
+    } finally {
+      setIsWithdrawing(false);
+    }
+  };
+
+  const showOverlay = navOverlay || forceOverlay;
+
   return (
     <>
-      {/* Floating CTA — right side, brought down below the Withdraw button level */}
+      {/* global overlay while routing / custom onboard action */}
+      <LoadingOverlay show={showOverlay} />
+
+      {/* Floating CTA */}
       <div
         className="fixed right-4 z-50 pointer-events-none"
-        style={{ top: `calc(env(safe-area-inset-top) + 500px)` }}
+        style={{ top: `calc(env(safe-area-inset-top) + 580px)` }}
       >
         <button
           type="button"
-          onClick={() => router.push("./onboard")}
+          onClick={goOnboard}
           aria-label="Onboard new user"
+          aria-busy={showOverlay}
           className="pointer-events-auto inline-flex items-center gap-2 rounded-sm bg-black px-5 py-3
-               text-white text-[12px] font-semibold shadow-xl shadow-black/40 active:scale-[0.98] transition"
+               text-white text-[12px] font-semibold shadow-xl shadow-black/40 active:scale-[0.98] transition disabled:opacity-70 disabled:cursor-not-allowed"
+          disabled={showOverlay}
         >
           <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-black">
-            <Plus className="h-4 w-4" strokeWidth={2.5} />
+            {showOverlay ? (
+              <Spinner className="w-4 h-4 text-black" />
+            ) : (
+              <Plus className="h-4 w-4" strokeWidth={2.5} />
+            )}
           </span>
-          Onboard new user
+          {showOverlay ? "Opening…" : "Onboard new user"}
         </button>
       </div>
 
@@ -104,10 +202,13 @@ export default function CommissionSummary({
           {/* Right: Withdraw */}
           <button
             type="button"
-            onClick={onWithdraw}
-            className="shrink-0 rounded-lg bg-white text-black px-3 py-1.5 text-[12px] font-semibold hover:bg-gray-100 active:bg-gray-200"
+            onClick={doWithdraw}
+            aria-busy={isWithdrawing}
+            className="shrink-0 rounded-lg bg-white text-black px-3 py-1.5 text-[12px] font-semibold hover:bg-gray-100 active:bg-gray-200 disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
+            disabled={isWithdrawing}
           >
-            Withdraw
+            {isWithdrawing && <Spinner className="w-3.5 h-3.5" />}
+            {isWithdrawing ? "Processing…" : "Withdraw"}
           </button>
         </div>
       </section>
