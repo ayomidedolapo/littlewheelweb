@@ -1,7 +1,7 @@
 /* app/customer/vault/page.tsx */
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   ArrowLeft,
   Plus,
@@ -12,6 +12,53 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
+
+/* ---------- tiny spinner + overlay (same pattern) ---------- */
+function Spinner({ className = "w-5 h-5 text-black" }: { className?: string }) {
+  return (
+    <svg
+      className={`animate-spin ${className}`}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+        fill="none"
+        className="opacity-25"
+      />
+      <path
+        fill="currentColor"
+        className="opacity-90"
+        d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"
+      />
+    </svg>
+  );
+}
+function LoadingOverlay({
+  show,
+  label = "Loading…",
+}: {
+  show: boolean;
+  label?: string;
+}) {
+  if (!show) return null;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-[1px] flex items-center justify-center"
+    >
+      <div className="rounded-xl bg-white px-4 py-3 shadow-2xl flex items-center gap-3">
+        <Spinner />
+        <span className="text-[13px] font-semibold text-gray-900">{label}</span>
+      </div>
+    </div>
+  );
+}
 
 /* ---------- types ---------- */
 type APIVault = {
@@ -89,7 +136,6 @@ function getActiveCustomerId(sp: URLSearchParams): string | null {
 /** Try cookie first (browser), then localStorage */
 function getAuthToken(): string {
   try {
-    // cookie
     const m = document.cookie.match(
       /(?:^|;\s*)(authToken|lw_token|token)\s*=\s*([^;]+)/
     );
@@ -119,6 +165,10 @@ async function apiGet(url: string, token: string, signal?: AbortSignal) {
 export default function CustomerVaultPage() {
   const router = useRouter();
   const sp = useSearchParams();
+
+  // routing overlay
+  const [isRouting, startTransition] = useTransition();
+  const routePush = (href: string) => startTransition(() => router.push(href));
 
   const [loading, setLoading] = useState(true);
   const [vaults, setVaults] = useState<Vault[]>([]);
@@ -153,7 +203,7 @@ export default function CustomerVaultPage() {
     if (customerId) q.set("customerId", customerId);
     q.set("vaultId", selectedVaultId);
 
-    router.push(
+    routePush(
       flow === "deposit"
         ? `/customer/vault/deposit?${q.toString()}`
         : `/customer/vault/withdraw?${q.toString()}`
@@ -163,7 +213,7 @@ export default function CustomerVaultPage() {
   const pushWithCustomer = (path: string) => {
     const customerId = getActiveCustomerId(sp);
     const q = customerId ? `?customerId=${customerId}` : "";
-    router.push(`${path}${q}`);
+    routePush(`${path}${q}`);
   };
 
   const pushVaultDetail = (v: Vault) => {
@@ -172,7 +222,7 @@ export default function CustomerVaultPage() {
     if (customerId) q.set("customerId", customerId);
     q.set("vaultId", v.id);
     const slug = makeSafeSlug(v.name, v.id);
-    router.push(`/customer/vault/${encodeURIComponent(slug)}?${q.toString()}`);
+    routePush(`/customer/vault/${encodeURIComponent(slug)}?${q.toString()}`);
   };
 
   const extractArray = (payload: any): any[] => {
@@ -359,19 +409,25 @@ export default function CustomerVaultPage() {
   }, []);
 
   const total = useMemo(() => totalBalance, [totalBalance]);
-  const withdrawable = useMemo(
-    () => Math.max(total - 1000, 0), // business rule placeholder
-    [total]
-  );
+  const withdrawable = useMemo(() => Math.max(total - 1000, 0), [total]); // business rule placeholder
+
+  const navDisabled = isRouting;
 
   return (
-    <div className="min-h-screen bg-white flex items-start justify-center p-0 md:p-4">
+    <div
+      className="min-h-screen bg-white flex items-start justify-center p-0 md:p-4"
+      aria-busy={isRouting}
+    >
+      {/* global overlay while routing */}
+      <LoadingOverlay show={isRouting} label="Loading…" />
+
       <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-3xl md:shadow-xl overflow-hidden">
         {/* Header */}
         <div className="px-4 pt-4 pb-2">
           <button
             onClick={() => router.back()}
             className="inline-flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900"
+            disabled={navDisabled}
           >
             <ArrowLeft className="h-4 w-4" />
             Back
@@ -389,7 +445,8 @@ export default function CustomerVaultPage() {
           >
             <button
               onClick={() => pushWithCustomer("/customer/vault/create")}
-              className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-lg bg-white/95 px-3 py-1.5 text-xs font-semibold text-black shadow-sm hover:bg-white"
+              className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-lg bg-white/95 px-3 py-1.5 text-xs font-semibold text-black shadow-sm hover:bg-white disabled:opacity-60"
+              disabled={navDisabled}
             >
               Add new <Plus className="h-4 w-4" />
             </button>
@@ -417,7 +474,8 @@ export default function CustomerVaultPage() {
             <div className="grid grid-cols-2 gap-0 overflow-hidden rounded-xl border h-[56px] border-gray-200 bg-white text-gray-900 shadow-lg">
               <button
                 onClick={() => openPicker("deposit")}
-                className="flex items-center justify-center gap-2 py-3 text-[13px] font-semibold hover:bg-black/5"
+                className="flex items-center justify-center gap-2 py-3 text-[13px] font-semibold hover:bg-black/5 disabled:opacity-60"
+                disabled={navDisabled}
               >
                 <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-black text-white text-xs font-bold">
                   +
@@ -426,7 +484,8 @@ export default function CustomerVaultPage() {
               </button>
               <button
                 onClick={() => openPicker("withdraw")}
-                className="flex items-center justify-center gap-2 border-l border-gray-200 py-3 text-[13px] font-semibold hover:bg-black/5"
+                className="flex items-center justify-center gap-2 border-l border-gray-200 py-3 text-[13px] font-semibold hover:bg-black/5 disabled:opacity-60"
+                disabled={navDisabled}
               >
                 <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-black text-white">
                   <CheckSquare className="h-3.5 w-3.5" />
@@ -447,7 +506,8 @@ export default function CustomerVaultPage() {
             </h2>
             <button
               onClick={() => pushWithCustomer("/customer/vault/vault-details")}
-              className="text-[12px] text-gray-600 inline-flex items-center gap-1"
+              className="text-[12px] text-gray-600 inline-flex items-center gap-1 disabled:opacity-60"
+              disabled={navDisabled}
             >
               See all <ChevronRight className="w-4 h-4" />
             </button>
@@ -480,7 +540,8 @@ export default function CustomerVaultPage() {
                     key={v.id}
                     onClick={() => pushVaultDetail(v)}
                     aria-label={`Open ${v.name}`}
-                    className="w-full text-left flex items-stretch gap-3 rounded-xl border border-gray-200 p-3 bg-white hover:bg-gray-50 transition"
+                    className="w-full text-left flex items-stretch gap-3 rounded-xl border border-gray-200 p-3 bg-white hover:bg-gray-50 transition disabled:opacity-60"
+                    disabled={navDisabled}
                   >
                     <div className="shrink-0 flex items-center justify-center h-16 w-16">
                       <Image
@@ -539,7 +600,8 @@ export default function CustomerVaultPage() {
             </h2>
             <button
               onClick={() => pushWithCustomer("/customer/vault/transactions")}
-              className="text-[12px] text-gray-600 inline-flex items-center gap-1"
+              className="text-[12px] text-gray-600 inline-flex items-center gap-1 disabled:opacity-60"
+              disabled={navDisabled}
             >
               See all <ChevronRight className="w-4 h-4" />
             </button>
@@ -681,9 +743,9 @@ export default function CustomerVaultPage() {
             {/* CTA */}
             <button
               onClick={proceed}
-              disabled={!selectedVaultId}
+              disabled={!selectedVaultId || navDisabled}
               className={`mt-4 w-full h-12 rounded-2xl font-semibold ${
-                selectedVaultId
+                selectedVaultId && !navDisabled
                   ? "bg-black text-white"
                   : "bg-gray-200 text-gray-500 cursor-not-allowed"
               }`}
@@ -696,7 +758,8 @@ export default function CustomerVaultPage() {
                 setPickerOpen(false);
                 pushWithCustomer("/customer/vault/create");
               }}
-              className="mt-3 w-full text-center text-[13px] font-semibold text-black underline"
+              className="mt-3 w-full text-center text-[13px] font-semibold text-black underline disabled:opacity-60"
+              disabled={navDisabled}
             >
               Create New Vault
             </button>

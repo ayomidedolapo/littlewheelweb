@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useTransition, useState, PropsWithChildren } from "react";
 import {
   ArrowLeft,
   ChevronRight,
@@ -15,13 +16,56 @@ import {
   Mail,
   X,
 } from "lucide-react";
-import { PropsWithChildren, useState } from "react";
 
-/* ========= Fill these with your real contacts ========= */
-const SUPPORT_PHONE = "REPLACE_WITH_PHONE_NUMBER"; // e.g. "+2348012345678"
-const SUPPORT_WHATSAPP = "REPLACE_WITH_WHATSAPP_NUMBER"; // e.g. "2348012345678"
-const SUPPORT_EMAIL = "REPLACE_WITH_EMAIL"; // e.g. "support@littlewheel.app"
-/* ====================================================== */
+/* ========= Real contacts ========= */
+const SUPPORT_PHONE = "+2349160006929";
+const SUPPORT_WHATSAPP_LINK =
+  "https://wa.me/2349160006929?text=Hey%20Little%20Wheel!";
+const SUPPORT_EMAIL = "support@littlewheel.app";
+/* ================================= */
+
+/* ---------- tiny spinner + overlay ---------- */
+function Spinner({ className = "w-4 h-4 text-black" }: { className?: string }) {
+  return (
+    <svg
+      className={`animate-spin ${className}`}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+        fill="none"
+        className="opacity-25"
+      />
+      <path
+        fill="currentColor"
+        className="opacity-90"
+        d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"
+      />
+    </svg>
+  );
+}
+function LoadingOverlay({ show }: { show: boolean }) {
+  if (!show) return null;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-[1px] flex items-center justify-center"
+    >
+      <div className="rounded-xl bg-white px-4 py-3 shadow-2xl flex items-center gap-3">
+        <Spinner className="w-5 h-5" />
+        <span className="text-[13px] font-semibold text-gray-900">
+          Loading…
+        </span>
+      </div>
+    </div>
+  );
+}
 
 function SectionTitle({ children }: PropsWithChildren) {
   return (
@@ -36,6 +80,8 @@ type ItemProps = {
   onClick?: () => void;
   destructive?: boolean;
   ariaLabel?: string;
+  disabled?: boolean;
+  onNavigate?: (href: string) => void;
 };
 
 function RowItem({
@@ -45,11 +91,13 @@ function RowItem({
   onClick,
   destructive,
   ariaLabel,
+  disabled,
+  onNavigate,
 }: ItemProps) {
-  const router = useRouter();
   const handle = () => {
+    if (disabled) return;
     if (onClick) return onClick();
-    if (href) router.push(href);
+    if (href && onNavigate) onNavigate(href);
   };
 
   return (
@@ -57,7 +105,8 @@ function RowItem({
       type="button"
       onClick={handle}
       aria-label={ariaLabel || label}
-      className="w-full flex items-center justify-between rounded-xl border border-gray-200 bg-white px-3 py-3 transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black/20"
+      disabled={disabled}
+      className="w-full flex items-center justify-between rounded-xl border border-gray-200 bg-white px-3 py-3 transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black/20 disabled:opacity-60 disabled:cursor-not-allowed"
     >
       <div className="flex items-center gap-3">
         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-800">
@@ -80,17 +129,31 @@ export default function SettingsPage() {
   const router = useRouter();
   const [supportOpen, setSupportOpen] = useState(false);
 
+  // route transition state for overlay
+  const [isPending, startTransition] = useTransition();
+
   const goBack = () => router.back();
+
+  const navigate = (href: string) => {
+    startTransition(() => {
+      router.push(href);
+    });
+  };
 
   const logout = () => {
     try {
       localStorage.removeItem("lw_token");
     } catch {}
-    router.replace("/agent-login");
+    startTransition(() => {
+      router.replace("/agent-login");
+    });
   };
 
   return (
     <>
+      {/* global overlay while routing */}
+      <LoadingOverlay show={isPending} />
+
       <div className="min-h-screen bg-gray-50 text-gray-900 flex items-start justify-center p-0 md:p-4">
         <div className="w-full max-w-sm bg-white md:rounded-3xl md:shadow-xl overflow-hidden">
           {/* Header */}
@@ -113,6 +176,8 @@ export default function SettingsPage() {
                 label="Personal Information"
                 icon={<UserRound className="h-5 w-5" />}
                 href="/dash/components/settings/personal"
+                onNavigate={navigate}
+                disabled={isPending}
               />
             </div>
 
@@ -123,11 +188,15 @@ export default function SettingsPage() {
                 label="Security"
                 icon={<Shield className="h-5 w-5" />}
                 href="/dash/components/settings/security"
+                onNavigate={navigate}
+                disabled={isPending}
               />
               <RowItem
                 label="Withdrawal Bank"
                 icon={<Building2 className="h-5 w-5" />}
                 href="/dash/components/settings/bank"
+                onNavigate={navigate}
+                disabled={isPending}
               />
             </div>
 
@@ -138,17 +207,21 @@ export default function SettingsPage() {
                 label="Customer Service"
                 icon={<Headphones className="h-5 w-5" />}
                 onClick={() => setSupportOpen(true)} // bottom sheet
+                disabled={isPending}
               />
               <RowItem
                 label="Close Account"
                 icon={<XCircle className="h-5 w-5" />}
                 href="/dash/components/settings/close"
+                onNavigate={navigate}
+                disabled={isPending}
               />
               <RowItem
                 label="Log Out"
                 icon={<LogOut className="h-5 w-5 text-red-600" />}
                 destructive
                 onClick={logout}
+                disabled={isPending}
               />
             </div>
 
@@ -161,7 +234,7 @@ export default function SettingsPage() {
         open={supportOpen}
         onClose={() => setSupportOpen(false)}
         phone={SUPPORT_PHONE}
-        whatsapp={SUPPORT_WHATSAPP}
+        whatsappLink={SUPPORT_WHATSAPP_LINK}
         email={SUPPORT_EMAIL}
       />
     </>
@@ -173,13 +246,13 @@ function SupportSheet({
   open,
   onClose,
   phone,
-  whatsapp,
+  whatsappLink,
   email,
 }: {
   open: boolean;
   onClose: () => void;
   phone: string;
-  whatsapp: string;
+  whatsappLink: string; // full link with prefilled text
   email: string;
 }) {
   return (
@@ -218,7 +291,7 @@ function SupportSheet({
 
           <div className="px-6 pb-6">
             <h3 className="text-center text-[18px] font-extrabold text-gray-900">
-              Contact LittleWheel support
+              Contact Little Wheel support
             </h3>
 
             <div className="mt-5 grid grid-cols-3 gap-4 text-center">
@@ -236,13 +309,13 @@ function SupportSheet({
                 <div className="mt-2 text-[13px] text-gray-800">Call</div>
               </a>
 
-              {/* WhatsApp */}
+              {/* WhatsApp (full link) */}
               <a
-                href={whatsapp ? `https://wa.me/${whatsapp}` : undefined}
+                href={whatsappLink || undefined}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => {
-                  if (!whatsapp) e.preventDefault();
+                  if (!whatsappLink) e.preventDefault();
                 }}
                 className="group"
               >

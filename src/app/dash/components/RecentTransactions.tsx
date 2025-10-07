@@ -1,7 +1,7 @@
 // app/dash/components/RecentTransactions.tsx
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useTransition } from "react";
 import { Wallet, Banknote, ArrowDownFromLine } from "lucide-react";
 
 type Txn = {
@@ -17,6 +17,49 @@ const NGN = new Intl.NumberFormat("en-NG", {
   currency: "NGN",
   minimumFractionDigits: 0,
 });
+
+/* ---------- tiny spinner + overlay (same pattern) ---------- */
+function Spinner({ className = "w-5 h-5 text-black" }: { className?: string }) {
+  return (
+    <svg
+      className={`animate-spin ${className}`}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+        fill="none"
+        className="opacity-25"
+      />
+      <path
+        fill="currentColor"
+        className="opacity-90"
+        d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"
+      />
+    </svg>
+  );
+}
+function LoadingOverlay({ show }: { show: boolean }) {
+  if (!show) return null;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-[1px] flex items-center justify-center"
+    >
+      <div className="rounded-xl bg-white px-4 py-3 shadow-2xl flex items-center gap-3">
+        <Spinner />
+        <span className="text-[13px] font-semibold text-gray-900">
+          Loading…
+        </span>
+      </div>
+    </div>
+  );
+}
 
 const ICONS: Record<Txn["icon"], React.ReactNode> = {
   withdraw: <Wallet className="w-4 h-4 text-red-600" />,
@@ -134,6 +177,9 @@ export default function RecentTransactions({
   const [fetched, setFetched] = useState<Txn[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  // show loader when user taps "See all"
+  const [isPending, startTransition] = useTransition();
+
   // If parent didn't pass items, we'll fetch from API
   const shouldFetch = !items || items.length === 0;
 
@@ -191,102 +237,115 @@ export default function RecentTransactions({
 
   const hasTxns = !!data && data.length > 0;
 
+  const handleSeeAll = () => {
+    if (!onSeeAll) return;
+    startTransition(() => {
+      onSeeAll();
+    });
+  };
+
   return (
-    <section className="w-full">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-[16px] font-semibold text-gray-900">
-          Recent Transactions
-        </h2>
+    <>
+      {/* overlay shows only when user taps See all (during nav) */}
+      <LoadingOverlay show={isPending} />
 
-        <button
-          onClick={onSeeAll}
-          className="text-[11px] text-gray-900 underline underline-offset-2"
-        >
-          See all
-        </button>
-      </div>
+      <section className="w-full" aria-busy={isPending}>
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-[16px] font-semibold text-gray-900">
+            Recent Transactions
+          </h2>
 
-      {/* States */}
-      {loading && (
-        <div className="mt-3 space-y-2">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-gray-100 animate-pulse" />
-                <div className="h-3 w-40 bg-gray-100 rounded animate-pulse" />
-              </div>
-              <div className="h-3 w-16 bg-gray-100 rounded animate-pulse" />
-            </div>
-          ))}
+          <button
+            onClick={handleSeeAll}
+            className="text-[11px] text-gray-900 underline underline-offset-2 disabled:opacity-60 disabled:cursor-not-allowed"
+            disabled={isPending}
+          >
+            See all
+          </button>
         </div>
-      )}
 
-      {error && !loading && (
-        <div className="mt-3 rounded-xl border border-rose-100 bg-rose-50 p-3 text-[12px] text-rose-700">
-          {error}
-        </div>
-      )}
-
-      {/* List or Empty */}
-      {!loading && !error && hasTxns ? (
-        <ul className="mt-3 divide-y divide-gray-100">
-          {data.map((t) => {
-            const isCredit = t.amount > 0;
-            const sign = isCredit ? "+" : "-";
-            const amountAbs = Math.abs(t.amount);
-
-            return (
-              <li key={t.id} className="py-2">
-                <div className="flex items-center justify-between gap-2">
-                  {/* Left: Icon + text */}
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div
-                      className={`w-8 h-8 ${
-                        ICONS[t.icon] ? ICON_BG[t.icon] : "bg-gray-100"
-                      } rounded-full flex items-center justify-center`}
-                      aria-hidden
-                    >
-                      {ICONS[t.icon] || ICONS.recharge}
-                    </div>
-
-                    <div className="min-w-0">
-                      <p className="text-[13px] font-medium text-gray-900 truncate">
-                        {t.type
-                          ? t.type.charAt(0).toUpperCase() + t.type.slice(1)
-                          : "Transaction"}
-                      </p>
-                      <p className="text-[11px] text-slate-500">
-                        {fmtDate(t.createdAt)}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Right: Amount */}
-                  <div
-                    className={`text-[13px] font-semibold ${
-                      isCredit ? "text-emerald-600" : "text-red-500"
-                    }`}
-                  >
-                    {`${sign}${NGN.format(amountAbs)}`}
-                  </div>
+        {/* States */}
+        {loading && (
+          <div className="mt-3 space-y-2">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-gray-100 animate-pulse" />
+                  <div className="h-3 w-40 bg-gray-100 rounded animate-pulse" />
                 </div>
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
+                <div className="h-3 w-16 bg-gray-100 rounded animate-pulse" />
+              </div>
+            ))}
+          </div>
+        )}
 
-      {!loading && !error && !hasTxns && (
-        <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-6 flex items-center justify-center">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/uploads/Empty State.png"
-            alt="No recent transactions"
-            className="h-28 object-contain opacity-90"
-          />
-        </div>
-      )}
-    </section>
+        {error && !loading && (
+          <div className="mt-3 rounded-xl border border-rose-100 bg-rose-50 p-3 text-[12px] text-rose-700">
+            {error}
+          </div>
+        )}
+
+        {/* List or Empty */}
+        {!loading && !error && hasTxns ? (
+          <ul className="mt-3 divide-y divide-gray-100">
+            {data.map((t) => {
+              const isCredit = t.amount > 0;
+              const sign = isCredit ? "+" : "-";
+              const amountAbs = Math.abs(t.amount);
+
+              return (
+                <li key={t.id} className="py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    {/* Left: Icon + text */}
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div
+                        className={`w-8 h-8 ${
+                          ICONS[t.icon] ? ICON_BG[t.icon] : "bg-gray-100"
+                        } rounded-full flex items-center justify-center`}
+                        aria-hidden
+                      >
+                        {ICONS[t.icon] || ICONS.recharge}
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-medium text-gray-900 truncate">
+                          {t.type
+                            ? t.type.charAt(0).toUpperCase() + t.type.slice(1)
+                            : "Transaction"}
+                        </p>
+                        <p className="text-[11px] text-slate-500">
+                          {fmtDate(t.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Right: Amount */}
+                    <div
+                      className={`text-[13px] font-semibold ${
+                        isCredit ? "text-emerald-600" : "text-red-500"
+                      }`}
+                    >
+                      {`${sign}${NGN.format(amountAbs)}`}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
+
+        {!loading && !error && !hasTxns && (
+          <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-6 flex items-center justify-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/uploads/Empty State.png"
+              alt="No recent transactions"
+              className="h-28 object-contain opacity-90"
+            />
+          </div>
+        )}
+      </section>
+    </>
   );
 }

@@ -1,13 +1,57 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, HelpCircle, Eye, EyeOff } from "lucide-react";
 
-const API_CHANGE_PASSWORD = "/api/settings/change-password"; // <- adjust if needed
+const API_CHANGE_PASSWORD = "/api/settings/change-password";
+
+/* ---------- tiny spinner + overlay (same as BottomTabs) ---------- */
+function Spinner({ className = "w-4 h-4 text-black" }: { className?: string }) {
+  return (
+    <svg
+      className={`animate-spin ${className}`}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+        fill="none"
+        className="opacity-25"
+      />
+      <path
+        fill="currentColor"
+        className="opacity-90"
+        d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"
+      />
+    </svg>
+  );
+}
+function LoadingOverlay({ show }: { show: boolean }) {
+  if (!show) return null;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-[1px] flex items-center justify-center"
+    >
+      <div className="rounded-xl bg-white px-4 py-3 shadow-2xl flex items-center gap-3">
+        <Spinner className="w-5 h-5" />
+        <span className="text-[13px] font-semibold text-gray-900">
+          Loading…
+        </span>
+      </div>
+    </div>
+  );
+}
 
 export default function ChangePasswordPage() {
   const router = useRouter();
+  const [isPending, startTransition] = useTransition();
 
   const [currentPwd, setCurrentPwd] = useState("");
   const [newPwd, setNewPwd] = useState("");
@@ -28,6 +72,7 @@ export default function ChangePasswordPage() {
   const different = newPwd && currentPwd && newPwd !== currentPwd;
 
   const formValid = currentPwd.length >= 1 && newValid && matches && different;
+  const loading = submitting || isPending;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -63,8 +108,9 @@ export default function ChangePasswordPage() {
       setNewPwd("");
       setConfirmPwd("");
 
-      // brief pause so the user sees success, then go back
-      setTimeout(() => router.back(), 700);
+      setTimeout(() => {
+        startTransition(() => router.back());
+      }, 700);
     } catch {
       setErrorMsg("Network error. Please try again.");
       setSubmitting(false);
@@ -72,14 +118,18 @@ export default function ChangePasswordPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50" aria-busy={loading}>
+      {/* global overlay while submitting or navigating */}
+      <LoadingOverlay show={loading} />
+
       {/* Header */}
       <div className="bg-white">
         <div className="max-w-sm mx-auto px-4 py-3 flex items-center justify-between">
           <button
-            onClick={() => router.back()}
-            className="flex items-center text-left"
+            onClick={() => startTransition(() => router.back())}
+            className="flex items-center text-left disabled:opacity-60 disabled:cursor-not-allowed"
             aria-label="Back"
+            disabled={loading}
           >
             <ChevronLeft className="w-5 h-5 text-gray-700 mr-2" />
             <span className="text-gray-700 text-base">Back</span>
@@ -109,14 +159,16 @@ export default function ChangePasswordPage() {
                   type={showCurrent ? "text" : "password"}
                   value={currentPwd}
                   onChange={(e) => setCurrentPwd(e.target.value)}
-                  className="w-full h-11 rounded-xl bg-gray-50 border border-gray-200 px-3 pr-11 text-sm outline-none focus:ring-2 focus:ring-black/10"
+                  className="w-full h-11 rounded-xl bg-gray-50 border border-gray-200 px-3 pr-11 text-sm outline-none focus:ring-2 focus:ring-black/10 disabled:opacity-60"
                   autoComplete="current-password"
+                  disabled={loading}
                 />
                 <button
                   type="button"
                   onClick={() => setShowCurrent((s) => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 disabled:opacity-40"
                   aria-label={showCurrent ? "Hide password" : "Show password"}
+                  disabled={loading}
                 >
                   {showCurrent ? (
                     <EyeOff className="w-4 h-4" />
@@ -137,14 +189,16 @@ export default function ChangePasswordPage() {
                   type={showNew ? "text" : "password"}
                   value={newPwd}
                   onChange={(e) => setNewPwd(e.target.value)}
-                  className="w-full h-11 rounded-xl bg-gray-50 border border-gray-200 px-3 pr-11 text-sm outline-none focus:ring-2 focus:ring-black/10"
+                  className="w-full h-11 rounded-xl bg-gray-50 border border-gray-200 px-3 pr-11 text-sm outline-none focus:ring-2 focus:ring-black/10 disabled:opacity-60"
                   autoComplete="new-password"
+                  disabled={loading}
                 />
                 <button
                   type="button"
                   onClick={() => setShowNew((s) => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 disabled:opacity-40"
                   aria-label={showNew ? "Hide password" : "Show password"}
+                  disabled={loading}
                 >
                   {showNew ? (
                     <EyeOff className="w-4 h-4" />
@@ -178,14 +232,16 @@ export default function ChangePasswordPage() {
                   type={showConfirm ? "text" : "password"}
                   value={confirmPwd}
                   onChange={(e) => setConfirmPwd(e.target.value)}
-                  className="w-full h-11 rounded-xl bg-gray-50 border border-gray-200 px-3 pr-11 text-sm outline-none focus:ring-2 focus:ring-black/10"
+                  className="w-full h-11 rounded-xl bg-gray-50 border border-gray-200 px-3 pr-11 text-sm outline-none focus:ring-2 focus:ring-black/10 disabled:opacity-60"
                   autoComplete="new-password"
+                  disabled={loading}
                 />
                 <button
                   type="button"
                   onClick={() => setShowConfirm((s) => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 disabled:opacity-40"
                   aria-label={showConfirm ? "Hide password" : "Show password"}
+                  disabled={loading}
                 >
                   {showConfirm ? (
                     <EyeOff className="w-4 h-4" />
@@ -220,7 +276,13 @@ export default function ChangePasswordPage() {
                 : "bg-black text-white hover:bg-black/90"
             }`}
           >
-            {submitting ? "Updating…" : "Update Password"}
+            {submitting ? (
+              <span className="inline-flex items-center gap-2">
+                <Spinner className="w-4 h-4 text-white" /> Updating…
+              </span>
+            ) : (
+              "Update Password"
+            )}
           </button>
         </form>
       </div>

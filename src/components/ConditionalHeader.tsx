@@ -6,7 +6,7 @@ export default function ConditionalHeader() {
   const pathname = usePathname();
 
   // Show header only on /home and /agent routes
-  const showHeader = pathname === "/home" || pathname === "/agent";
+  const showHeader = pathname === "/" || pathname === "/";
 
   return showHeader ? <Header /> : null;
 }

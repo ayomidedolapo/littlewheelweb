@@ -1,9 +1,52 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { ChevronLeft, ChevronDown, Copy, Check } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+
+/* ---------- tiny spinner + overlay (same as BottomTabs) ---------- */
+function Spinner({ className = "w-4 h-4 text-black" }: { className?: string }) {
+  return (
+    <svg
+      className={`animate-spin ${className}`}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+        fill="none"
+        className="opacity-25"
+      />
+      <path
+        fill="currentColor"
+        className="opacity-90"
+        d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"
+      />
+    </svg>
+  );
+}
+function LoadingOverlay({ show }: { show: boolean }) {
+  if (!show) return null;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-[1px] flex items-center justify-center"
+    >
+      <div className="rounded-xl bg-white px-4 py-3 shadow-2xl flex items-center gap-3">
+        <Spinner className="w-5 h-5" />
+        <span className="text-[13px] font-semibold text-gray-900">
+          Loading…
+        </span>
+      </div>
+    </div>
+  );
+}
 
 /* ---------------- Types ---------------- */
 type Bank = { name: string; code: string | number; logo?: string };
@@ -48,7 +91,6 @@ function bankLogoUrl(name: string, provided?: string) {
     .toLowerCase()
     .replace(/\s+/g, "-")}.png`;
 }
-
 function toTitle(s: string) {
   return s
     .toLowerCase()
@@ -57,7 +99,6 @@ function toTitle(s: string) {
     .map((w) => w[0].toUpperCase() + w.slice(1))
     .join(" ");
 }
-
 function maskAcct(num: string) {
   const d = (num || "").replace(/\D/g, "");
   if (d.length <= 4) return d;
@@ -66,6 +107,7 @@ function maskAcct(num: string) {
 
 export default function WithdrawalBank() {
   const router = useRouter();
+  const [isPending, startTransition] = useTransition();
 
   // entry state (for editing/changing)
   const [bank, setBank] = useState<Bank | null>(null);
@@ -84,8 +126,8 @@ export default function WithdrawalBank() {
   const [successOpen, setSuccessOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [initialLoading, setInitialLoading] = useState(true); // NEW: overlay during initial fetch
 
-  // Token for proxy headers (raw JWT)
   const tokenHeader =
     typeof window !== "undefined"
       ? localStorage.getItem("authToken") ||
@@ -96,8 +138,8 @@ export default function WithdrawalBank() {
   /* Load saved display from backend (fallback to local cache) */
   useEffect(() => {
     let cancelled = false;
-
     async function loadSaved() {
+      setInitialLoading(true);
       try {
         // optimistic: local cache
         try {
@@ -148,15 +190,15 @@ export default function WithdrawalBank() {
             } catch {}
           }
         }
-      } catch {}
+      } finally {
+        if (!cancelled) setInitialLoading(false);
+      }
     }
-
     loadSaved();
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [tokenHeader]);
 
   // clear name when editing
   useEffect(() => {
@@ -235,7 +277,7 @@ export default function WithdrawalBank() {
       };
 
       const res = await fetch("/api/v1/settings/withdrawal-method", {
-        method: saved ? "PATCH" : "POST", // if you already had one, PATCH; else POST
+        method: saved ? "PATCH" : "POST",
         headers: {
           "Content-Type": "application/json",
           ...(tokenHeader ? { "x-lw-auth": tokenHeader } : {}),
@@ -306,25 +348,25 @@ export default function WithdrawalBank() {
     }
   };
 
+  const overlayOn = isPending || saving || initialLoading; // <— when to show overlay
+  const disableAll = overlayOn; // convenience
+
   /* ===================== RENDER ===================== */
 
-  // Two modes:
-  // 1) No saved yet -> show full setup (bank select + acct input)
-  // 2) Saved exists ->
-  //    - show saved card
-  //    - show ONLY bank select first
-  //    - once bank is picked, reveal acct input + confirm
   const hasSaved = !!saved;
-  const showAcctInput =
-    !hasSaved /* first-time setup */ || (!!hasSaved && !!bank); // reveal only after bank is chosen when editing
+  const showAcctInput = !hasSaved || (!!hasSaved && !!bank);
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white" aria-busy={overlayOn}>
+      {/* global overlay */}
+      <LoadingOverlay show={overlayOn} />
+
       <div className="max-w-sm mx-auto px-5 pt-4">
         {/* Header */}
         <button
-          onClick={() => router.back()}
-          className="flex items-center gap-2 text-gray-700 hover:text-black"
+          onClick={() => startTransition(() => router.back())}
+          className="flex items-center gap-2 text-gray-700 hover:text-black disabled:opacity-60 disabled:cursor-not-allowed"
+          disabled={disableAll}
         >
           <ChevronLeft className="w-5 h-5" />
           <span className="text-sm">Back</span>
@@ -365,6 +407,7 @@ export default function WithdrawalBank() {
                 onClick={() => copy(saved!.accountNumber)}
                 className="p-2 rounded-lg hover:bg-white/10 transition"
                 aria-label="Copy account number"
+                disabled={disableAll}
               >
                 <Copy className="w-4 h-4 text-white" />
               </button>
@@ -376,8 +419,9 @@ export default function WithdrawalBank() {
                 {bank ? "Change to" : "Change your bank"}
               </label>
               <button
-                onClick={() => setPickerOpen(true)}
-                className="w-full h-11 px-3 rounded-xl border border-gray-200 text-left text-[13px] flex items-center justify-between"
+                onClick={() => !disableAll && setPickerOpen(true)}
+                className="w-full h-11 px-3 rounded-xl border border-gray-200 text-left text-[13px] flex items-center justify-between disabled:opacity-60"
+                disabled={disableAll}
               >
                 <div className="flex items-center gap-2">
                   {bank ? (
@@ -406,11 +450,11 @@ export default function WithdrawalBank() {
           </label>
         )}
 
-        {/* Bank selector (shown in both modes) */}
         {!hasSaved && (
           <button
-            onClick={() => setPickerOpen(true)}
-            className="w-full h-11 px-3 rounded-xl border border-gray-200 text-left text-[13px] flex items-center justify-between"
+            onClick={() => !disableAll && setPickerOpen(true)}
+            className="w-full h-11 px-3 rounded-xl border border-gray-200 text-left text-[13px] flex items-center justify-between disabled:opacity-60"
+            disabled={disableAll}
           >
             <div className="flex items-center gap-2">
               {bank ? (
@@ -430,9 +474,7 @@ export default function WithdrawalBank() {
           </button>
         )}
 
-        {/* Account number (only:
-              - always for first-time setup, OR
-              - after user picks a bank when editing an existing one) */}
+        {/* Account number input */}
         {showAcctInput && (
           <div className="mt-5">
             <label className="block text-[12px] text-gray-700 mb-1">
@@ -447,12 +489,13 @@ export default function WithdrawalBank() {
               onChange={(e) =>
                 setAcct(e.target.value.replace(/\D/g, "").slice(0, 10))
               }
-              className="w-full h-11 px-3 rounded-xl border border-gray-200 text-[13px] outline-none"
+              className="w-full h-11 px-3 rounded-xl border border-gray-200 text-[13px] outline-none disabled:opacity-60"
+              disabled={disableAll}
             />
           </div>
         )}
 
-        {/* Resolve chip (only after we have a name) */}
+        {/* Resolve chip */}
         {showAcctInput && resolvedName && (
           <div className="mt-3 w-full rounded-xl bg-black text-white px-4 py-3 flex items-center justify-between">
             <div className="flex items-start gap-3">
@@ -480,6 +523,7 @@ export default function WithdrawalBank() {
               onClick={() => copy(acct)}
               className="p-2 rounded-lg hover:bg-white/10 transition"
               aria-label="Copy account number"
+              disabled={disableAll}
             >
               <Copy className="w-4 h-4 text-white" />
             </button>
@@ -493,7 +537,7 @@ export default function WithdrawalBank() {
           </p>
         )}
 
-        {/* Confirm button (only when the acct input is showing) */}
+        {/* Confirm */}
         {showAcctInput && (
           <button
             onClick={onConfirm}
@@ -612,8 +656,8 @@ function BankPickerSheet({
           </div>
 
           {loading ? (
-            <div className="px-2 py-6 text-[13px] text-gray-500">
-              Loading banks…
+            <div className="px-2 py-6 text-[13px] text-gray-500 flex items-center gap-2">
+              <Spinner className="w-4 h-4" /> Loading banks…
             </div>
           ) : err ? (
             <div className="px-2 py-6 text-[13px] text-red-600">

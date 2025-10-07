@@ -6,7 +6,7 @@ export default function ConditionalFooter() {
   const pathname = usePathname();
 
   // Show footer only on /home and /agent routes
-  const showFooter = pathname === "/home" || pathname === "/agent";
+  const showFooter = pathname === "/" || pathname === "/";
 
   return showFooter ? <Footer /> : null;
 }

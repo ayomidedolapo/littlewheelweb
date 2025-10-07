@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
@@ -13,7 +13,10 @@ import {
 
 const FALLBACK_AFTER_ADDRESS = "/agent-login";
 
-// Nigeria states (unchanged)
+/* ===== Consistent session key (same as earlier steps) ===== */
+const SKEY = { SESSION_ID: "lw_flow_sessionId" };
+
+/* ===== Nigeria states (unchanged) ===== */
 const NG_STATES = [
   "Abia",
   "Adamawa",
@@ -54,7 +57,7 @@ const NG_STATES = [
   "FCT (Abuja)",
 ];
 
-// Example LGAs
+/* ===== Example LGAs ===== */
 const LGA_BY_STATE: Record<string, string[]> = {
   Oyo: [
     "Ibadan North",
@@ -71,31 +74,74 @@ const LGA_BY_STATE: Record<string, string[]> = {
   ],
 };
 
+/* Small cookie reader (non-HttpOnly only) */
+function getCookie(name: string) {
+  if (typeof document === "undefined") return "";
+  const m = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
+  return m ? decodeURIComponent(m[2]) : "";
+}
+
 export default function AddressPage() {
   const router = useRouter();
   const sp = useSearchParams();
 
   const NEXT_STEP_ROUTE = sp.get("next") || FALLBACK_AFTER_ADDRESS;
 
-  // ===== session / token (session-first) =====
+  /* ===== session / token ===== */
   const [signupSessionId, setSignupSessionId] = useState<string>("");
   const [bearerToken, setBearerToken] = useState<string>("");
 
   useEffect(() => {
+    // Prefer the sessionId from query (shared across steps), then sessionStorage (same key as previous page)
+    const fromQs = (sp.get("sessionId") || "").trim();
+    let sid = fromQs;
     try {
-      const fromQs = (sp.get("sessionId") || "").trim();
-      const sid = fromQs || localStorage.getItem("lw_signup_session") || "";
-      if (fromQs) localStorage.setItem("lw_signup_session", fromQs);
+      if (fromQs) sessionStorage.setItem(SKEY.SESSION_ID, fromQs);
+      sid = sid || sessionStorage.getItem(SKEY.SESSION_ID) || "";
+    } catch {}
 
-      const lt = localStorage.getItem("lw_token") || "";
-      setSignupSessionId(sid);
-      setBearerToken(sid ? "" : lt); // if session exists, don't use bearer
-    } catch {
-      // ignore
+    setSignupSessionId(sid);
+
+    // Try token from cookie first (if server set a readable cookie), then localStorage
+    let tok = getCookie("lw_token") || "";
+    if (!tok) {
+      try {
+        tok = localStorage.getItem("lw_token") || "";
+      } catch {}
     }
+    setBearerToken(tok);
   }, [sp]);
 
-  // ===== form fields =====
+  // If we have a session but no token, try to obtain a V1 token (same flow as Personal Details)
+  const ensuringTokenRef = useRef(false);
+  useEffect(() => {
+    if (bearerToken || !signupSessionId || ensuringTokenRef.current) return;
+    ensuringTokenRef.current = true;
+
+    (async () => {
+      try {
+        const r = await fetch("/api/auth/get-v1-token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: signupSessionId }),
+          credentials: "include",
+        });
+        const j = await r.json().catch(() => ({}));
+        if (r.ok && j?.token) {
+          setBearerToken(j.token);
+          try {
+            localStorage.setItem("lw_token", j.token);
+          } catch {}
+        }
+      } catch {
+        // ignore; user can retry Save later
+      } finally {
+        ensuringTokenRef.current = false;
+      }
+    })();
+  }, [bearerToken, signupSessionId]);
+
+  /* ===== form fields ===== */
   const [address, setAddress] = useState("No. 15, University Road, Agbowo,");
   const [stateName, setStateName] = useState("Oyo");
   const [lga, setLga] = useState("Ibadan North");
@@ -114,9 +160,10 @@ export default function AddressPage() {
 
   useEffect(() => {
     if (stateName === "Oyo") {
-      setCity("Ibadan");
-      setLga("Ibadan North");
+      setCity((prev) => (prev ? prev : "Ibadan"));
+      setLga((prev) => (prev ? prev : "Ibadan North"));
     } else {
+      // If you want to force user to re-select when they switch state:
       setCity("");
       setLga("");
     }
@@ -141,25 +188,50 @@ export default function AddressPage() {
     setSaving(true);
     setError(null);
 
+    // Ensure we have a token (attempt one last time if needed)
+    let token = bearerToken;
+    if (!token && signupSessionId) {
+      try {
+        const tokenResp = await fetch("/api/auth/get-v1-token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: signupSessionId }),
+          credentials: "include",
+        });
+        const tokenData = await tokenResp.json().catch(() => ({}));
+        if (tokenResp.ok && tokenData?.token) {
+          token = tokenData.token;
+          setBearerToken(token);
+          try {
+            localStorage.setItem("lw_token", token);
+          } catch {}
+        }
+      } catch {}
+    }
+
+    if (!token) {
+      setError("Missing authentication. Please verify your phone again.");
+      setSaving(false);
+      return;
+    }
+
     const payload = {
       country: country.trim(),
       state: stateName.trim(),
       city: city.trim(),
       lga: lga.trim(),
       address: address.trim(),
-      ...(signupSessionId ? { sessionId: signupSessionId } : {}), // body sessionId too
+      ...(signupSessionId ? { sessionId: signupSessionId } : {}), // not used by your route, but harmless
     };
 
-    // Prefer session id; only send bearer if no session
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
+      // Send both for safety; your route reads x-lw-auth then falls back to cookie
+      Authorization: `Bearer ${token}`,
+      "x-lw-auth": token,
       ...(signupSessionId ? { "x-session-id": signupSessionId } : {}),
-      ...(!signupSessionId && bearerToken
-        ? { Authorization: `Bearer ${bearerToken}` }
-        : {}),
     };
 
-    // Client timeout so failures are visible
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 45000);
 
@@ -210,6 +282,27 @@ export default function AddressPage() {
   const menuItem =
     "w-full text-left px-3 py-2 text-sm hover:bg-gray-50 focus:bg-gray-50 focus:outline-none";
 
+  // close dropdowns on outside click
+  const stateMenuRef = useRef<HTMLDivElement | null>(null);
+  const lgaMenuRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      const n = e.target as Node;
+      if (
+        openState &&
+        stateMenuRef.current &&
+        !stateMenuRef.current.contains(n)
+      ) {
+        setOpenState(false);
+      }
+      if (openLga && lgaMenuRef.current && !lgaMenuRef.current.contains(n)) {
+        setOpenLga(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [openState, openLga]);
+
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-0 md:p-4">
       <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-2xl md:shadow-xl overflow-hidden flex flex-col">
@@ -253,7 +346,7 @@ export default function AddressPage() {
           <label className="block mt-4 text-[13px] font-semibold text-gray-800">
             State*
           </label>
-          <div className="mt-2 relative">
+          <div className="mt-2 relative" ref={stateMenuRef}>
             <button
               type="button"
               onClick={() => {
@@ -290,7 +383,7 @@ export default function AddressPage() {
           <label className="block mt-4 text-[13px] font-semibold text-gray-800">
             Local Government*
           </label>
-          <div className="mt-2 relative">
+          <div className="mt-2 relative" ref={lgaMenuRef}>
             <button
               type="button"
               onClick={() => {

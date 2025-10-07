@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft,
@@ -14,8 +14,52 @@ import {
 
 const PIN_LEN = 4;
 
+/* ---------- tiny spinner + overlay (same as BottomTabs) ---------- */
+function Spinner({ className = "w-4 h-4 text-black" }: { className?: string }) {
+  return (
+    <svg
+      className={`animate-spin ${className}`}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+        fill="none"
+        className="opacity-25"
+      />
+      <path
+        fill="currentColor"
+        className="opacity-90"
+        d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"
+      />
+    </svg>
+  );
+}
+function LoadingOverlay({ show }: { show: boolean }) {
+  if (!show) return null;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-[1px] flex items-center justify-center"
+    >
+      <div className="rounded-xl bg-white px-4 py-3 shadow-2xl flex items-center gap-3">
+        <Spinner className="w-5 h-5" />
+        <span className="text-[13px] font-semibold text-gray-900">
+          Loading…
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function SetTransactionPinPage() {
   const router = useRouter();
+  const [isPending, startTransition] = useTransition();
 
   // main flow
   const [stage, setStage] = useState<"enter" | "confirm">("enter");
@@ -49,6 +93,8 @@ export default function SetTransactionPinPage() {
   const activeValue = stage === "enter" ? pin : confirmPin;
   const setActiveValue = stage === "enter" ? setPin : setConfirmPin;
 
+  const loading = submitting || isPending; // overlay trigger
+
   /* ---------- input helpers ---------- */
   function addDigit(d: string) {
     if (submitting || pwOpen) return;
@@ -70,9 +116,16 @@ export default function SetTransactionPinPage() {
       setConfirmPin("");
       setErrorMsg(null);
     } else {
-      router.back();
+      startTransition(() => router.back());
     }
   }
+
+  // Prefetch home for the success flow
+  useEffect(() => {
+    try {
+      router.prefetch("/dash");
+    } catch {}
+  }, [router]);
 
   // Keyboard support for keypad
   useEffect(() => {
@@ -117,17 +170,15 @@ export default function SetTransactionPinPage() {
       setSubmitting(true);
       setPwError(null);
 
-      // Optional bearer from client storage (your Auth middleware also reads cookies)
+      // Align with your other routes: send 'x-lw-auth' from localStorage('lw_token')
       const token =
-        typeof window !== "undefined"
-          ? localStorage.getItem("authToken")
-          : null;
+        typeof window !== "undefined" ? localStorage.getItem("lw_token") : null;
 
       const res = await fetch("/api/v1/settings/set-transaction-pin", {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(token ? { "x-lw-auth": token } : {}),
         },
         credentials: "include",
         body: JSON.stringify({
@@ -197,7 +248,7 @@ export default function SetTransactionPinPage() {
   }) => (
     <button
       onClick={onClick}
-      disabled={submitting || pwOpen}
+      disabled={submitting || pwOpen || isPending}
       className={`h-14 w-14 rounded-full flex items-center justify-center font-medium text-lg transition active:scale-95
         ${
           variant === "delete"
@@ -211,13 +262,17 @@ export default function SetTransactionPinPage() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50" aria-busy={loading}>
+      {/* global overlay while submitting or navigating */}
+      <LoadingOverlay show={loading} />
+
       {/* Header */}
       <div className="bg-white">
         <div className="max-w-sm mx-auto px-5 py-4 flex items-center justify-between">
           <button
             onClick={goBack}
-            className="flex items-center text-gray-700 hover:text-gray-900"
+            className="flex items-center text-gray-700 hover:text-gray-900 disabled:opacity-60 disabled:cursor-not-allowed"
+            disabled={loading}
           >
             <ChevronLeft className="w-5 h-5 mr-1" />
             <span className="text-base font-medium">Back</span>
@@ -266,13 +321,6 @@ export default function SetTransactionPinPage() {
             </div>
           </div>
         </div>
-
-        {submitting && !pwOpen && (
-          <div className="mt-6 text-center text-sm text-gray-600 inline-flex items-center gap-2">
-            <span className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-            Saving your PIN…
-          </div>
-        )}
       </div>
 
       {/* Bottom-sheet: Ask for Account Password */}
@@ -315,7 +363,7 @@ export default function SetTransactionPinPage() {
                     submitPin(pin, password);
                   }
                 }}
-                className="w-full h-11 rounded-xl border border-gray-200 px-3 pr-10 text-[14px] outline-none"
+                className="w-full h-11 rounded-xl border border-gray-200 px-3 pr-10 text-[14px] outline-none disabled:opacity-60"
                 placeholder="•••••"
                 autoFocus
                 disabled={submitting}
@@ -325,6 +373,7 @@ export default function SetTransactionPinPage() {
                 onClick={() => setShowPw((v) => !v)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
                 aria-label={showPw ? "Hide password" : "Show password"}
+                disabled={submitting}
               >
                 {showPw ? (
                   <EyeOff className="w-4 h-4" />
@@ -358,7 +407,13 @@ export default function SetTransactionPinPage() {
                     : "bg-black/30 cursor-not-allowed"
                 }`}
               >
-                {submitting ? "Saving…" : "Confirm"}
+                {submitting ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Spinner className="w-4 h-4 text-white" /> Saving…
+                  </span>
+                ) : (
+                  "Confirm"
+                )}
               </button>
             </div>
           </div>
@@ -379,8 +434,9 @@ export default function SetTransactionPinPage() {
           onClick={() => setShowSuccess(false)}
         />
         <div
-          className={`absolute left-0 right-0 bottom-0 transition-transform duration-300 ease-out
-                      ${showSuccess ? "translate-y-0" : "translate-y-full"}`}
+          className={`absolute left-0 right-0 bottom-0 transition-transform duration-300 ease-out ${
+            showSuccess ? "translate-y-0" : "translate-y-full"
+          }`}
         >
           <div className="mx-auto w-full max-w-sm bg-white rounded-t-3xl p-8 shadow-2xl">
             <div className="mx-auto w-16 h-16 rounded-full bg-green-50 flex items-center justify-center mb-6">
@@ -395,9 +451,10 @@ export default function SetTransactionPinPage() {
             <button
               onClick={() => {
                 setShowSuccess(false);
-                router.push("/dash");
+                startTransition(() => router.push("/dash"));
               }}
-              className="w-full h-12 rounded-2xl bg-black text-white font-semibold hover:bg-black/90"
+              className="w-full h-12 rounded-2xl bg-black text-white font-semibold hover:bg-black/90 disabled:opacity-60"
+              disabled={isPending}
             >
               Done
             </button>

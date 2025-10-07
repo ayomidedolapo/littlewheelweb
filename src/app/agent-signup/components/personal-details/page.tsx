@@ -44,6 +44,7 @@ export default function PersonalDetailsPage() {
   const [sessionId, setSessionId] = useState("");
   const [bearerToken, setBearerToken] = useState("");
   const [authBanner, setAuthBanner] = useState<string | null>(null);
+
   useEffect(() => {
     const qsSid = (sp.get("sessionId") || "").trim();
     let sid = qsSid;
@@ -97,7 +98,7 @@ export default function PersonalDetailsPage() {
   // validation
   const pinValid = useMemo(() => onlyDigits(pin).length === 5, [pin]);
   const firstValid = firstName.trim().length > 0;
-  const middleValid = middleName.trim().length > 0;
+  const middleValid = middleName.trim().length > 0; // you marked * so I kept it required
   const lastValid = lastName.trim().length > 0;
   const dobValid = !!dob;
   const usernameValid = isValidUsername(username);
@@ -237,36 +238,14 @@ export default function PersonalDetailsPage() {
     setSaving(true);
     setError(null);
 
-    console.log("=== PERSONAL DETAILS TOKEN DEBUG ===");
-
     let actualToken = bearerToken;
     try {
       const cookieToken = getCookie("lw_token");
       const localStorageToken = localStorage.getItem("lw_token") || "";
-
-      console.log(
-        "Bearer token from state:",
-        bearerToken ? `${bearerToken.substring(0, 20)}...` : "MISSING"
-      );
-      console.log(
-        "Cookie token:",
-        cookieToken ? `${cookieToken.substring(0, 20)}...` : "MISSING"
-      );
-      console.log(
-        "LocalStorage token:",
-        localStorageToken
-          ? `${localStorageToken.substring(0, 20)}...`
-          : "MISSING"
-      );
-      console.log("Session ID:", sessionId);
-
       actualToken = bearerToken || cookieToken || localStorageToken || "";
 
-      // If no token but we have sessionId, try to get a V1 token
+      // Optional: If still no token but we have sessionId, try your bridge endpoint
       if (!actualToken && sessionId) {
-        console.log(
-          "No token found, attempting to get V1 token from sessionId..."
-        );
         try {
           const tokenResp = await fetch("/api/auth/get-v1-token", {
             method: "POST",
@@ -274,26 +253,17 @@ export default function PersonalDetailsPage() {
             body: JSON.stringify({ sessionId }),
             credentials: "include",
           });
-
-          const tokenData = await tokenResp.json();
-          console.log("Token fetch response:", tokenData);
-
-          if (tokenResp.ok && tokenData.token) {
+          const tokenData = await tokenResp.json().catch(() => ({}));
+          if (tokenResp.ok && tokenData?.token) {
             actualToken = tokenData.token;
             setBearerToken(tokenData.token);
-            // Also store it
             try {
               localStorage.setItem("lw_token", tokenData.token);
             } catch {}
-            console.log("Successfully got V1 token");
           }
-        } catch (tokenError) {
-          console.error("Failed to get V1 token:", tokenError);
-        }
+        } catch {}
       }
-    } catch (e) {
-      console.error("Error in token check:", e);
-    }
+    } catch {}
 
     if (!actualToken) {
       setError(
@@ -303,33 +273,27 @@ export default function PersonalDetailsPage() {
       return;
     }
 
-    console.log(
-      "Using token for submission:",
-      actualToken ? `${actualToken.substring(0, 20)}...` : "NONE"
-    );
-    console.log("==========================================");
-
     const payloadBase: Record<string, any> = {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       middleName: middleName.trim(),
       dob,
       referralCode: referralCode.trim() || undefined,
-      password: pin,
+      password: pin, // V1 expects password (you use 5-digit numeric PIN)
       gender,
       username: username.trim(),
       ...(sessionId ? { sessionId } : {}),
     };
 
     if (avatarDataUrl) {
-      payloadBase.avatarUrl = avatarDataUrl;
+      payloadBase.avatarUrl = avatarDataUrl; // optional
     }
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       ...(sessionId ? { "x-session-id": sessionId } : {}),
       Authorization: `Bearer ${actualToken}`,
-      "x-lw-auth": actualToken,
+      "x-lw-auth": actualToken, // your route reads either/both
     };
 
     try {
@@ -348,12 +312,6 @@ export default function PersonalDetailsPage() {
       } catch {
         json = { message: raw };
       }
-
-      console.log("Submit user data response:", {
-        status: res.status,
-        statusText: res.statusText,
-        data: json,
-      });
 
       if (!res.ok || json?.success === false) {
         const msg =
@@ -377,7 +335,6 @@ export default function PersonalDetailsPage() {
 
       router.push(NEXT_STEP_ROUTE);
     } catch (e: any) {
-      console.error("Submit user data error:", e);
       setError(e?.message || "Network error. Please try again.");
       setSaving(false);
     }
@@ -428,7 +385,7 @@ export default function PersonalDetailsPage() {
             <button
               type="button"
               onClick={avatarPreview ? retakePhoto : openCamera}
-              className={`w-full flex items-center gap-3 rounded-xl border border-dashed border-gray-300 bg-gray-50 px-3 py-3 hover:border-gray-400 transition`}
+              className="w-full flex items-center gap-3 rounded-xl border border-dashed border-gray-300 bg-gray-50 px-3 py-3 hover:border-gray-400 transition"
             >
               <div className="w-12 h-12 rounded-full bg-white border border-gray-200 overflow-hidden flex items-center justify-center">
                 {avatarPreview ? (

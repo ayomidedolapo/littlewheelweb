@@ -6,6 +6,53 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, UserRound, Landmark, X } from "lucide-react";
 
+/* ---------- tiny spinner + overlay (same pattern you liked) ---------- */
+function Spinner({ className = "w-5 h-5 text-black" }: { className?: string }) {
+  return (
+    <svg
+      className={`animate-spin ${className}`}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+        fill="none"
+        className="opacity-25"
+      />
+      <path
+        fill="currentColor"
+        className="opacity-90"
+        d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"
+      />
+    </svg>
+  );
+}
+function LoadingOverlay({
+  show,
+  label = "Loading…",
+}: {
+  show: boolean;
+  label?: string;
+}) {
+  if (!show) return null;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-[1px] flex items-center justify-center"
+    >
+      <div className="rounded-xl bg-white px-4 py-3 shadow-2xl flex items-center gap-3">
+        <Spinner />
+        <span className="text-[13px] font-semibold text-gray-900">{label}</span>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- money helpers ---------------- */
 const fmt = (v: number) =>
   `₦${(v || 0).toLocaleString("en-NG", {
@@ -343,8 +390,7 @@ export default function CommissionWithdrawalPage() {
       } catch {}
 
       await loadCommissionBalance();
-      router.refresh?.();
-      // optional: toast
+      // No nav. If you want a toast, replace alert with your toaster.
       alert("Withdrawal request submitted successfully.");
     } catch (e: any) {
       setSubmitErr(e?.message || "Withdrawal failed.");
@@ -353,9 +399,15 @@ export default function CommissionWithdrawalPage() {
     }
   }
 
+  const overlayOn = submitting;
+  const overlayLabel = submitting ? "Submitting…" : "Loading…";
+
   /* ---------------- UI ---------------- */
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white" aria-busy={overlayOn}>
+      {/* global overlay only when confirming (long action) */}
+      <LoadingOverlay show={overlayOn} label={overlayLabel} />
+
       {/* Top Bar */}
       <div className="sticky top-0 z-10 bg-white">
         <button
@@ -393,6 +445,7 @@ export default function CommissionWithdrawalPage() {
               onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))}
               className="w-full bg-transparent outline-none text-[13px] text-gray-900 placeholder:text-gray-400"
               aria-label="Amount to withdraw"
+              disabled={overlayOn}
             />
           </div>
 
@@ -412,6 +465,7 @@ export default function CommissionWithdrawalPage() {
             <button
               onClick={() => setQuick("ALL")}
               className="h-8 px-3 rounded-full bg-gray-100 text-[11px] font-semibold text-gray-800"
+              disabled={overlayOn}
             >
               All
             </button>
@@ -420,6 +474,7 @@ export default function CommissionWithdrawalPage() {
                 key={v}
                 onClick={() => setQuick(v)}
                 className="h-8 px-3 rounded-full bg-gray-100 text-[11px] font-semibold text-gray-800"
+                disabled={overlayOn}
               >
                 {fmt(v).replace(".00", "")}
               </button>
@@ -440,6 +495,7 @@ export default function CommissionWithdrawalPage() {
             type="button"
             onClick={() => setMethod("RECHARGE")}
             className="w-full flex items-center justify-between px-3.5 py-3"
+            disabled={overlayOn}
           >
             <div className="flex items-center gap-2.5 min-w-0">
               <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-gray-200">
@@ -471,6 +527,7 @@ export default function CommissionWithdrawalPage() {
             type="button"
             onClick={() => setMethod("BANK")}
             className="w-full flex items-center justify-between px-3.5 py-3"
+            disabled={overlayOn}
           >
             <div className="flex items-center gap-2.5 min-w-0">
               <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-gray-200">
@@ -545,10 +602,10 @@ export default function CommissionWithdrawalPage() {
       <div className="px-4 mt-6 pb-8">
         <button
           onClick={openSheet}
-          disabled={!canProceed}
+          disabled={!canProceed || overlayOn}
           className={`w-full h-11 rounded-xl text-white font-semibold transition
             ${
-              canProceed
+              canProceed && !overlayOn
                 ? "bg-black active:scale-[0.99]"
                 : "bg-gray-300 text-gray-600 cursor-not-allowed"
             }`}
@@ -596,6 +653,7 @@ export default function CommissionWithdrawalPage() {
               onClick={() => setSheetOpen(false)}
               className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center"
               aria-label="Close summary"
+              disabled={overlayOn}
             >
               <X className="w-4 h-4 text-gray-700" />
             </button>
@@ -642,6 +700,7 @@ export default function CommissionWithdrawalPage() {
                 placeholder="Enter your PIN"
                 className="w-full h-11 rounded-xl border border-gray-200 px-3 text-[13px] outline-none focus:ring-2 focus:ring-black"
                 aria-label="Password or PIN"
+                disabled={overlayOn}
               />
               {pin.trim().length > 0 && pin.trim().length < 4 && (
                 <p className="mt-1 text-[11px] text-gray-500">

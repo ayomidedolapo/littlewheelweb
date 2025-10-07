@@ -33,11 +33,16 @@ async function getCaptchaToken(action: string): Promise<string | null> {
 
 /** Helpers */
 const digitsOnly = (s: string) => s.replace(/\D/g, "");
+
+/** Nigeria-only E.164 (+234XXXXXXXXXX) with robust normalization */
 const toE164 = (raw: string) => {
-  const d = digitsOnly(raw);
-  const local = d.startsWith("0") ? d.slice(1) : d;
-  return `+234${local}`;
+  let d = digitsOnly(raw);
+  if (d.startsWith("234")) d = d.slice(3);
+  if (d.startsWith("0")) d = d.slice(1);
+  d = d.slice(-10);
+  return `+234${d}`;
 };
+
 const isValidEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 
 /** Per-tab storage keys */
@@ -46,8 +51,13 @@ const SKEY = {
   PHONE: "lw_flow_phone",
   EMAIL: "lw_flow_email",
 };
-/** Shared device token */
-const LKEY = { DEVICE: "lw_device_token" };
+/** Cross-step keys */
+const LKEY = {
+  DEVICE: "lw_device_token",
+  SIGNUP_PHONE: "signup_phone_e164",
+  SIGNUP_SESSION: "signup_session_id",
+  SIGNUP_EMAIL: "signup_email",
+};
 
 function newId() {
   try {
@@ -99,11 +109,9 @@ function persistToken(tok: string | null | undefined) {
   } catch {}
 }
 
-/** 🔁 exchange the 4-digit phone OTP for a V1 token (so /v1/* accepts us) */
+/** (optional) bridge to v1 */
 async function bridgeV1Token(e164: string, otp: string) {
   try {
-    console.log("Attempting to bridge V1 token...", { phone: e164 });
-
     const r = await fetch("/api/auth/bridge-v1-token", {
       method: "POST",
       headers: {
@@ -113,27 +121,16 @@ async function bridgeV1Token(e164: string, otp: string) {
       body: JSON.stringify({ phoneNumber: e164, otp }),
       credentials: "include",
     });
-
     const j = await r.json().catch(() => ({}));
-    console.log("Bridge V1 response:", { status: r.status, data: j });
-
     const t =
       j?.token ||
       j?.data?.token ||
       j?.data?.access_token ||
       j?.access_token ||
       null;
-
-    if (t && r.ok) {
-      console.log("Successfully bridged V1 token");
-      persistToken(t);
-      return t;
-    } else {
-      console.warn("Bridge V1 failed:", j?.message || "No token received");
-      return null;
-    }
-  } catch (error) {
-    console.error("Bridge V1 error:", error);
+    if (t && r.ok) persistToken(t);
+    return t;
+  } catch {
     return null;
   }
 }
@@ -158,7 +155,11 @@ export default function CreateExactDualOTP() {
   /** session + inputs */
   const [sessionId, setSessionId] = useState<string>(() => {
     try {
-      return sessionStorage.getItem(SKEY.SESSION_ID) || "";
+      return (
+        sessionStorage.getItem(SKEY.SESSION_ID) ||
+        localStorage.getItem(LKEY.SIGNUP_SESSION) ||
+        ""
+      );
     } catch {
       return "";
     }
@@ -166,15 +167,23 @@ export default function CreateExactDualOTP() {
 
   const [phone, setPhone] = useState<string>(() => {
     try {
-      const p = sessionStorage.getItem(SKEY.PHONE);
+      const p =
+        sessionStorage.getItem(SKEY.PHONE) ||
+        localStorage.getItem(LKEY.SIGNUP_PHONE) ||
+        "";
       return p ? p.replace(/^\+?234/, "") : "";
     } catch {
       return "";
     }
   });
+
   const [email, setEmail] = useState<string>(() => {
     try {
-      return sessionStorage.getItem(SKEY.EMAIL) || "";
+      return (
+        sessionStorage.getItem(SKEY.EMAIL) ||
+        localStorage.getItem(LKEY.SIGNUP_EMAIL) ||
+        ""
+      );
     } catch {
       return "";
     }
@@ -208,12 +217,16 @@ export default function CreateExactDualOTP() {
     setSessionId(sid);
     try {
       sessionStorage.setItem(SKEY.SESSION_ID, sid);
+      localStorage.setItem(LKEY.SIGNUP_SESSION, sid);
     } catch {}
   };
+
   const persistInputs = (e164: string, cleanEmail: string) => {
     try {
       sessionStorage.setItem(SKEY.PHONE, e164);
       sessionStorage.setItem(SKEY.EMAIL, cleanEmail);
+      localStorage.setItem(LKEY.SIGNUP_PHONE, e164);
+      if (cleanEmail) localStorage.setItem(LKEY.SIGNUP_EMAIL, cleanEmail);
     } catch {}
   };
 
@@ -257,7 +270,7 @@ export default function CreateExactDualOTP() {
     }
   }
 
-  /** ---------- PHONE (force SMS channel) ---------- */
+  /** ---------- PHONE: step 1 (send) & step 2 (verify) ---------- */
   const sendPhoneCode = async () => {
     if (!phoneIsValid || pState === "sending" || pState === "verifying") return;
     setPageError(null);
@@ -296,6 +309,7 @@ export default function CreateExactDualOTP() {
     saveSessionId(
       data?.sessionId || data?.data?.sessionId || data?.data?.data?.sessionId
     );
+
     setPOtp(["", "", "", ""]);
     setPState("code_sent");
     requestAnimationFrame(() => pRefs.current[0]?.focus());
@@ -309,15 +323,10 @@ export default function CreateExactDualOTP() {
     const captchaToken = await getCaptchaToken("verify_phone");
 
     const payload: any = {
-      step: 1,
-      phoneNumber: e164,
+      step: 2,
       phoneOtp: code,
-      otpChannel: "sms",
-      role: "AGENT",
-      mode: "SELF_CREATED",
-      deviceToken,
-      ...(captchaToken ? { captchaToken } : {}),
       ...(sessionId ? { sessionId } : {}),
+      ...(captchaToken ? { captchaToken } : {}),
     };
 
     setPState("verifying");
@@ -335,33 +344,21 @@ export default function CreateExactDualOTP() {
       return;
     }
 
-    // The V2 token should work for V1 endpoints too
+    // Token if issued
     const token = getToken(data);
-    if (token) {
-      console.log(
-        "Got token from V2 phone verification:",
-        token.substring(0, 20) + "..."
-      );
-      persistToken(token);
-    } else {
-      console.warn("No token received from V2 verification");
-    }
+    if (token) persistToken(token);
 
-    // Save session
-    const newSessionId =
-      data?.sessionId || data?.data?.sessionId || data?.data?.data?.sessionId;
-    if (newSessionId) {
-      saveSessionId(newSessionId);
-    }
+    // Keep verified phone + session for later steps
+    persistInputs(e164, (email || "").trim().toLowerCase());
+    saveSessionId(
+      data?.sessionId || data?.data?.sessionId || data?.data?.data?.sessionId
+    );
 
     setPState("verified");
     setPOtp(["", "", "", ""]);
     pRefs.current[3]?.blur();
 
-    console.log("Phone verification complete", {
-      hasToken: !!token,
-      sessionId: newSessionId || sessionId,
-    });
+    await bridgeV1Token(e164, code);
   };
 
   const resendPhoneCode = async () => {
@@ -369,33 +366,33 @@ export default function CreateExactDualOTP() {
     await sendPhoneCode();
   };
 
-  /** ---------- EMAIL (force EMAIL channel) ---------- */
+  /** ---------- EMAIL: step 3 (send) & step 4 (verify) ---------- */
   const sendEmailCode = async () => {
     if (!emailIsValid || eState === "sending" || eState === "verifying") return;
     setPageError(null);
 
     const cleanEmail = email.trim().toLowerCase();
+    // persist email so step 5 can reuse
+    try {
+      sessionStorage.setItem(SKEY.EMAIL, cleanEmail);
+      localStorage.setItem(LKEY.SIGNUP_EMAIL, cleanEmail);
+    } catch {}
 
     setEState("sending");
 
-    // Try minimal payload - maybe backend expects different structure
-    const minimalPayload = {
-      step: 1,
+    // EXACTLY what your route expects for step 3:
+    const payload = {
+      step: 3,
       email: cleanEmail,
-      role: "AGENT",
-      mode: "SELF_CREATED",
-      deviceToken,
       ...(sessionId ? { sessionId } : {}),
     };
 
-    console.log("Trying minimal email payload:", minimalPayload);
-
-    const { r, data } = await callSignupV2(minimalPayload);
+    const { r, data } = await callSignupV2(payload);
 
     if (!r.ok || data?.success === false) {
       setEState("error");
       setPageError(
-        `Email verification unavailable. Please proceed with phone verification only.`
+        data?.message || data?.data?.message || "Couldn’t send email code."
       );
       return;
     }
@@ -412,23 +409,10 @@ export default function CreateExactDualOTP() {
     const code = eOtp.join("");
     if (code.length !== 4 || eState === "verifying") return;
 
-    const cleanEmail = email.trim().toLowerCase();
-    const e164 = phoneIsValid ? toE164(phone) : undefined;
-    const captchaToken = await getCaptchaToken("verify_email");
-
-    const payload: any = {
-      step: 1,
-      ...(e164 ? { phoneNumber: e164 } : {}),
-      email: cleanEmail,
+    // EXACTLY what your route expects for step 4:
+    const payload = {
+      step: 4,
       emailOtp: code,
-      otpChannel: "email",
-      channel: "EMAIL",
-      otpType: "EMAIL",
-      via: "EMAIL",
-      role: "AGENT",
-      mode: "SELF_CREATED",
-      deviceToken,
-      ...(captchaToken ? { captchaToken } : {}),
       ...(sessionId ? { sessionId } : {}),
     };
 
@@ -447,8 +431,9 @@ export default function CreateExactDualOTP() {
       return;
     }
 
-    // Persist any token backend may issue here (some do after both OTPs)
-    persistToken(getToken(data));
+    // If backend issues a token here, persist it
+    const token = getToken(data);
+    if (token) persistToken(token);
 
     saveSessionId(
       data?.sessionId || data?.data?.sessionId || data?.data?.data?.sessionId
@@ -536,23 +521,24 @@ export default function CreateExactDualOTP() {
     else if (e.key === "ArrowRight" && i < 3) refs.current[i + 1]?.focus();
   };
 
-  /** Continue */
-
-  // And update the goNext function:
+  /** Continue -> next step */
   const goNext = () => {
     if (!canContinue) return;
-
-    // Save the email for later use in personal details
     try {
-      sessionStorage.setItem("lw_flow_email", email.trim().toLowerCase());
+      const e164 = toE164(phone);
+      sessionStorage.setItem(SKEY.EMAIL, email.trim().toLowerCase());
+      sessionStorage.setItem(SKEY.PHONE, e164);
+      localStorage.setItem(LKEY.SIGNUP_PHONE, e164);
+      localStorage.setItem(LKEY.SIGNUP_SESSION, sessionId);
+      if (email)
+        localStorage.setItem(LKEY.SIGNUP_EMAIL, email.trim().toLowerCase());
     } catch {}
-
     router.push(
       `${NEXT_STEP_ROUTE}?sessionId=${encodeURIComponent(sessionId)}`
     );
   };
 
-  /** UI (unchanged look) */
+  /** UI */
   return (
     <div className="min-h-screen bg-white flex items-center justify-center p-0 md:p-4">
       <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-2xl md:shadow-xl overflow-hidden flex flex-col">
@@ -717,7 +703,7 @@ export default function CreateExactDualOTP() {
             Email
           </label>
 
-          {/* Email input row (button inside right) */}
+          {/* Email input row */}
           <div className="mt-2">
             <div className="relative">
               <div className="flex items-center gap-2 rounded-md bg-gray-100 px-3 py-2">
@@ -801,7 +787,7 @@ export default function CreateExactDualOTP() {
                     {eState === "verifying" ? (
                       <span className="text-gray-700">Verifying…</span>
                     ) : eState === "error" ? (
-                      <span className="text-red-600">Invalid code.</span>
+                      <span className="text-red-600">Invalid email code.</span>
                     ) : null}{" "}
                     {eState !== "verified" && (
                       <>

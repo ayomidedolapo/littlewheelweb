@@ -15,7 +15,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 
-/* ---------- tiny spinner ---------- */
+/* ---------- tiny spinner + overlay (same pattern) ---------- */
 function Spinner({ className = "w-5 h-5 text-black" }: { className?: string }) {
   return (
     <svg
@@ -40,8 +40,29 @@ function Spinner({ className = "w-5 h-5 text-black" }: { className?: string }) {
     </svg>
   );
 }
+function LoadingOverlay({
+  show,
+  label = "Loading…",
+}: {
+  show: boolean;
+  label?: string;
+}) {
+  if (!show) return null;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-[1px] flex items-center justify-center"
+    >
+      <div className="rounded-xl bg-white px-4 py-3 shadow-2xl flex items-center gap-3">
+        <Spinner />
+        <span className="text-[13px] font-semibold text-gray-900">{label}</span>
+      </div>
+    </div>
+  );
+}
 
-/* -------- shared types & helpers (mirrors your Customers page) -------- */
+/* -------- shared types & helpers -------- */
 type Customer = {
   id: string;
   firstName: string;
@@ -66,26 +87,12 @@ type APIVault = {
   amount?: number;
 };
 
-type VaultRow = {
-  id: string;
-  name: string;
-  balance: number;
-  target: number;
-  daily: number;
-};
-
 const C = {
   deposit: "#0F973D",
   vault: "#1671D9",
   withdraw: "#D42620",
 };
 
-function fmtNaira2(n: number) {
-  return `₦${n.toLocaleString("en-NG", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
 function fmtNairaCompact(v?: number | null) {
   if (typeof v !== "number") return "₦0.00";
   if (Math.abs(v) < 1000) {
@@ -338,7 +345,6 @@ export default function AllBeneficiariesPage() {
   const refresh = () =>
     startTransition(() => {
       router.refresh?.();
-      setTimeout(() => location.reload(), 40);
     });
 
   // dropdown close on outside click
@@ -351,7 +357,7 @@ export default function AllBeneficiariesPage() {
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [menuOpen]);
 
-  /* ---------- Load BENEFICIARIES (same endpoint as Customers page) ---------- */
+  /* ---------- Load BENEFICIARIES ---------- */
   useEffect(() => {
     let cancelled = false;
 
@@ -405,6 +411,110 @@ export default function AllBeneficiariesPage() {
     };
   }, []);
 
+  /* ---------- ENRICH vault balances (mirror of Customers page) ---------- */
+  useEffect(() => {
+    let cancelled = false;
+
+    async function getTotalBalanceFromAPI(customerId: string): Promise<number> {
+      const cache = readBalanceCache();
+      if (cache[customerId] != null) return cache[customerId];
+
+      // Primary: aggregated balance endpoint
+      try {
+        const r = await fetch(
+          `/api/v1/agent/customers/${encodeURIComponent(
+            customerId
+          )}/vaults/balance`,
+          {
+            cache: "no-store",
+            credentials: "include",
+          }
+        );
+        if (r.ok) {
+          const j = await r.json().catch(() => ({}));
+          const bal = Number(j?.balance ?? j?.data?.balance ?? 0) || 0;
+          const next = { ...cache, [customerId]: bal };
+          writeBalanceCache(next);
+          return bal;
+        }
+      } catch {}
+
+      // Fallback: sum ongoing vaults balances
+      try {
+        const listRes = await fetch(
+          `/api/v1/agent/customers/${customerId}/vaults?status=ONGOING`,
+          {
+            cache: "no-store",
+            credentials: "include",
+          }
+        );
+        if (!listRes.ok) return 0;
+        const listJ = await listRes.json().catch(() => ({}));
+        const apiVaults: APIVault[] = extractArray(listJ);
+
+        let total = 0;
+        for (const v of apiVaults || []) {
+          const apiId = v.id || v.vaultId || v._id || "";
+          if (!apiId) continue;
+          try {
+            const vr = await fetch(
+              `/api/v1/agent/customers/${customerId}/vaults/${apiId}`,
+              {
+                cache: "no-store",
+                credentials: "include",
+              }
+            );
+            if (!vr.ok) continue;
+            const vj = await vr.json().catch(() => ({}));
+            const d = vj?.data ?? vj ?? {};
+            const bal =
+              Number(
+                d.availableBalance ??
+                  d.currentAmount ??
+                  d.currentBalance ??
+                  d.amount ??
+                  d.balance ??
+                  0
+              ) || 0;
+            total += bal;
+          } catch {}
+        }
+
+        const next = { ...cache, [customerId]: total };
+        writeBalanceCache(next);
+        return total;
+      } catch {
+        return 0;
+      }
+    }
+
+    async function enrich(list: Customer[]) {
+      if (!list.length) return;
+      const ids = list.map((c) => c.id).filter(Boolean);
+      const CONCURRENCY = 4;
+      let i = 0;
+
+      async function worker() {
+        while (i < ids.length) {
+          const idx = i++;
+          const cid = ids[idx];
+          const bal = await getTotalBalanceFromAPI(cid);
+          if (cancelled) return;
+          setBeneficiaries((prev) =>
+            prev.map((c) => (c.id === cid ? { ...c, vaultBalance: bal } : c))
+          );
+        }
+      }
+
+      await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+    }
+
+    if (beneficiaries.length) enrich(beneficiaries);
+    return () => {
+      cancelled = true;
+    };
+  }, [beneficiaries.length]);
+
   /* ---------- Visible list (by selected filter) ---------- */
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -429,7 +539,7 @@ export default function AllBeneficiariesPage() {
     );
   }, [beneficiaries, query, filter]);
 
-  /* ---------- Card actions (same as Customers page) ---------- */
+  /* ---------- Card actions ---------- */
   const openPicker = (mode: "deposit" | "withdraw", customerId: string) => {
     setFlow(mode);
     setSelectedCustomerId(customerId);
@@ -452,7 +562,13 @@ export default function AllBeneficiariesPage() {
   const navDisabled = isRouting;
 
   return (
-    <div className="min-h-screen bg-white flex items-start justify-center p-0 md:p-4">
+    <div
+      className="min-h-screen bg-white flex items-start justify-center p-0 md:p-4"
+      aria-busy={isRouting}
+    >
+      {/* global overlay while routing */}
+      <LoadingOverlay show={isRouting} />
+
       <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-3xl md:shadow-xl overflow-hidden">
         {/* Top Bar */}
         <div className="px-4 pt-6 pb-2 bg-white flex items-center justify-between">
@@ -617,7 +733,7 @@ export default function AllBeneficiariesPage() {
                       </div>
                     </div>
 
-                    {/* Middle: balance + phone (phone shown without +234/234/leading 0) */}
+                    {/* Middle: balance + phone */}
                     <div className="flex items-center justify-between text-xs">
                       <p className="text-gray-600">
                         Vault Balance:{" "}
@@ -636,7 +752,7 @@ export default function AllBeneficiariesPage() {
                       </p>
                     </div>
 
-                    {/* Actions row (same as Customers page) */}
+                    {/* Actions row */}
                     <div className="mt-3 flex items-center gap-8 text-[13px] font-semibold">
                       <button
                         type="button"
@@ -730,7 +846,8 @@ export default function AllBeneficiariesPage() {
                     )}`
                   );
                 }}
-                className="w-full h-12 rounded-xl bg-black text-white font-semibold"
+                className="w-full h-12 rounded-xl bg-black text-white font-semibold disabled:opacity-60"
+                disabled={navDisabled}
               >
                 Deposit
               </button>
@@ -745,7 +862,8 @@ export default function AllBeneficiariesPage() {
                     )}`
                   );
                 }}
-                className="w-full h-12 rounded-xl bg-gray-200 text-gray-900 font-semibold"
+                className="w-full h-12 rounded-xl bg-gray-200 text-gray-900 font-semibold disabled:opacity-60"
+                disabled={navDisabled}
               >
                 Withdraw
               </button>
