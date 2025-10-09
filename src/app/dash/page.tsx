@@ -110,22 +110,36 @@ export default function MobileDashboard() {
     if (username) return username;
     return "User";
   }
+
+  /* ---------- FIX ONLY HERE: widen mapping to support { VirtualAccount: { name, number, provider } } ---------- */
   function pickVirtualAccount(obj: any): VirtualAccount | null {
     if (!obj) return null;
+
     const direct =
       obj.virtualAccount ||
       obj.virtual_account ||
       obj.virtual ||
       obj.VirtualAccount;
-    if (direct && (direct.accountNumber || direct.account_number)) {
+
+    const normalize = (src: any): VirtualAccount | null => {
+      if (!src) return null;
+      const accountNumber = String(
+        src.accountNumber || src.account_number || src.number || ""
+      ).trim();
+      if (!accountNumber) return null;
       return {
-        bankName: direct.bankName || direct.bank || direct.bank_name,
-        accountNumber: String(
-          direct.accountNumber || direct.account_number || ""
-        ),
-        accountName: direct.accountName || direct.account_name,
+        bankName:
+          src.bankName || src.bank || src.bank_name || src.provider || "",
+        accountNumber,
+        accountName: src.accountName || src.account_name || src.name || "",
       };
-    }
+    };
+
+    // 1) Direct object
+    const d = normalize(direct);
+    if (d) return d;
+
+    // 2) Look through arrays
     const arr = obj.accounts || obj.bankAccounts || obj.bank_accounts || [];
     if (Array.isArray(arr)) {
       const v =
@@ -136,33 +150,40 @@ export default function MobileDashboard() {
               .toLowerCase()
               .includes("virtual") || a.isVirtual === true
         ) || null;
-      if (v) {
-        return {
-          bankName: v.bankName || v.bank || v.bank_name,
-          accountNumber: String(v.accountNumber || v.account_number || ""),
-          accountName: v.accountName || v.account_name,
-        };
-      }
+      const n = normalize(v);
+      if (n) return n;
     }
+
+    // 3) Flat fields on the user
     const num =
       obj.virtualAccountNumber ||
       obj.virtual_account_number ||
       obj.vAccountNumber ||
-      obj.accountNumber;
+      obj.accountNumber ||
+      obj.number;
     if (num) {
       return {
         bankName:
           obj.virtualBankName ||
           obj.bankName ||
           obj.bank ||
-          obj.virtual_bank_name,
-        accountNumber: String(num),
+          obj.virtual_bank_name ||
+          obj.provider ||
+          "",
+        accountNumber: String(num).trim(),
         accountName:
-          obj.virtualAccountName || obj.accountName || obj.account_name,
+          obj.virtualAccountName ||
+          obj.accountName ||
+          obj.account_name ||
+          obj.name ||
+          "",
       };
     }
+
     return null;
   }
+  /* ---------- END FIX ---------- */
+
   function pickIsTier2(obj: any): boolean {
     if (!obj) return false;
     const accountTier = (obj.accountTier || obj.account_tier || "").toString();
