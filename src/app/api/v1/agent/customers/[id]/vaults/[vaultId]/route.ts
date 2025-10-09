@@ -5,9 +5,18 @@ import { cookies as cookiesFn, headers as headersFn } from "next/headers";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const BASE = (process.env.BACKEND_API_URL || "").replace(/\/+$/, "");
-const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS ?? 45000);
+const RAW = (process.env.VITA_API || "").replace(/\/+$/, "");
+const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS ?? 45_000);
 const ROUTE_REV = "vaults-detail-R4";
+
+/* ---------- ensure exactly one /v1 on base ---------- */
+function withV1(base: string) {
+  if (!base) return "";
+  const lower = base.toLowerCase();
+  if (lower.endsWith("/v1") || lower.includes("/v1/")) return base;
+  return `${base}/v1`;
+}
+const API_V1 = withV1(RAW);
 
 /* ---------- small helpers ---------- */
 async function getCookieStore() {
@@ -20,9 +29,7 @@ async function getHeadersStore() {
 }
 function joinUpstream(path: string) {
   const p = path.startsWith("/") ? path : `/${path}`;
-  if (BASE.endsWith("/v1") && p.startsWith("/v1"))
-    return BASE + p.replace(/^\/v1/, "");
-  return BASE + p;
+  return `${API_V1}${p}`;
 }
 function fetchWithTimeout(
   input: RequestInfo | URL,
@@ -173,9 +180,9 @@ export async function GET(
       ? (ctx.params as any)
       : ctx.params);
 
-    if (!BASE)
+    if (!API_V1)
       return jsonOut(
-        { success: false, where: "route", message: "Missing BACKEND_API_URL" },
+        { success: false, where: "route", message: "Missing VITA_API" },
         500
       );
     if (!id || !vaultId)

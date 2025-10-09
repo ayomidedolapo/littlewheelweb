@@ -14,11 +14,7 @@ export default function HomeScreen() {
     >
       <div className="absolute inset-0 bg-black/40" />
 
-      {/* Blur effect for bottom section with softer, brushed edges */}
-      {/* <div className="absolute bottom-0 left-0 right-0 h-48 bg-gradient-to-t from-black/70 via-black/40 to-black/5 backdrop-blur-sm" />
-      <div className="absolute bottom-0 left-0 right-0 h-56 bg-gradient-to-t from-transparent via-black/10 to-transparent opacity-60" /> */}
-
-      {/* Main content area - centered with top and bottom spacing */}
+      {/* Main content area */}
       <div className="flex flex-col items-center text-center space-y-8 z-10 px-6 max-w-4xl mt-8 mb-20">
         <div className="px-4 py-2 w-fit bg-white bg-opacity-90 rounded-full flex items-center justify-center gap-3 text-black font-semibold">
           Be the Surest Plug
@@ -67,17 +63,51 @@ export default function HomeScreen() {
         </div>
       </div>
 
-      {/* Bottom licensing section with spacing from bottom */}
-      <div className="absolute bottom-0 left-0 right-0 z-10 pb-12 pt-4 px-6">
-        <div className="flex flex-wrap items-center justify-center gap-6 text-white text-sm">
-          <div className="flex items-center gap-2">
-            <CBN />
-          </div>
-          <div className="flex items-center gap-2">
-            <NDIC />
-          </div>
-          <div className="flex items-center gap-2">
-            <Fortress />
+      {/* Bottom licensing section (hidden on mobile) */}
+      <div
+        className="hidden md:block absolute inset-x-0 bottom-0 z-10 px-4 pt-3"
+        style={{
+          paddingBottom: "calc(env(safe-area-inset-bottom,0px) + 1rem)",
+        }}
+      >
+        <div className="mx-auto max-w-5xl">
+          <div
+            className="
+              grid grid-cols-3
+              items-center justify-items-center
+              gap-x-8 gap-y-4
+              text-white text-xs
+            "
+          >
+            {/* CBN */}
+            <div className="flex items-center justify-center">
+              <div className="hidden md:block lg:hidden">
+                <CBN size={112} />
+              </div>
+              <div className="hidden lg:block">
+                <CBN size={144} />
+              </div>
+            </div>
+
+            {/* NDIC */}
+            <div className="flex items-center justify-center">
+              <div className="hidden md:block lg:hidden">
+                <NDIC size={150} />
+              </div>
+              <div className="hidden lg:block">
+                <NDIC size={180} />
+              </div>
+            </div>
+
+            {/* Fortress */}
+            <div className="flex items-center justify-center">
+              <div className="hidden md:block lg:hidden">
+                <Fortress size={128} />
+              </div>
+              <div className="hidden lg:block">
+                <Fortress size={160} />
+              </div>
+            </div>
           </div>
         </div>
       </div>
