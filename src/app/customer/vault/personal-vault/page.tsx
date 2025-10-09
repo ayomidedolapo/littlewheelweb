@@ -1,6 +1,7 @@
-/* app/customer/personal-vault/page.tsx */
+/* app/customer/vault/personal-vault/page.tsx */
 "use client";
 
+import { Suspense } from "react";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
@@ -97,7 +98,9 @@ type VaultRow = {
   daily: number;
 };
 
-export default function PersonalVaultCustomerPage() {
+/* ================= Inner component that uses useSearchParams ================= */
+
+function PersonalVaultCustomerPageInner() {
   const router = useRouter();
   const sp = useSearchParams();
 
@@ -811,5 +814,15 @@ export default function PersonalVaultCustomerPage() {
         )}
       </div>
     </>
+  );
+}
+
+/* ================= Wrapper with Suspense ================= */
+
+export default function PersonalVaultCustomerPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-white" />}>
+      <PersonalVaultCustomerPageInner />
+    </Suspense>
   );
 }

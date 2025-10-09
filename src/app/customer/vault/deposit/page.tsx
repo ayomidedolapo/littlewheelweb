@@ -1,7 +1,7 @@
 /* app/customer/vault/deposit/page.tsx */
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { Suspense, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, HelpCircle, X, Check, AlertCircle } from "lucide-react";
 import Image from "next/image";
@@ -48,7 +48,7 @@ function getAuthToken(): string {
   }
 }
 
-function toNumber(x: any): number {
+function toNumber(x: string | number | undefined): number {
   if (typeof x === "number" && Number.isFinite(x)) return x;
   if (typeof x === "string") {
     const cleaned = x.replace(/,/g, "");
@@ -76,17 +76,16 @@ type VaultDetail = {
   currentBalance?: number;
 };
 
-export default function DepositToVaultPage() {
+/* ---------------- wrapper component ---------------- */
+function DepositInner() {
   const router = useRouter();
   const sp = useSearchParams();
 
-  // ✅ global route spinner (same pattern as other pages)
   const [isRouting, startTransition] = useTransition();
 
   const customerId = getActiveCustomerId(sp);
   const vaultId = sp.get("vaultId") || "";
 
-  /* -------- state -------- */
   const [amount, setAmount] = useState<string>("");
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(true);
@@ -97,14 +96,12 @@ export default function DepositToVaultPage() {
   const [vault, setVault] = useState<VaultDetail | null>(null);
   const [vaultBalance, setVaultBalance] = useState<number>(0);
 
-  // balances from the shared hook
   const {
     creditBalance,
     loading: balancesLoading,
     refresh: refreshBalances,
   } = useAgentBalances();
 
-  // Bottom sheets
   const [previewOpen, setPreviewOpen] = useState(false);
   const [pinOpen, setPinOpen] = useState(false);
   const [pinDigits, setPinDigits] = useState(["", "", "", ""]);
@@ -112,7 +109,6 @@ export default function DepositToVaultPage() {
   const [successOpen, setSuccessOpen] = useState(false);
   const [depositedAmount, setDepositedAmount] = useState<number>(0);
 
-  // token (stable)
   const tokenRef = useRef<string>("");
   if (!tokenRef.current && typeof window !== "undefined") {
     tokenRef.current = getAuthToken();
@@ -121,7 +117,6 @@ export default function DepositToVaultPage() {
 
   const pin = pinDigits.join("");
 
-  /* -------- persist scoped customerId if present -------- */
   useEffect(() => {
     const cid = sp.get("customerId");
     if (cid) {
@@ -130,10 +125,8 @@ export default function DepositToVaultPage() {
         sessionStorage.removeItem("lw_onboarding_customer_id");
       } catch {}
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [sp]);
 
-  /* -------- load header info and vault detail -------- */
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -148,7 +141,6 @@ export default function DepositToVaultPage() {
           ? { Authorization: `Bearer ${token}` }
           : {};
 
-        // customer header
         const cRes = await fetch(`/api/v1/agent/customers/${customerId}`, {
           cache: "no-store",
           headers,
@@ -165,7 +157,6 @@ export default function DepositToVaultPage() {
           avatar: c.avatar || null,
         };
 
-        // vault detail
         const vRes = await fetch(
           `/api/v1/agent/customers/${customerId}/vaults/${vaultId}`,
           { cache: "no-store", headers }
@@ -188,8 +179,12 @@ export default function DepositToVaultPage() {
         }
 
         refreshBalances();
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message || "Failed to load details.");
+      } catch (e: unknown) {
+        const msg =
+          typeof e === "object" && e && "message" in e
+            ? String((e as any).message)
+            : "Failed to load details.";
+        if (!cancelled) setError(msg);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -199,13 +194,11 @@ export default function DepositToVaultPage() {
     };
   }, [customerId, vaultId, token, refreshBalances]);
 
-  /* -------- handlers -------- */
   const setQuick = (n: number) => setAmount(String(n));
 
   const openPreview = () => {
     const n = Math.abs(toNumber(amount));
     if (!n || n <= 0) return;
-
     if (n > creditBalance) {
       setError(
         `Insufficient credit balance. Available: ${NGN(
@@ -214,7 +207,6 @@ export default function DepositToVaultPage() {
       );
       return;
     }
-
     setError(null);
     setPreviewOpen(true);
   };
@@ -224,13 +216,6 @@ export default function DepositToVaultPage() {
     setPinError(null);
     setPinDigits(["", "", "", ""]);
     setTimeout(() => setPinOpen(true), 80);
-  };
-
-  const setPinAt = (i: number, val: string) => {
-    if (!/^\d?$/.test(val)) return;
-    const nxt = [...pinDigits];
-    nxt[i] = val;
-    setPinDigits(nxt);
   };
 
   const canProceed = () => {
@@ -245,7 +230,6 @@ export default function DepositToVaultPage() {
       return;
     }
     const n = Math.abs(toNumber(amount));
-
     if (n > creditBalance) {
       setPinError(
         `Insufficient credit balance. Available: ${NGN(creditBalance)}.`
@@ -256,7 +240,6 @@ export default function DepositToVaultPage() {
     try {
       setSubmitting(true);
       setPinError(null);
-
       const headers: HeadersInit = {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -277,19 +260,14 @@ export default function DepositToVaultPage() {
       );
 
       const j = await res.json().catch(() => ({}));
-      if (!res.ok) {
+      if (!res.ok)
         throw new Error(j?.message || `Deposit failed (HTTP ${res.status}).`);
-      }
 
-      // success
       setPinOpen(false);
       setDepositedAmount(n);
       setSuccessOpen(true);
-
-      // optimistic updates
       setVaultBalance((b) => (b || 0) + n);
       setTimeout(() => refreshBalances(), 400);
-
       setAmount("");
       setNote("");
     } catch (e: any) {
@@ -302,7 +280,6 @@ export default function DepositToVaultPage() {
   const fullName =
     `${customer?.firstName || ""} ${customer?.lastName || ""}`.trim() ||
     "Customer";
-
   const avatarSrc =
     customer?.avatarUrl || customer?.profileImageUrl || customer?.avatar || "";
 
@@ -355,7 +332,7 @@ export default function DepositToVaultPage() {
                     <p className="text-sm font-semibold text-gray-900 truncate">
                       {loading ? (
                         <span className="inline-flex items-center gap-2">
-                          <LogoSpinner className="w-3.5 h-3.5" /> …
+                          <LogoSpinner show={true} /> …
                         </span>
                       ) : (
                         fullName
@@ -387,7 +364,7 @@ export default function DepositToVaultPage() {
                   <span className="font-semibold inline-flex items-center gap-2">
                     {balancesLoading ? (
                       <>
-                        <LogoSpinner className="w-3.5 h-3.5" />
+                        <LogoSpinner show={true} />
                         <span>Fetching…</span>
                       </>
                     ) : (
@@ -414,7 +391,7 @@ export default function DepositToVaultPage() {
                 <span className="font-semibold text-emerald-600">
                   {loading ? (
                     <span className="inline-flex items-center gap-2">
-                      <LogoSpinner className="w-3.5 h-3.5" /> …
+                      <LogoSpinner show={true} /> …
                     </span>
                   ) : (
                     NGN(vaultBalance)
@@ -441,6 +418,8 @@ export default function DepositToVaultPage() {
                 rows={3}
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
+                placeholder="Add a note (optional)"
+                title="Notes for this deposit (optional)"
                 className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black resize-none"
               />
             </div>
@@ -494,6 +473,7 @@ export default function DepositToVaultPage() {
                 <button
                   onClick={() => setPreviewOpen(false)}
                   className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center"
+                  title="Close preview"
                 >
                   <X className="w-4 h-4 text-gray-700" />
                 </button>
@@ -566,6 +546,7 @@ export default function DepositToVaultPage() {
                 <button
                   onClick={() => !submitting && setPinOpen(false)}
                   className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center"
+                  title="Close PIN entry"
                 >
                   <X className="w-4 h-4 text-gray-700" />
                 </button>
@@ -578,6 +559,8 @@ export default function DepositToVaultPage() {
                     value={d}
                     inputMode="numeric"
                     maxLength={1}
+                    placeholder="•"
+                    title={`PIN digit ${i + 1}`}
                     onChange={(e) => {
                       const v = e.target.value
                         .replace(/[^\d]/g, "")
@@ -628,7 +611,7 @@ export default function DepositToVaultPage() {
               >
                 {submitting ? (
                   <span className="inline-flex items-center gap-2">
-                    <LogoSpinner className="w-4 h-4" /> Processing…
+                    <LogoSpinner show={true} /> Processing…
                   </span>
                 ) : (
                   "Confirm Deposit"
@@ -683,5 +666,14 @@ export default function DepositToVaultPage() {
         </div>
       </div>
     </>
+  );
+}
+
+/* ✅ Suspense wrapper fix */
+export default function DepositToVaultPage() {
+  return (
+    <Suspense fallback={<LogoSpinner show={true} />}>
+      <DepositInner />
+    </Suspense>
   );
 }

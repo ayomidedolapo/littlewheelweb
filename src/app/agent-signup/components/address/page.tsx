@@ -1,6 +1,7 @@
+/* app/agent-signup/components/address/page.tsx */
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
@@ -10,7 +11,7 @@ import {
   Building2,
   Globe2,
 } from "lucide-react";
-import LogoSpinner from "../../../../components/loaders/LogoSpinner"; // ← update path if your folders differ
+import LogoSpinner from "../../../../components/loaders/LogoSpinner"; // ← update path if needed
 
 const FALLBACK_AFTER_ADDRESS = "/agent-login";
 
@@ -82,7 +83,8 @@ function getCookie(name: string) {
   return m ? decodeURIComponent(m[2]) : "";
 }
 
-export default function AddressPage() {
+/* ================= Inner component that uses useSearchParams ================= */
+function AddressPageInner() {
   const router = useRouter();
   const sp = useSearchParams();
 
@@ -496,5 +498,14 @@ export default function AddressPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+/* ================= Wrapper with Suspense (fixes CSR bailout error) ================= */
+export default function AddressPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+      <AddressPageInner />
+    </Suspense>
   );
 }

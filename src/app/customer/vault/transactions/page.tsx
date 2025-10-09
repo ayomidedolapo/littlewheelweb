@@ -1,6 +1,7 @@
+/* app/customer/vault/transactions/page.tsx */
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { Suspense, useEffect, useMemo, useState, useTransition } from "react";
 import { ArrowLeft, Check, Search } from "lucide-react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -99,9 +100,9 @@ function getAuthToken(): string {
   }
 }
 
-/* ---------------- page ---------------- */
+/* ===================== Inner component (uses useSearchParams) ===================== */
 
-export default function VaultTransactionsPage() {
+function VaultTransactionsPageInner() {
   const router = useRouter();
   const sp = useSearchParams();
 
@@ -429,5 +430,15 @@ export default function VaultTransactionsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+/* ===================== Wrapper with Suspense (fixes the build error) ===================== */
+
+export default function VaultTransactionsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-white" />}>
+      <VaultTransactionsPageInner />
+    </Suspense>
   );
 }

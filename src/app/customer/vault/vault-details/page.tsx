@@ -1,7 +1,7 @@
 /* app/customer/vault/vault-details/page.tsx */
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { Suspense, useEffect, useMemo, useState, useTransition } from "react";
 import { ArrowLeft, HelpCircle } from "lucide-react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -99,8 +99,9 @@ function getAuthToken(): string {
   }
 }
 
-/* ---------- page ---------- */
-export default function VaultDetailsPage() {
+/* ============================ Inner (uses useSearchParams) ============================ */
+
+function VaultDetailsPageInner() {
   const router = useRouter();
   const sp = useSearchParams();
 
@@ -371,5 +372,15 @@ export default function VaultDetailsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+/* ============================ Wrapper with Suspense ============================ */
+
+export default function VaultDetailsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-white" />}>
+      <VaultDetailsPageInner />
+    </Suspense>
   );
 }
