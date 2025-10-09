@@ -1,7 +1,14 @@
 /* app/customer/vault/create/page.tsx */
 "use client";
 
-import { useMemo, useState, useEffect, useRef, useTransition } from "react";
+import {
+  useMemo,
+  useState,
+  useEffect,
+  useRef,
+  useTransition,
+  Suspense,
+} from "react";
 import { ArrowLeft, HelpCircle, Check } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import LogoSpinner from "../../../../components/loaders/LogoSpinner";
@@ -28,7 +35,7 @@ const makeSafeSlug = (name: string, id: string) => {
     (id || "")
       .toString()
       .replace(/[^a-zA-Z0-9]/g, "")
-      .slice(-6) || Math.random().toString(36).slice(-6);
+      .slice(-6) || Math.random().toString(36).slice(6);
   return `${base}-${tail}`;
 };
 
@@ -89,8 +96,23 @@ function resolveStartDate(when: StartWhen): string {
 /** JS 0..6 -> ISO 1..7 */
 const toIsoDow = (js: number) => (js === 0 ? 7 : js);
 
-/* ---------- page ---------- */
+/* ---------- Suspense wrapper (✅ fixes the error) ---------- */
 export default function CreateSavingsVaultPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-white flex items-center justify-center">
+          <LogoSpinner show />
+        </div>
+      }
+    >
+      <CreateSavingsVaultPageInner />
+    </Suspense>
+  );
+}
+
+/* ---------- page (unchanged UI/logic) ---------- */
+function CreateSavingsVaultPageInner() {
   const router = useRouter();
   const sp = useSearchParams();
   const [isRouting, startTransition] = useTransition();
@@ -500,7 +522,7 @@ export default function CreateSavingsVaultPage() {
             >
               {submitting ? (
                 <span className="inline-flex items-center gap-2">
-                  <LogoSpinner className="w-4 h-4" /> Creating…
+                  <LogoSpinner show={true} /> Creating…
                 </span>
               ) : (
                 "Create vault"

@@ -1,7 +1,7 @@
-/* app/dash/components/transactions/page.tsx */
+/* app/dash/fulltransaction/page.tsx */
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
@@ -174,8 +174,23 @@ function matchTab(tab: TabKey, t: Txn) {
   }
 }
 
-/* --------------------------- Page --------------------------- */
+/* --------------------------- Suspense wrapper --------------------------- */
 export default function FullTransactionsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-white flex items-center justify-center">
+          <LogoSpinner show />
+        </div>
+      }
+    >
+      <FullTransactionsPageInner />
+    </Suspense>
+  );
+}
+
+/* --------------------------- Page (inner) --------------------------- */
+function FullTransactionsPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -285,7 +300,7 @@ export default function FullTransactionsPage() {
   return (
     <div className="min-h-screen bg-white">
       {/* ✅ Centered logo spinner overlay while fetching */}
-      <LogoSpinner show={loading} invert blurStrength={2} />
+      <LogoSpinner show={loading} invert />
 
       {/* Top bar */}
       <div className="sticky top-0 z-10 bg-white">

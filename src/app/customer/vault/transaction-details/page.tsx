@@ -1,6 +1,7 @@
 /* app/customer/vault/transaction-details/page.tsx */
 "use client";
 
+import { Suspense } from "react";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
@@ -106,9 +107,9 @@ type Tx = {
   vaultId?: string | null;
 };
 
-/* ---------------- component ---------------- */
+/* ---------------- inner component (unchanged logic) ---------------- */
 
-export default function TransactionDetailsPage() {
+function TransactionDetailsPageInner() {
   const router = useRouter();
   const sp = useSearchParams();
 
@@ -660,5 +661,15 @@ export default function TransactionDetailsPage() {
         )}
       </div>
     </div>
+  );
+}
+
+/* ---------------- wrapper with Suspense ---------------- */
+
+export default function TransactionDetailsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#F4F6FA]" />}>
+      <TransactionDetailsPageInner />
+    </Suspense>
   );
 }

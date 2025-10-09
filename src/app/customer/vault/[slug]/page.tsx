@@ -352,7 +352,7 @@ export default function VaultDetailPage() {
             <h1 className="text-[15px] font-semibold text-gray-900">{name}</h1>
             {txLoading && (
               <span className="inline-flex items-center gap-1 text-[11px] text-gray-500">
-                <LogoSpinner show={true} className="w-3.5 h-3.5" />
+                <LogoSpinner show={true} />
                 syncing…
               </span>
             )}
@@ -362,7 +362,7 @@ export default function VaultDetailPage() {
             /* ---------- Loading (LogoSpinner only) ---------- */
             <div className="px-4 py-12 flex items-center justify-center">
               <span className="inline-flex items-center gap-2 text-sm text-gray-700">
-                <LogoSpinner show={true} className="w-5 h-5" />
+                <LogoSpinner show={true} />
                 Loading vault…
               </span>
             </div>
@@ -494,7 +494,7 @@ export default function VaultDetailPage() {
                   {txLoading ? (
                     <div className="h-28 rounded-xl bg-gray-50 flex items-center justify-center">
                       <span className="inline-flex items-center gap-2 text-sm text-gray-600">
-                        <LogoSpinner show={true} className="w-5 h-5" />
+                        <LogoSpinner show={true} />
                         Loading transactions…
                       </span>
                     </div>
@@ -596,7 +596,7 @@ export default function VaultDetailPage() {
               >
                 {closing ? (
                   <>
-                    <LogoSpinner show={true} className="w-4 h-4" /> Closing…
+                    <LogoSpinner show={true} /> Closing…
                   </>
                 ) : (
                   "Close Vault"

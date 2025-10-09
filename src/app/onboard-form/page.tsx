@@ -157,7 +157,7 @@ export default function MobileSignup() {
                     alt="Nigeria Flag"
                     width={24}
                     height={24}
-                    className="w-full h-full object-contain"
+                    className="w-full h-full"
                   />
                 </div>
                 <span className="text-gray-700 font-bold text-sm">+234</span>

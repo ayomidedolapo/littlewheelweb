@@ -1,6 +1,7 @@
+/* app/agent-signup/components/personal-details/page.tsx */
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
@@ -37,7 +38,8 @@ function todayISO() {
 const onlyDigits = (v: string) => v.replace(/\D/g, "");
 const isValidUsername = (v: string) => /^[a-zA-Z0-9._-]{3,32}$/.test(v.trim());
 
-export default function PersonalDetailsPage() {
+/* ================== Inner component (uses useSearchParams) ================== */
+function PersonalDetailsInner() {
   const router = useRouter();
   const sp = useSearchParams();
 
@@ -334,7 +336,7 @@ export default function PersonalDetailsPage() {
         return;
       }
 
-      /* ---------- NEW: persist first name for the Welcome page ---------- */
+      // Persist first name for welcome page
       try {
         const fn = firstName.trim();
         if (fn) {
@@ -342,7 +344,6 @@ export default function PersonalDetailsPage() {
           localStorage.setItem("lw_first_name", fn);
         }
       } catch {}
-      /* ------------------------------------------------------------------ */
 
       router.push(NEXT_STEP_ROUTE);
     } catch (e: any) {
@@ -694,5 +695,14 @@ export default function PersonalDetailsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+/* ================== Wrapper with Suspense (fixes CSR bailout) ================== */
+export default function PersonalDetailsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-white" />}>
+      <PersonalDetailsInner />
+    </Suspense>
   );
 }

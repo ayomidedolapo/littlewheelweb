@@ -1,7 +1,14 @@
 /* app/customer/vault/page.tsx */
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  Suspense,
+} from "react";
 import {
   ArrowLeft,
   Plus,
@@ -115,8 +122,23 @@ async function apiGet(url: string, token: string, signal?: AbortSignal) {
   return r;
 }
 
-/* ============================ Page ============================ */
+/* ============================ Suspense wrapper ============================ */
 export default function CustomerVaultPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-white flex items-center justify-center">
+          <LogoSpinner show />
+        </div>
+      }
+    >
+      <CustomerVaultPageInner />
+    </Suspense>
+  );
+}
+
+/* ============================ Page (inner) ============================ */
+function CustomerVaultPageInner() {
   const router = useRouter();
   const sp = useSearchParams();
 
@@ -413,7 +435,7 @@ export default function CustomerVaultPage() {
               <div className="text-[28px] leading-none font-extrabold tracking-tight mb-6">
                 {loading ? (
                   <span className="inline-flex items-center gap-2">
-                    <LogoSpinner show={true} className="w-5 h-5" />
+                    <LogoSpinner show={true} />
                     Loading…
                   </span>
                 ) : (
@@ -427,7 +449,7 @@ export default function CustomerVaultPage() {
                   <span className="font-semibold">
                     {loading ? (
                       <span className="inline-flex items-center gap-2">
-                        <LogoSpinner show={true} className="w-4 h-4" />…
+                        <LogoSpinner show={true} />…
                       </span>
                     ) : (
                       formatNGN(withdrawable)
@@ -488,7 +510,7 @@ export default function CustomerVaultPage() {
             {loading ? (
               <div className="px-1 py-6 flex items-center justify-center">
                 <span className="inline-flex items-center gap-2 text-sm text-gray-700">
-                  <LogoSpinner show={true} className="w-5 h-5" />
+                  <LogoSpinner show={true} />
                   Loading vaults…
                 </span>
               </div>
@@ -579,7 +601,7 @@ export default function CustomerVaultPage() {
               {txLoading ? (
                 <div className="px-3 py-4 flex items-center justify-center">
                   <span className="inline-flex items-center gap-2 text-sm text-gray-700">
-                    <LogoSpinner show={true} className="w-5 h-5" />
+                    <LogoSpinner show={true} />
                     Loading transactions…
                   </span>
                 </div>

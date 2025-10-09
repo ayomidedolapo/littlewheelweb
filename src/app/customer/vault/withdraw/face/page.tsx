@@ -1,7 +1,7 @@
 /* app/customer/vault/withdraw/face/page.tsx */
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronLeft,
@@ -36,8 +36,9 @@ function getAuthToken(): string {
   }
 }
 
-/* ---------------- page ---------------- */
-export default function FaceCapturePage() {
+/* ======================= Inner (uses useSearchParams) ======================= */
+
+function FaceCapturePageInner() {
   const router = useRouter();
   const sp = useSearchParams();
 
@@ -219,7 +220,6 @@ export default function FaceCapturePage() {
       setSubmitting(true);
 
       const payload: Record<string, any> = {
-        // include multiple synonymous keys in case API expects a specific one
         selfieImageURL: img,
         selfieImage: img,
         image: img,
@@ -450,7 +450,6 @@ export default function FaceCapturePage() {
             <button
               onClick={() => {
                 setSuccessOpen(false);
-                // preserve scoped customerId on return
                 const q = new URLSearchParams();
                 if (customerId) q.set("customerId", customerId);
                 router.push(`/customer/vault?${q.toString()}`);
@@ -463,5 +462,15 @@ export default function FaceCapturePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+/* ======================= Wrapper with Suspense ======================= */
+
+export default function FaceCapturePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-white" />}>
+      <FaceCapturePageInner />
+    </Suspense>
   );
 }

@@ -1,25 +1,29 @@
+/* app/agent-signup/components/term/page.tsx */
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import LogoSpinner from "../../../../components/loaders/LogoSpinner"; // adjust the path if needed
+import LogoSpinner from "../../../../components/loaders/LogoSpinner"; // adjust if needed
 
-export default function TermsAndConditions() {
+function TermsInner() {
   const router = useRouter();
   const sp = useSearchParams();
-  const returnTo = sp.get("returnTo") || ""; // optional ?returnTo=/where/next
-
+  const returnTo = sp.get("returnTo") || "";
   const [agreeing, setAgreeing] = useState(false);
 
   const agree = () => {
     if (agreeing) return;
     setAgreeing(true);
+
     try {
       localStorage.setItem(
         "lw_terms_accepted",
         JSON.stringify({ at: new Date().toISOString(), version: "1.0" })
       );
-    } catch {}
+    } catch (err) {
+      console.warn("Failed to save terms acceptance:", err);
+    }
+
     if (returnTo) router.push(returnTo);
     else router.back();
   };
@@ -269,5 +273,13 @@ export default function TermsAndConditions() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function TermsAndConditions() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-white" />}>
+      <TermsInner />
+    </Suspense>
   );
 }
