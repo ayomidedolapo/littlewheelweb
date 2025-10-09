@@ -12,53 +12,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
-
-/* ---------- tiny spinner + overlay (same pattern) ---------- */
-function Spinner({ className = "w-5 h-5 text-black" }: { className?: string }) {
-  return (
-    <svg
-      className={`animate-spin ${className}`}
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <circle
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="4"
-        fill="none"
-        className="opacity-25"
-      />
-      <path
-        fill="currentColor"
-        className="opacity-90"
-        d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"
-      />
-    </svg>
-  );
-}
-function LoadingOverlay({
-  show,
-  label = "Loading…",
-}: {
-  show: boolean;
-  label?: string;
-}) {
-  if (!show) return null;
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-[1px] flex items-center justify-center"
-    >
-      <div className="rounded-xl bg-white px-4 py-3 shadow-2xl flex items-center gap-3">
-        <Spinner />
-        <span className="text-[13px] font-semibold text-gray-900">{label}</span>
-      </div>
-    </div>
-  );
-}
+import LogoSpinner from "../../../components/loaders/LogoSpinner";
 
 /* ---------- types ---------- */
 type APIVault = {
@@ -166,7 +120,7 @@ export default function CustomerVaultPage() {
   const router = useRouter();
   const sp = useSearchParams();
 
-  // routing overlay
+  // routing spinner
   const [isRouting, startTransition] = useTransition();
   const routePush = (href: string) => startTransition(() => router.push(href));
 
@@ -414,358 +368,378 @@ export default function CustomerVaultPage() {
   const navDisabled = isRouting;
 
   return (
-    <div
-      className="min-h-screen bg-white flex items-start justify-center p-0 md:p-4"
-      aria-busy={isRouting}
-    >
-      {/* global overlay while routing */}
-      <LoadingOverlay show={isRouting} label="Loading…" />
+    <>
+      {/* ✅ Global route spinner (same pattern) */}
+      <LogoSpinner show={isRouting} />
 
-      <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-3xl md:shadow-xl overflow-hidden">
-        {/* Header */}
-        <div className="px-4 pt-4 pb-2">
-          <button
-            onClick={() => router.back()}
-            className="inline-flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900"
-            disabled={navDisabled}
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </button>
-        </div>
-
-        {/* HERO */}
-        <div className="px-4 relative">
-          <div
-            className="relative rounded-2xl bg-black text-white p-5 overflow-hidden pb-8"
-            style={{
-              backgroundImage:
-                "repeating-linear-gradient(0deg, rgba(255,255,255,.08) 0, rgba(255,255,255,.08) 1px, transparent 1px, transparent 64px), repeating-linear-gradient(90deg, rgba(255,255,255,.08) 0, rgba(255,255,255,.08) 1px, transparent 1px, transparent 64px)",
-            }}
-          >
+      <div
+        className="min-h-screen bg-white flex items-start justify-center p-0 md:p-4"
+        aria-busy={isRouting}
+      >
+        <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-3xl md:shadow-xl overflow-hidden">
+          {/* Header */}
+          <div className="px-4 pt-4 pb-2">
             <button
-              onClick={() => pushWithCustomer("/customer/vault/create")}
-              className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-lg bg-white/95 px-3 py-1.5 text-xs font-semibold text-black shadow-sm hover:bg-white disabled:opacity-60"
+              onClick={() => startTransition(() => router.back())}
+              className="inline-flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900"
               disabled={navDisabled}
             >
-              Add new <Plus className="h-4 w-4" />
+              <ArrowLeft className="h-4 w-4" />
+              Back
             </button>
+          </div>
 
-            <div className="flex items-center gap-1 text-[12px] text-white/85 mb-1">
-              <span>Total Balance</span>
-              <Eye className="h-3.5 w-3.5 opacity-80" />
-            </div>
-            <div className="text-[28px] leading-none font-extrabold tracking-tight mb-6">
-              {loading ? "…" : formatNGN(total)}
-            </div>
+          {/* HERO */}
+          <div className="px-4 relative">
+            <div
+              className="relative rounded-2xl bg-black text-white p-5 overflow-hidden pb-8"
+              style={{
+                backgroundImage:
+                  "repeating-linear-gradient(0deg, rgba(255,255,255,.08) 0, rgba(255,255,255,.08) 1px, transparent 1px, transparent 64px), repeating-linear-gradient(90deg, rgba(255,255,255,.08) 0, rgba(255,255,255,.08) 1px, transparent 1px, transparent 64px)",
+              }}
+            >
+              <button
+                onClick={() => pushWithCustomer("/customer/vault/create")}
+                className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-lg bg-white/95 px-3 py-1.5 text-xs font-semibold text-black shadow-sm hover:bg-white disabled:opacity-60"
+                disabled={navDisabled}
+              >
+                Add new <Plus className="h-4 w-4" />
+              </button>
 
-            <div className="mb-6">
-              <div className="inline-flex items-center rounded-full border border-white/10 bg-[#2A3F5D]/90 px-3 py-1 text-[12px] shadow-sm">
-                <span className="opacity-95">Withdrawable Amount:&nbsp;</span>
-                <span className="font-semibold">
-                  {loading ? "…" : formatNGN(withdrawable)}
-                </span>
+              <div className="flex items-center gap-1 text-[12px] text-white/85 mb-1">
+                <span>Total Balance</span>
+                <Eye className="h-3.5 w-3.5 opacity-80" />
+              </div>
+              <div className="text-[28px] leading-none font-extrabold tracking-tight mb-6">
+                {loading ? (
+                  <span className="inline-flex items-center gap-2">
+                    <LogoSpinner show={true} className="w-5 h-5" />
+                    Loading…
+                  </span>
+                ) : (
+                  formatNGN(total)
+                )}
+              </div>
+
+              <div className="mb-6">
+                <div className="inline-flex items-center rounded-full border border-white/10 bg-[#2A3F5D]/90 px-3 py-1 text-[12px] shadow-sm">
+                  <span className="opacity-95">Withdrawable Amount:&nbsp;</span>
+                  <span className="font-semibold">
+                    {loading ? (
+                      <span className="inline-flex items-center gap-2">
+                        <LogoSpinner show={true} className="w-4 h-4" />…
+                      </span>
+                    ) : (
+                      formatNGN(withdrawable)
+                    )}
+                  </span>
+                </div>
               </div>
             </div>
+
+            {/* action buttons */}
+            <div className="absolute bottom-[-1px] left-1/2 transform -translate-x-1/2  w-[86%] z-10">
+              <div className="grid grid-cols-2 gap-0 overflow-hidden rounded-xl border h-[56px] border-gray-200 bg-white text-gray-900 shadow-lg">
+                <button
+                  onClick={() => openPicker("deposit")}
+                  className="flex items-center justify-center gap-2 py-3 text-[13px] font-semibold hover:bg-black/5 disabled:opacity-60"
+                  disabled={navDisabled}
+                >
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-black text-white text-xs font-bold">
+                    +
+                  </span>
+                  Deposit
+                </button>
+                <button
+                  onClick={() => openPicker("withdraw")}
+                  className="flex items-center justify-center gap-2 border-l border-gray-200 py-3 text-[13px] font-semibold hover:bg-black/5 disabled:opacity-60"
+                  disabled={navDisabled}
+                >
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-black text-white">
+                    <CheckSquare className="h-3.5 w-3.5" />
+                  </span>
+                  Withdraw
+                </button>
+              </div>
+            </div>
+
+            <div className="h-6" />
           </div>
 
-          {/* action buttons */}
-          <div className="absolute bottom-[-1px] left-1/2 transform -translate-x-1/2  w-[86%] z-10">
-            <div className="grid grid-cols-2 gap-0 overflow-hidden rounded-xl border h-[56px] border-gray-200 bg-white text-gray-900 shadow-lg">
+          {/* Personal Vaults */}
+          <div className="px-4 mt-4">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-[13px] font-semibold text-gray-900">
+                Personal Vaults
+              </h2>
               <button
-                onClick={() => openPicker("deposit")}
-                className="flex items-center justify-center gap-2 py-3 text-[13px] font-semibold hover:bg-black/5 disabled:opacity-60"
+                onClick={() =>
+                  pushWithCustomer("/customer/vault/vault-details")
+                }
+                className="text-[12px] text-gray-600 inline-flex items-center gap-1 disabled:opacity-60"
                 disabled={navDisabled}
               >
-                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-black text-white text-xs font-bold">
-                  +
-                </span>
-                Deposit
-              </button>
-              <button
-                onClick={() => openPicker("withdraw")}
-                className="flex items-center justify-center gap-2 border-l border-gray-200 py-3 text-[13px] font-semibold hover:bg-black/5 disabled:opacity-60"
-                disabled={navDisabled}
-              >
-                <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-black text-white">
-                  <CheckSquare className="h-3.5 w-3.5" />
-                </span>
-                Withdraw
+                See all <ChevronRight className="w-4 h-4" />
               </button>
             </div>
+
+            {error && <p className="text-xs text-rose-600 mb-2">{error}</p>}
+
+            {loading ? (
+              <div className="px-1 py-6 flex items-center justify-center">
+                <span className="inline-flex items-center gap-2 text-sm text-gray-700">
+                  <LogoSpinner show={true} className="w-5 h-5" />
+                  Loading vaults…
+                </span>
+              </div>
+            ) : vaults.length === 0 ? (
+              <p className="text-sm text-gray-500">No vaults yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {vaults.map((v) => {
+                  const pct = v.target
+                    ? Math.min(
+                        100,
+                        Math.max(0, Math.round((v.balance / v.target) * 100))
+                      )
+                    : 0;
+                  return (
+                    <button
+                      key={v.id}
+                      onClick={() => pushVaultDetail(v)}
+                      aria-label={`Open ${v.name}`}
+                      className="w-full text-left flex items-stretch gap-3 rounded-xl border border-gray-200 p-3 bg-white hover:bg-gray-50 transition disabled:opacity-60"
+                      disabled={navDisabled}
+                    >
+                      <div className="shrink-0 flex items-center justify-center h-16 w-16">
+                        <Image
+                          src="/uploads/Little wheel personal vault bw 1.png"
+                          alt="Vault"
+                          width={48}
+                          height={48}
+                          className="h-12 w-12 object-contain"
+                          priority
+                        />
+                      </div>
+
+                      <div className="flex-1">
+                        <div className="flex items-start justify-between">
+                          <p className="text-[13px] font-semibold text-gray-900 leading-tight">
+                            {v.name}
+                          </p>
+                          <p className="text-[12px] leading-tight">
+                            <span className="font-bold text-red-600">
+                              {formatNGN(v.balance)}
+                            </span>
+                            <span className="text-gray-400 font-normal">
+                              /{formatNGN(v.target)}
+                            </span>
+                          </p>
+                        </div>
+
+                        <p className="text-[11px] text-gray-500 mt-0.5">
+                          Savings: {formatNGN(v.daily)} daily
+                        </p>
+
+                        <div className="mt-2 flex items-center gap-2">
+                          <div className="h-2 flex-1 rounded-full bg-gray-200 overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-emerald-500 transition-all"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <span className="text-[11px] text-gray-600">
+                            {pct}%
+                          </span>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
-          <div className="h-6" />
+          {/* Recent Transactions (live from contributions) */}
+          <div className="px-4 mt-5 pb-6">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-[13px] font-semibold text-gray-900">
+                Recent Transactions
+              </h2>
+              <button
+                onClick={() => pushWithCustomer("/customer/vault/transactions")}
+                className="text-[12px] text-gray-600 inline-flex items-center gap-1 disabled:opacity-60"
+                disabled={navDisabled}
+              >
+                See all <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 overflow-hidden bg-white">
+              {txLoading ? (
+                <div className="px-3 py-4 flex items-center justify-center">
+                  <span className="inline-flex items-center gap-2 text-sm text-gray-700">
+                    <LogoSpinner show={true} className="w-5 h-5" />
+                    Loading transactions…
+                  </span>
+                </div>
+              ) : txs.length === 0 ? (
+                <div className="px-3 py-4 text-sm text-gray-500">
+                  No transactions yet.
+                </div>
+              ) : (
+                txs.map((t, i) => (
+                  <div
+                    key={t.id}
+                    className={`flex items-center justify-between px-3 py-3 ${
+                      i !== txs.length - 1 ? "border-b border-gray-100" : ""
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`h-8 w-8 rounded-full ${
+                          t.isCredit ? "bg-emerald-50" : "bg-rose-50"
+                        } flex items-center justify-center`}
+                      >
+                        <Check
+                          className={`w-4 h-4 ${
+                            t.isCredit ? "text-emerald-600" : "text-rose-600"
+                          }`}
+                        />
+                      </div>
+                      <div>
+                        <p className="text-[13px] font-medium text-gray-900">
+                          {t.note}
+                        </p>
+                        <p className="text-[11px] text-gray-500">
+                          {fmtDateTime(t.at)}
+                        </p>
+                      </div>
+                    </div>
+                    <div
+                      className={`text-[13px] font-semibold ${
+                        t.isCredit ? "text-emerald-600" : "text-rose-600"
+                      }`}
+                    >
+                      {t.isCredit ? "+" : "-"}
+                      {formatNGN(t.amount)}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* Personal Vaults */}
-        <div className="px-4 mt-4">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-[13px] font-semibold text-gray-900">
-              Personal Vaults
-            </h2>
-            <button
-              onClick={() => pushWithCustomer("/customer/vault/vault-details")}
-              className="text-[12px] text-gray-600 inline-flex items-center gap-1 disabled:opacity-60"
-              disabled={navDisabled}
-            >
-              See all <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
+        {/* ===== Vault Picker Modal (Deposit / Withdraw) ===== */}
+        {pickerOpen && (
+          <div className="fixed inset-0 z-50">
+            {/* backdrop */}
+            <div
+              className="absolute inset-0 bg-black/40"
+              onClick={() => setPickerOpen(false)}
+            />
+            {/* sheet */}
+            <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-3xl p-5 shadow-2xl">
+              <div className="mx-auto h-1.5 w-16 rounded-full bg-gray-200 mb-3" />
 
-          {error && <p className="text-xs text-rose-600 mb-2">{error}</p>}
+              <h3 className="text-base font-semibold text-gray-900 mb-4">
+                Choose Preferred Vault
+              </h3>
 
-          {loading ? (
-            <div className="space-y-3">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="h-20 rounded-xl bg-gray-50 animate-pulse"
-                />
-              ))}
-            </div>
-          ) : vaults.length === 0 ? (
-            <p className="text-sm text-gray-500">No vaults yet.</p>
-          ) : (
-            <div className="space-y-3">
-              {vaults.map((v) => {
-                const pct = v.target
-                  ? Math.min(
-                      100,
-                      Math.max(0, Math.round((v.balance / v.target) * 100))
-                    )
-                  : 0;
-                return (
-                  <button
-                    key={v.id}
-                    onClick={() => pushVaultDetail(v)}
-                    aria-label={`Open ${v.name}`}
-                    className="w-full text-left flex items-stretch gap-3 rounded-xl border border-gray-200 p-3 bg-white hover:bg-gray-50 transition disabled:opacity-60"
-                    disabled={navDisabled}
-                  >
-                    <div className="shrink-0 flex items-center justify-center h-16 w-16">
-                      <Image
-                        src="/uploads/Little wheel personal vault bw 1.png"
-                        alt="Vault"
-                        width={48}
-                        height={48}
-                        className="h-12 w-12 object-contain"
-                        priority
-                      />
-                    </div>
+              <div className="space-y-3 max-h-[55vh] overflow-auto pr-1">
+                {vaults.map((v) => {
+                  const pct = v.target
+                    ? Math.min(
+                        100,
+                        Math.max(0, Math.round((v.balance / v.target) * 100))
+                      )
+                    : 0;
+                  const isActive = selectedVaultId === v.id;
+                  return (
+                    <button
+                      key={v.id}
+                      onClick={() => setSelectedVaultId(v.id)}
+                      className={`w-full text-left rounded-xl border p-3 bg-white flex items-center gap-3 ${
+                        isActive ? "border-black" : "border-gray-200"
+                      }`}
+                    >
+                      <div className="shrink-0">
+                        <Image
+                          src="/uploads/Little wheel personal vault bw 1.png"
+                          alt="Vault"
+                          width={56}
+                          height={56}
+                          className="w-14 h-14 object-contain"
+                          priority
+                        />
+                      </div>
 
-                    <div className="flex-1">
-                      <div className="flex items-start justify-between">
+                      <div className="flex-1">
                         <p className="text-[13px] font-semibold text-gray-900 leading-tight">
                           {v.name}
                         </p>
-                        <p className="text-[12px] leading-tight">
-                          <span className="font-bold text-red-600">
-                            {formatNGN(v.balance)}
-                          </span>
-                          <span className="text-gray-400 font-normal">
-                            /{formatNGN(v.target)}
-                          </span>
+                        <p className="text-[11px] text-gray-600">
+                          Amount: <strong>{formatNGN(v.daily)}</strong> (DAILY)
                         </p>
+
+                        <div className="mt-2 flex items-center gap-2">
+                          <div className="h-2 flex-1 rounded-full bg-gray-200 overflow-hidden">
+                            <div
+                              className="h-full rounded-full"
+                              style={{
+                                width: `${pct}%`,
+                                backgroundColor: "#10B981",
+                              }}
+                            />
+                          </div>
+                          <span className="text-[11px] text-gray-600">
+                            {pct}%
+                          </span>
+                        </div>
                       </div>
 
-                      <p className="text-[11px] text-gray-500 mt-0.5">
-                        Savings: {formatNGN(v.daily)} daily
-                      </p>
-
-                      <div className="mt-2 flex items-center gap-2">
-                        <div className="h-2 flex-1 rounded-full bg-gray-200 overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-emerald-500 transition-all"
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                        <span className="text-[11px] text-gray-600">
-                          {pct}%
+                      <div className="text-right text-[12px] font-semibold">
+                        <span className="text-red-600">
+                          {formatNGN(v.balance)}
+                        </span>
+                        <span className="text-gray-400">/</span>
+                        <span className="text-green-600">
+                          {formatNGN(v.target)}
                         </span>
                       </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Recent Transactions (live from contributions) */}
-        <div className="px-4 mt-5 pb-6">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-[13px] font-semibold text-gray-900">
-              Recent Transactions
-            </h2>
-            <button
-              onClick={() => pushWithCustomer("/customer/vault/transactions")}
-              className="text-[12px] text-gray-600 inline-flex items-center gap-1 disabled:opacity-60"
-              disabled={navDisabled}
-            >
-              See all <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="rounded-xl border border-gray-200 overflow-hidden bg-white">
-            {txLoading ? (
-              <div className="h-16 bg-gray-50 animate-pulse" />
-            ) : txs.length === 0 ? (
-              <div className="px-3 py-4 text-sm text-gray-500">
-                No transactions yet.
+                    </button>
+                  );
+                })}
               </div>
-            ) : (
-              txs.map((t, i) => (
-                <div
-                  key={t.id}
-                  className={`flex items-center justify-between px-3 py-3 ${
-                    i !== txs.length - 1 ? "border-b border-gray-100" : ""
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`h-8 w-8 rounded-full ${
-                        t.isCredit ? "bg-emerald-50" : "bg-rose-50"
-                      } flex items-center justify-center`}
-                    >
-                      <Check
-                        className={`w-4 h-4 ${
-                          t.isCredit ? "text-emerald-600" : "text-rose-600"
-                        }`}
-                      />
-                    </div>
-                    <div>
-                      <p className="text-[13px] font-medium text-gray-900">
-                        {t.note}
-                      </p>
-                      <p className="text-[11px] text-gray-500">
-                        {fmtDateTime(t.at)}
-                      </p>
-                    </div>
-                  </div>
-                  <div
-                    className={`text-[13px] font-semibold ${
-                      t.isCredit ? "text-emerald-600" : "text-rose-600"
-                    }`}
-                  >
-                    {t.isCredit ? "+" : "-"}
-                    {formatNGN(t.amount)}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
 
-      {/* ===== Vault Picker Modal (Deposit / Withdraw) ===== */}
-      {pickerOpen && (
-        <div className="fixed inset-0 z-50">
-          {/* backdrop */}
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setPickerOpen(false)}
-          />
-          {/* sheet */}
-          <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-3xl p-5 shadow-2xl">
-            <div className="mx-auto h-1.5 w-16 rounded-full bg-gray-200 mb-3" />
+              {/* CTA */}
+              <button
+                onClick={proceed}
+                disabled={!selectedVaultId || navDisabled}
+                className={`mt-4 w-full h-12 rounded-2xl font-semibold ${
+                  selectedVaultId && !navDisabled
+                    ? "bg-black text-white"
+                    : "bg-gray-200 text-gray-500 cursor-not-allowed"
+                }`}
+              >
+                Select and Proceed
+              </button>
 
-            <h3 className="text-base font-semibold text-gray-900 mb-4">
-              Choose Preferred Vault
-            </h3>
-
-            <div className="space-y-3 max-h=[55vh] max-h-[55vh] overflow-auto pr-1">
-              {vaults.map((v) => {
-                const pct = v.target
-                  ? Math.min(
-                      100,
-                      Math.max(0, Math.round((v.balance / v.target) * 100))
-                    )
-                  : 0;
-                const isActive = selectedVaultId === v.id;
-                return (
-                  <button
-                    key={v.id}
-                    onClick={() => setSelectedVaultId(v.id)}
-                    className={`w-full text-left rounded-xl border p-3 bg-white flex items-center gap-3 ${
-                      isActive ? "border-black" : "border-gray-200"
-                    }`}
-                  >
-                    <div className="shrink-0">
-                      <Image
-                        src="/uploads/Little wheel personal vault bw 1.png"
-                        alt="Vault"
-                        width={56}
-                        height={56}
-                        className="w-14 h-14 object-contain"
-                        priority
-                      />
-                    </div>
-
-                    <div className="flex-1">
-                      <p className="text-[13px] font-semibold text-gray-900 leading-tight">
-                        {v.name}
-                      </p>
-                      <p className="text-[11px] text-gray-600">
-                        Amount: <strong>{formatNGN(v.daily)}</strong> (DAILY)
-                      </p>
-
-                      <div className="mt-2 flex items-center gap-2">
-                        <div className="h-2 flex-1 rounded-full bg-gray-200 overflow-hidden">
-                          <div
-                            className="h-full rounded-full"
-                            style={{
-                              width: `${pct}%`,
-                              backgroundColor: "#10B981",
-                            }}
-                          />
-                        </div>
-                        <span className="text-[11px] text-gray-600">
-                          {pct}%
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="text-right text-[12px] font-semibold">
-                      <span className="text-red-600">
-                        {formatNGN(v.balance)}
-                      </span>
-                      <span className="text-gray-400">/</span>
-                      <span className="text-green-600">
-                        {formatNGN(v.target)}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
+              <button
+                onClick={() => {
+                  setPickerOpen(false);
+                  pushWithCustomer("/customer/vault/create");
+                }}
+                className="mt-3 w-full text-center text-[13px] font-semibold text-black underline disabled:opacity-60"
+                disabled={navDisabled}
+              >
+                Create New Vault
+              </button>
             </div>
-
-            {/* CTA */}
-            <button
-              onClick={proceed}
-              disabled={!selectedVaultId || navDisabled}
-              className={`mt-4 w-full h-12 rounded-2xl font-semibold ${
-                selectedVaultId && !navDisabled
-                  ? "bg-black text-white"
-                  : "bg-gray-200 text-gray-500 cursor-not-allowed"
-              }`}
-            >
-              Select and Proceed
-            </button>
-
-            <button
-              onClick={() => {
-                setPickerOpen(false);
-                pushWithCustomer("/customer/vault/create");
-              }}
-              className="mt-3 w-full text-center text-[13px] font-semibold text-black underline disabled:opacity-60"
-              disabled={navDisabled}
-            >
-              Create New Vault
-            </button>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </>
   );
 }

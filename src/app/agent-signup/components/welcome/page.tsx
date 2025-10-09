@@ -2,11 +2,25 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function WelcomeKycIntro() {
   const router = useRouter();
   const [agree, setAgree] = useState(false);
+
+  // NEW: read first name saved during Personal Details step
+  const [firstName, setFirstName] = useState<string>("");
+  useEffect(() => {
+    try {
+      const name =
+        sessionStorage.getItem("lw_first_name") ||
+        localStorage.getItem("lw_first_name") ||
+        "";
+      setFirstName((name || "").trim());
+    } catch {
+      setFirstName("");
+    }
+  }, []);
 
   const start = () => {
     if (!agree) return;
@@ -16,7 +30,7 @@ export default function WelcomeKycIntro() {
   return (
     <div className="min-h-screen w-full bg-black text-white relative overflow-hidden">
       {/* content block — anchored near the top */}
-      <div className="mx-auto w-full max-w-[360px] px-5 pb-6 text-center pt-[calc(env(safe-area-inset-top,0px)+100px)]">
+      <div className="mx-auto w-full max-w-[360px] px-5 pb-6 text-center pt-[calc(env(safe-area-inset-top,0px)+200px)]">
         {/* Center logo (forced white) */}
         <div className="flex items-center justify-center mb-4">
           <Image
@@ -31,7 +45,7 @@ export default function WelcomeKycIntro() {
 
         {/* Heading */}
         <h1 className="font-extrabold text-[19px] leading-[24px] tracking-[0.2px]">
-          Welcome Agent Olawale - Start your
+          Welcome Agent {firstName || "Agent"} - Start your
           <br />
           savings journey with Little
         </h1>

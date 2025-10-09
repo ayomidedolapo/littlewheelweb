@@ -4,49 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { ChevronLeft, ChevronDown, Copy, Check } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-
-/* ---------- tiny spinner + overlay (same as BottomTabs) ---------- */
-function Spinner({ className = "w-4 h-4 text-black" }: { className?: string }) {
-  return (
-    <svg
-      className={`animate-spin ${className}`}
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <circle
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="4"
-        fill="none"
-        className="opacity-25"
-      />
-      <path
-        fill="currentColor"
-        className="opacity-90"
-        d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"
-      />
-    </svg>
-  );
-}
-function LoadingOverlay({ show }: { show: boolean }) {
-  if (!show) return null;
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-[1px] flex items-center justify-center"
-    >
-      <div className="rounded-xl bg-white px-4 py-3 shadow-2xl flex items-center gap-3">
-        <Spinner className="w-5 h-5" />
-        <span className="text-[13px] font-semibold text-gray-900">
-          Loading…
-        </span>
-      </div>
-    </div>
-  );
-}
+import LogoSpinner from "../../../../../../components/loaders/LogoSpinner"; // ✅ use your spinner
 
 /* ---------------- Types ---------------- */
 type Bank = { name: string; code: string | number; logo?: string };
@@ -126,7 +84,7 @@ export default function WithdrawalBank() {
   const [successOpen, setSuccessOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [initialLoading, setInitialLoading] = useState(true); // NEW: overlay during initial fetch
+  const [initialLoading, setInitialLoading] = useState(true); // overlay during initial fetch
 
   const tokenHeader =
     typeof window !== "undefined"
@@ -348,8 +306,8 @@ export default function WithdrawalBank() {
     }
   };
 
-  const overlayOn = isPending || saving || initialLoading; // <— when to show overlay
-  const disableAll = overlayOn; // convenience
+  const overlayOn = isPending || saving || initialLoading; // ← show logo overlay for these
+  const disableAll = overlayOn;
 
   /* ===================== RENDER ===================== */
 
@@ -358,8 +316,8 @@ export default function WithdrawalBank() {
 
   return (
     <div className="min-h-screen bg-white" aria-busy={overlayOn}>
-      {/* global overlay */}
-      <LoadingOverlay show={overlayOn} />
+      {/* global logo overlay */}
+      <LogoSpinner show={overlayOn} invert />
 
       <div className="max-w-sm mx-auto px-5 pt-4">
         {/* Header */}
@@ -656,8 +614,8 @@ function BankPickerSheet({
           </div>
 
           {loading ? (
-            <div className="px-2 py-6 text-[13px] text-gray-500 flex items-center gap-2">
-              <Spinner className="w-4 h-4" /> Loading banks…
+            <div className="px-2 py-6 text-[13px] text-gray-500">
+              Loading banks…
             </div>
           ) : err ? (
             <div className="px-2 py-6 text-[13px] text-red-600">

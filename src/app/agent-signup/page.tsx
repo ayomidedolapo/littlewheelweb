@@ -3,6 +3,7 @@
 import Image from "next/image";
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
+import LogoSpinner from "../../components/loaders/LogoSpinner";
 
 // Routes
 const CREATE_ACCOUNT_ROUTE = "/agent-signup/components/create";
@@ -13,16 +14,32 @@ const AFTER_SKIP_ROUTE = CREATE_ACCOUNT_ROUTE;
 export default function Onboarding() {
   const router = useRouter();
   const [step, setStep] = useState<0 | 1>(0);
+  const [routing, setRouting] = useState(false);
 
   const goNext = () => setStep(1);
-  const skip = () => router.replace(AFTER_SKIP_ROUTE); // go straight to Create
-  const createAccount = () => router.push(CREATE_ACCOUNT_ROUTE);
-  const login = () => router.push(LOGIN_ROUTE);
+
+  const skip = () => {
+    if (routing) return;
+    setRouting(true);
+    router.replace(AFTER_SKIP_ROUTE);
+  };
+
+  const createAccount = () => {
+    if (routing) return;
+    setRouting(true);
+    router.push(CREATE_ACCOUNT_ROUTE);
+  };
+
+  const login = () => {
+    if (routing) return;
+    setRouting(true);
+    router.push(LOGIN_ROUTE);
+  };
 
   return (
     <div className="min-h-screen bg-white flex items-stretch justify-center">
-      <div className="w-full max-w-sm flex flex-col">
-        {/* Top row: progress + Skip */}
+      <div className="w-full max-w-sm flex flex-col" aria-busy={routing}>
+        {/* Top row: progress + Skip / Spinner */}
         <div className="flex items-center justify-between px-4 pt-4">
           <div className="flex items-center gap-1">
             <span
@@ -36,12 +53,20 @@ export default function Onboarding() {
               }`}
             />
           </div>
-          <button
-            onClick={skip}
-            className="text-[12px] text-gray-700 hover:text-gray-900"
-          >
-            Skip
-          </button>
+
+          {routing ? (
+            <div className="flex items-center">
+              <LogoSpinner show={true} />
+            </div>
+          ) : (
+            <button
+              onClick={skip}
+              className="text-[12px] text-gray-700 hover:text-gray-900 disabled:opacity-60"
+              disabled={routing}
+            >
+              Skip
+            </button>
+          )}
         </div>
 
         {/* Centered logo below the row */}
@@ -120,6 +145,7 @@ export default function Onboarding() {
             <button
               onClick={goNext}
               className="w-full h-12 rounded-xl bg-black text-white font-semibold hover:bg-black/90 active:scale-[0.99] transition"
+              disabled={routing}
             >
               Proceed
             </button>
@@ -127,14 +153,18 @@ export default function Onboarding() {
             <div className="space-y-3">
               <button
                 onClick={createAccount}
-                className="w-full h-12 rounded-xl bg-black text-white font-semibold hover:bg-black/90 active:scale-[0.99] transition"
+                disabled={routing}
+                className="w-full h-12 rounded-xl bg-black text-white font-semibold hover:bg-black/90 active:scale-[0.99] transition inline-flex items-center justify-center gap-2 disabled:opacity-60"
               >
+                {routing ? <LogoSpinner show={true} /> : null}
                 Create account
               </button>
               <button
                 onClick={login}
-                className="w-full h-12 rounded-xl bg-transparent text-gray-900 font-semibold underline underline-offset-2"
+                disabled={routing}
+                className="w-full h-12 rounded-xl bg-transparent text-gray-900 font-semibold underline underline-offset-2 disabled:opacity-60 inline-flex items-center justify-center gap-2"
               >
+                {routing ? <LogoSpinner show={true} /> : null}
                 Login your account
               </button>
             </div>

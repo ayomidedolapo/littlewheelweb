@@ -5,6 +5,30 @@ import React, { useMemo, useState } from "react";
 import { ArrowLeft, Phone, Check } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import LogoSpinner from "../../components/loaders/LogoSpinner";
+
+/* small overlay using the shared LogoSpinner */
+function LoadingOverlay({
+  show,
+  label = "Loading…",
+}: {
+  show: boolean;
+  label?: string;
+}) {
+  if (!show) return null;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-[1px] flex items-center justify-center"
+    >
+      <div className="rounded-xl bg-white px-4 py-3 shadow-2xl flex items-center gap-3">
+        <LogoSpinner show={true} />
+        <span className="text-[13px] font-semibold text-gray-900">{label}</span>
+      </div>
+    </div>
+  );
+}
 
 /* ---------- helpers ---------- */
 function toNgE164(localish: string) {
@@ -58,7 +82,6 @@ export default function MobileSignup() {
           ...(auth ? { "x-lw-auth": auth } : {}),
         },
         cache: "no-store",
-        // credentials: "include", // ← leave off unless your proxy strictly needs cookies
         body: JSON.stringify({ phoneNumber: e164 }),
       });
 
@@ -94,13 +117,17 @@ export default function MobileSignup() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-0 md:p-4">
+    <div
+      className="min-h-screen bg-gray-50 flex items-center justify-center p-0 md:p-4"
+      aria-busy={sending}
+    >
       <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-2xl md:shadow-xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center p-4 pt-8 bg-white">
           <button
             onClick={handleBack}
-            className="flex items-center text-gray-600 hover:text-gray-800 transition-colors"
+            className="flex items-center text-gray-600 hover:text-gray-800 transition-colors disabled:opacity-60"
+            disabled={sending}
           >
             <ArrowLeft className="w-5 h-5 mr-2" />
             <span className="text-sm font-medium">Back</span>
@@ -218,8 +245,16 @@ export default function MobileSignup() {
                   : "bg-gray-300 text-gray-500 cursor-not-allowed"
               }`}
               disabled={!isFormValid || sending}
+              aria-busy={sending}
             >
-              {sending ? "Sending…" : "Verify"}
+              {sending ? (
+                <span className="inline-flex items-center gap-2">
+                  <LogoSpinner show={true} />
+                  Sending…
+                </span>
+              ) : (
+                "Verify"
+              )}
             </button>
           </div>
         </div>

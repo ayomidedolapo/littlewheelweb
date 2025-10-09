@@ -4,6 +4,7 @@
 import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ChevronDown, Check } from "lucide-react";
+import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 
 /** Where to go after saving the address */
 const NEXT_ROUTE = "/customer";
@@ -31,7 +32,6 @@ function addCustomerIdToList(id: string) {
     const arr: string[] = raw ? JSON.parse(raw) : [];
     if (!arr.includes(id)) {
       arr.unshift(id);
-      // keep list bounded (optional)
       localStorage.setItem(
         "lw_customer_ids",
         JSON.stringify(arr.slice(0, 100))
@@ -145,7 +145,6 @@ export default function AddressPage() {
           ...(auth ? { "x-lw-auth": auth } : {}),
         },
         cache: "no-store",
-        // credentials: "include", // ← keep disabled unless your proxy needs it
         body: JSON.stringify({
           token,
           country: form.country.trim() || "Nigeria",
@@ -167,7 +166,6 @@ export default function AddressPage() {
         throw new Error(msg);
       }
 
-      // Try to capture the customer id from the response, else fall back to the session key.
       const customerIdFromApi =
         json?.data?.customerId || json?.data?.id || json?.customerId || "";
       const lastFromSession = sessionStorage.getItem(
@@ -176,13 +174,10 @@ export default function AddressPage() {
 
       const finalId = String(customerIdFromApi || lastFromSession || "");
       if (finalId) {
-        // Maintain the session key as before
         sessionStorage.setItem("lw_onboarding_customer_id", finalId);
-        // Persist into the local list for the Customers page (no server needed)
         addCustomerIdToList(finalId);
       }
 
-      // ✅ Go to the customer page after success
       router.push(NEXT_ROUTE);
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : "Failed to save address.");
@@ -196,13 +191,17 @@ export default function AddressPage() {
   const isPersonalDetailsAdded = true;
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-0 md:p-4">
+    <div
+      className="min-h-screen bg-gray-50 flex items-center justify-center p-0 md:p-4"
+      aria-busy={submitting}
+    >
       <div className="w-full max-w-3xl bg-white min-h-screen md:min-h-0 md:rounded-2xl md:shadow-xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center p-4 pt-8 bg-white">
           <button
             onClick={handleBack}
             className="flex items-center text-gray-600 hover:text-gray-800"
+            disabled={submitting}
           >
             <ArrowLeft className="w-5 h-5 mr-2" />
             <span className="text-sm font-medium">Back</span>
@@ -394,7 +393,13 @@ export default function AddressPage() {
                   : "bg-gray-200 text-gray-500 cursor-not-allowed"
               }`}
             >
-              {submitting ? "Saving…" : "Save and Continue"}
+              {submitting ? (
+                <span className="inline-flex items-center gap-2">
+                  <LogoSpinner className="w-4 h-4" />
+                </span>
+              ) : (
+                "Save and Continue"
+              )}
             </button>
           </div>
         </div>

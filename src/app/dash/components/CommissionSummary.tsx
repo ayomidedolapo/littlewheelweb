@@ -4,6 +4,9 @@ import { useEffect, useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Info, X, Plus } from "lucide-react";
 
+/* ✅ Logo spinner overlay */
+import LogoSpinner from "../../../components/loaders/LogoSpinner";
+
 /* ---------- money ---------- */
 const NGN = new Intl.NumberFormat("en-NG", {
   style: "currency",
@@ -11,7 +14,7 @@ const NGN = new Intl.NumberFormat("en-NG", {
   minimumFractionDigits: 2,
 });
 
-/* ---------- tiny spinner ---------- */
+/* ---------- tiny spinner (for small inline buttons) ---------- */
 function Spinner({ className = "w-4 h-4" }: { className?: string }) {
   return (
     <svg
@@ -34,25 +37,6 @@ function Spinner({ className = "w-4 h-4" }: { className?: string }) {
         d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"
       />
     </svg>
-  );
-}
-
-/* ---------- full-screen overlay during navigation ---------- */
-function LoadingOverlay({ show }: { show: boolean }) {
-  if (!show) return null;
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="fixed inset-0 z-[60] bg-black/35 backdrop-blur-[1px] flex items-center justify-center"
-    >
-      <div className="rounded-xl bg-white px-4 py-3 shadow-2xl flex items-center gap-3">
-        <Spinner className="w-5 h-5 text-black" />
-        <span className="text-[13px] font-semibold text-gray-900">
-          Loading…
-        </span>
-      </div>
-    </div>
   );
 }
 
@@ -93,12 +77,12 @@ export default function CommissionSummary({
       try {
         await Promise.resolve(onOnboard());
       } finally {
-        // Give a tiny grace so UI doesn't flicker
+        // Grace delay to avoid flicker
         setTimeout(() => setForceOverlay(false), 400);
       }
       return;
     }
-    // Show overlay while Next.js navigates (component will unmount soon after)
+    // Show overlay while Next.js navigates
     startTransition(() => {
       router.push("./onboard");
     });
@@ -118,8 +102,8 @@ export default function CommissionSummary({
 
   return (
     <>
-      {/* global overlay while routing / custom onboard action */}
-      <LoadingOverlay show={showOverlay} />
+      {/* ✅ full-screen logo spinner while routing / custom onboard action */}
+      <LogoSpinner show={showOverlay} />
 
       {/* Floating CTA */}
       <div

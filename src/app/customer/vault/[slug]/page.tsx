@@ -1,10 +1,11 @@
 /* app/customer/vault/[slug]/page.tsx */
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Image from "next/image";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, X } from "lucide-react";
+import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 
 /* ---------------- helpers ---------------- */
 const NGN = (v?: number) =>
@@ -23,6 +24,7 @@ function ordinal(n: number) {
   const v = n % 100;
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
+
 function fmtDate(d?: string | Date | null) {
   if (!d) return "—";
   const dt = new Date(d);
@@ -104,6 +106,7 @@ type Tx = {
 
 export default function VaultDetailPage() {
   const router = useRouter();
+  const [isRouting, startTransition] = useTransition();
   const params = useParams<{ slug: string }>();
   const sp = useSearchParams();
 
@@ -295,7 +298,7 @@ export default function VaultDetailPage() {
     detail?.startDate || (detail as any)?.start_at || detail?.createdAt;
   const maturity = detail?.maturityDate || detail?.endDate || null;
 
-  /* ---------------- close vault action (uses new route handler) ---------------- */
+  /* ---------------- close vault action ---------------- */
   const doCloseVault = async () => {
     if (!customerId || !resolvedVaultId) return;
     try {
@@ -313,8 +316,10 @@ export default function VaultDetailPage() {
       if (!res.ok) throw new Error(`Close HTTP ${res.status}`);
 
       setConfirmOpen(false);
-      router.replace(
-        `/customer/vault?customerId=${encodeURIComponent(customerId)}`
+      startTransition(() =>
+        router.replace(
+          `/customer/vault?customerId=${encodeURIComponent(customerId)}`
+        )
       );
     } catch (e: any) {
       setCloseErr(e?.message || "Failed to close vault.");
@@ -325,271 +330,282 @@ export default function VaultDetailPage() {
 
   /* ---------------- UI ---------------- */
   return (
-    <div className="min-h-screen bg-[#F4F6FA] flex items-start justify-center">
-      {/* wider container so content isn't compressed */}
-      <div className="w-full max-w-[480px] min-h-screen bg-[#F4F6FA] md:min-h-0 md:rounded-3xl md:shadow-xl overflow-hidden">
-        {/* Top bar */}
-        <div className="px-4 pt-4 pb-2 bg-[#F4F6FA]">
-          <button
-            onClick={() => router.back()}
-            className="inline-flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-        </div>
+    <>
+      {/* ✅ Global route spinner (same pattern everywhere) */}
+      <LogoSpinner show={isRouting} />
 
-        {/* Page title */}
-        <div className="px-4 pb-2">
-          <h1 className="text-[15px] font-semibold text-gray-900">{name}</h1>
-        </div>
-
-        {loading ? (
-          /* ---------- Skeleton ---------- */
-          <div className="px-4 space-y-3">
-            <div className="h-20 rounded-2xl bg-white shadow-sm border border-gray-100">
-              <div className="h-full w-full animate-pulse rounded-2xl bg-gray-100" />
-            </div>
-            <div className="rounded-2xl bg-white shadow-sm border border-gray-100 p-4 space-y-3">
-              <div className="h-4 w-2/5 bg-gray-100 animate-pulse rounded" />
-              <div className="grid grid-cols-2 gap-3">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="space-y-2">
-                    <div className="h-3 w-20 bg-gray-100 animate-pulse rounded" />
-                    <div className="h-4 w-28 bg-gray-100 animate-pulse rounded" />
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="h-44 rounded-2xl bg-white shadow-sm border border-gray-100">
-              <div className="h-full w-full animate-pulse rounded-2xl bg-gray-100" />
-            </div>
-            <div className="h-12 mx-4 mt-4 rounded-2xl bg-rose-100 animate-pulse" />
-            <div className="h-20" />
-          </div>
-        ) : (
-          <>
-            {/* ---------- Top vault card ---------- */}
-            <div className="px-4">
-              <div className="rounded-2xl bg-white border border-gray-100 shadow-sm p-3">
-                <div className="flex items-start gap-3">
-                  {/* vault icon */}
-                  <div className="shrink-0">
-                    <Image
-                      src="/uploads/Little wheel personal vault bw 1.png"
-                      alt="Vault"
-                      width={48}
-                      height={48}
-                      className="w-12 h-12 object-contain"
-                      priority
-                    />
-                  </div>
-
-                  {/* middle */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-semibold text-gray-900 leading-tight truncate">
-                      {new Date(startedAt || new Date()).toLocaleString(
-                        undefined,
-                        {
-                          month: "long",
-                        }
-                      )}{" "}
-                      {new Date(startedAt || new Date()).getDate()}
-                    </p>
-                    <p className="text-[11px] text-gray-600">
-                      Amount: <strong>{NGN(daily)}</strong>
-                    </p>
-
-                    {/* progress bar */}
-                    <div className="mt-2 h-2 rounded-full bg-gray-200 overflow-hidden">
-                      <div
-                        className="h-full rounded-full"
-                        style={{
-                          width: `${progress}%`,
-                          backgroundColor: "#94A3B8",
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* right totals — single straight line */}
-                  <div className="shrink-0 text-right leading-tight text-[12px]">
-                    <p className="whitespace-nowrap font-bold">
-                      <span className="text-rose-600">{NGN(liveBalance)}</span>
-                      <span className="text-gray-400">/</span>
-                      <span className="text-emerald-600">{NGN(target)}</span>
-                    </p>
-                    <p className="text-[10px] text-gray-500 mt-1">
-                      {progress}%
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* ---------- Stats card ---------- */}
-            <div className="px-4 mt-3">
-              <div className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-[11px] font-semibold text-gray-500 uppercase">
-                      Target Amount
-                    </p>
-                    <p className="text-[14px] font-bold text-gray-900 mt-1">
-                      {NGN(target)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-semibold text-gray-500 uppercase">
-                      Amount
-                    </p>
-                    <p className="text-[14px] font-bold text-gray-900 mt-1">
-                      {NGN(daily)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-semibold text-gray-500 uppercase">
-                      Duration
-                    </p>
-                    <p className="text-[12px] font-bold text-gray-900 mt-1">
-                      {duration || "—"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-semibold text-gray-500 uppercase">
-                      Frequency
-                    </p>
-                    <p className="text-[12px] font-bold text-gray-900 mt-1">
-                      {frequency || "—"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-semibold text-gray-500 uppercase">
-                      Start Date
-                    </p>
-                    <p className="text-[12px] font-bold text-gray-900 mt-1">
-                      {fmtDate(startedAt)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-semibold text-gray-500 uppercase">
-                      Maturity Date
-                    </p>
-                    <p className="text-[12px] font-bold text-gray-900 mt-1">
-                      {fmtDate(maturity)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* ---------- Transactions card ---------- */}
-            <div className="px-4 mt-3">
-              <div className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4">
-                <p className="text-[13px] font-semibold text-gray-900 mb-2">
-                  Transactions
-                </p>
-
-                {txLoading ? (
-                  <div className="h-28 rounded-xl bg-gray-100 animate-pulse" />
-                ) : txs.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8">
-                    <Image
-                      src="/uploads/Empty State.png"
-                      alt="No transactions"
-                      width={160}
-                      height={160}
-                      className="w-40 h-40 object-contain"
-                      priority
-                    />
-                    <p className="text-[12px] text-gray-500 mt-2">
-                      No transactions yet.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-gray-100">
-                    {txs.map((t) => (
-                      <div
-                        key={t.id}
-                        className="flex items-center justify-between py-3"
-                      >
-                        <div>
-                          <p className="text-[13px] font-medium text-gray-900">
-                            {t.note}
-                          </p>
-                          <p className="text-[11px] text-gray-500">
-                            {fmtDateTime(t.at)}
-                          </p>
-                        </div>
-                        <div
-                          className={`text-[13px] font-semibold ${
-                            t.isCredit ? "text-emerald-600" : "text-rose-600"
-                          }`}
-                        >
-                          {t.isCredit ? "+" : "−"}
-                          {NGN(t.amount)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* ---------- Close Vault button ---------- */}
-            <div className="px-4 py-5">
-              <button
-                onClick={() => setConfirmOpen(true)}
-                className="w-full h-12 rounded-2xl bg-rose-100 text-rose-700 font-semibold active:scale-[0.99] transition"
-              >
-                Close Vault
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* ===== Close Vault Confirmation (bottom sheet) ===== */}
-      {confirmOpen && (
-        <div className="fixed inset-0 z-50">
-          {/* backdrop */}
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => !closing && setConfirmOpen(false)}
-          />
-          {/* sheet */}
-          <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-3xl p-5 shadow-2xl">
-            <div className="mx-auto h-1.5 w-16 rounded-full bg-gray-200 mb-3" />
-            <div className="flex items-start justify-between mb-2">
-              <h3 className="text-base font-semibold text-gray-900">
-                Are you sure you want to close this vault?
-              </h3>
-              <button
-                onClick={() => !closing && setConfirmOpen(false)}
-                className="p-1 rounded hover:bg-gray-100"
-              >
-                <X className="w-5 h-5 text-gray-600" />
-              </button>
-            </div>
-            <p className="text-[12px] text-gray-600 mb-4">
-              Note: This action cannot be undone.
-            </p>
-
-            {closeErr && (
-              <p className="text-[12px] text-rose-600 mb-3">{closeErr}</p>
-            )}
-
+      <div className="min-h-screen bg-[#F4F6FA] flex items-start justify-center">
+        {/* wider container so content isn't compressed */}
+        <div className="w-full max-w-[480px] min-h-screen bg-[#F4F6FA] md:min-h-0 md:rounded-3xl md:shadow-xl overflow-hidden">
+          {/* Top bar */}
+          <div className="px-4 pt-4 pb-2 bg-[#F4F6FA]">
             <button
-              onClick={doCloseVault}
-              disabled={closing}
-              className={`w-full h-12 rounded-2xl font-semibold ${
-                closing ? "bg-rose-200 text-white" : "bg-rose-600 text-white"
-              }`}
+              onClick={() => startTransition(() => router.back())}
+              className="inline-flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900"
             >
-              {closing ? "Closing..." : "Close Vault"}
+              <ArrowLeft className="h-4 w-4" />
             </button>
           </div>
+
+          {/* Page title */}
+          <div className="px-4 pb-2 flex items-center gap-2">
+            <h1 className="text-[15px] font-semibold text-gray-900">{name}</h1>
+            {txLoading && (
+              <span className="inline-flex items-center gap-1 text-[11px] text-gray-500">
+                <LogoSpinner show={true} className="w-3.5 h-3.5" />
+                syncing…
+              </span>
+            )}
+          </div>
+
+          {loading ? (
+            /* ---------- Loading (LogoSpinner only) ---------- */
+            <div className="px-4 py-12 flex items-center justify-center">
+              <span className="inline-flex items-center gap-2 text-sm text-gray-700">
+                <LogoSpinner show={true} className="w-5 h-5" />
+                Loading vault…
+              </span>
+            </div>
+          ) : (
+            <>
+              {/* ---------- Top vault card ---------- */}
+              <div className="px-4">
+                <div className="rounded-2xl bg-white border border-gray-100 shadow-sm p-3">
+                  <div className="flex items-start gap-3">
+                    {/* vault icon */}
+                    <div className="shrink-0">
+                      <Image
+                        src="/uploads/Little wheel personal vault bw 1.png"
+                        alt="Vault"
+                        width={48}
+                        height={48}
+                        className="w-12 h-12 object-contain"
+                        priority
+                      />
+                    </div>
+
+                    {/* middle */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-semibold text-gray-900 leading-tight truncate">
+                        {new Date(startedAt || new Date()).toLocaleString(
+                          undefined,
+                          {
+                            month: "long",
+                          }
+                        )}{" "}
+                        {new Date(startedAt || new Date()).getDate()}
+                      </p>
+                      <p className="text-[11px] text-gray-600">
+                        Amount: <strong>{NGN(daily)}</strong>
+                      </p>
+
+                      {/* progress bar */}
+                      <div className="mt-2 h-2 rounded-full bg-gray-200 overflow-hidden">
+                        <div
+                          className="h-full rounded-full"
+                          style={{
+                            width: `${progress}%`,
+                            backgroundColor: "#94A3B8",
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* right totals — single straight line */}
+                    <div className="shrink-0 text-right leading-tight text-[12px]">
+                      <p className="whitespace-nowrap font-bold">
+                        <span className="text-rose-600">
+                          {NGN(liveBalance)}
+                        </span>
+                        <span className="text-gray-400">/</span>
+                        <span className="text-emerald-600">{NGN(target)}</span>
+                      </p>
+                      <p className="text-[10px] text-gray-500 mt-1">
+                        {progress}%
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ---------- Stats card ---------- */}
+              <div className="px-4 mt-3">
+                <div className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase">
+                        Target Amount
+                      </p>
+                      <p className="text-[14px] font-bold text-gray-900 mt-1">
+                        {NGN(target)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase">
+                        Amount
+                      </p>
+                      <p className="text-[14px] font-bold text-gray-900 mt-1">
+                        {NGN(daily)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase">
+                        Duration
+                      </p>
+                      <p className="text-[12px] font-bold text-gray-900 mt-1">
+                        {duration || "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase">
+                        Frequency
+                      </p>
+                      <p className="text-[12px] font-bold text-gray-900 mt-1">
+                        {frequency || "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase">
+                        Start Date
+                      </p>
+                      <p className="text-[12px] font-bold text-gray-900 mt-1">
+                        {fmtDate(startedAt)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase">
+                        Maturity Date
+                      </p>
+                      <p className="text-[12px] font-bold text-gray-900 mt-1">
+                        {fmtDate(maturity)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ---------- Transactions card ---------- */}
+              <div className="px-4 mt-3">
+                <div className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4">
+                  <p className="text-[13px] font-semibold text-gray-900 mb-2">
+                    Transactions
+                  </p>
+
+                  {txLoading ? (
+                    <div className="h-28 rounded-xl bg-gray-50 flex items-center justify-center">
+                      <span className="inline-flex items-center gap-2 text-sm text-gray-600">
+                        <LogoSpinner show={true} className="w-5 h-5" />
+                        Loading transactions…
+                      </span>
+                    </div>
+                  ) : txs.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8">
+                      <Image
+                        src="/uploads/Empty State.png"
+                        alt="No transactions"
+                        width={160}
+                        height={160}
+                        className="w-40 h-40 object-contain"
+                        priority
+                      />
+                      <p className="text-[12px] text-gray-500 mt-2">
+                        No transactions yet.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-100">
+                      {txs.map((t) => (
+                        <div
+                          key={t.id}
+                          className="flex items-center justify-between py-3"
+                        >
+                          <div>
+                            <p className="text-[13px] font-medium text-gray-900">
+                              {t.note}
+                            </p>
+                            <p className="text-[11px] text-gray-500">
+                              {fmtDateTime(t.at)}
+                            </p>
+                          </div>
+                          <div
+                            className={`text-[13px] font-semibold ${
+                              t.isCredit ? "text-emerald-600" : "text-rose-600"
+                            }`}
+                          >
+                            {t.isCredit ? "+" : "−"}
+                            {NGN(t.amount)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ---------- Close Vault button ---------- */}
+              <div className="px-4 py-5">
+                <button
+                  onClick={() => setConfirmOpen(true)}
+                  className="w-full h-12 rounded-2xl bg-rose-100 text-rose-700 font-semibold active:scale-[0.99] transition"
+                >
+                  Close Vault
+                </button>
+              </div>
+            </>
+          )}
         </div>
-      )}
-    </div>
+
+        {/* ===== Close Vault Confirmation (bottom sheet) ===== */}
+        {confirmOpen && (
+          <div className="fixed inset-0 z-50">
+            {/* backdrop */}
+            <div
+              className="absolute inset-0 bg-black/40"
+              onClick={() => !closing && setConfirmOpen(false)}
+            />
+            {/* sheet */}
+            <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-3xl p-5 shadow-2xl">
+              <div className="mx-auto h-1.5 w-16 rounded-full bg-gray-200 mb-3" />
+              <div className="flex items-start justify-between mb-2">
+                <h3 className="text-base font-semibold text-gray-900">
+                  Are you sure you want to close this vault?
+                </h3>
+                <button
+                  onClick={() => !closing && setConfirmOpen(false)}
+                  className="p-1 rounded hover:bg-gray-100"
+                >
+                  <X className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
+              <p className="text-[12px] text-gray-600 mb-4">
+                Note: This action cannot be undone.
+              </p>
+
+              {closeErr && (
+                <p className="text-[12px] text-rose-600 mb-3">{closeErr}</p>
+              )}
+
+              <button
+                onClick={doCloseVault}
+                disabled={closing}
+                className={`w-full h-12 rounded-2xl font-semibold flex items-center justify-center gap-2 ${
+                  closing
+                    ? "bg-rose-500/80 text-white"
+                    : "bg-rose-600 text-white"
+                } disabled:opacity-70`}
+              >
+                {closing ? (
+                  <>
+                    <LogoSpinner show={true} className="w-4 h-4" /> Closing…
+                  </>
+                ) : (
+                  "Close Vault"
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
   );
 }

@@ -5,11 +5,27 @@ import { useEffect, useMemo, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+/* ✅ Logo spinner (centered, no overlay) */
+import LogoSpinner from "../../components/loaders/LogoSpinner"; // adjust path if needed
 
 function toNgE164(localish: string) {
   const d = localish.replace(/\D/g, "");
   const local = d.startsWith("0") ? d.slice(1) : d;
   return `+234${local}`;
+}
+
+/* ✅ helpers to normalize avatar URLs like on dashboard */
+function isBareBase64Jpeg(s?: string) {
+  return !!s && /^\/9j\//.test(s);
+}
+function looksLikeDataUrl(s?: string) {
+  return !!s && /^data:image\/[a-z]+;base64,/i.test(s || "");
+}
+function normalizeImgSrc(u?: string) {
+  if (!u) return "";
+  if (looksLikeDataUrl(u)) return u;
+  if (isBareBase64Jpeg(u)) return `data:image/jpeg;base64,${u}`;
+  return u;
 }
 
 export default function MobileLogin() {
@@ -20,6 +36,25 @@ export default function MobileLogin() {
   const [showPassword, setShowPassword] = useState(false);
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  /* ✅ last logged-in user avatar/name (for greeting circle) */
+  const [lastAvatar, setLastAvatar] = useState<string>("");
+  const [lastName, setLastName] = useState<string>("");
+
+  useEffect(() => {
+    try {
+      const a =
+        localStorage.getItem("lw_last_avatar") ||
+        sessionStorage.getItem("lw_last_avatar") ||
+        "";
+      const n =
+        localStorage.getItem("lw_last_name") ||
+        sessionStorage.getItem("lw_last_name") ||
+        "";
+      setLastAvatar(normalizeImgSrc(a || ""));
+      setLastName((n || "").trim());
+    } catch {}
+  }, []);
 
   // persistent device token
   const [deviceToken, setDeviceToken] = useState("web-client");
@@ -126,7 +161,47 @@ export default function MobileLogin() {
         localStorage.setItem("lw_token", token);
       } catch {}
 
-      // 4) Go to app home (your authenticated area)
+      /* ✅ 4) Get user profile → save avatar + display name for next login screen */
+      try {
+        const meRes = await fetch("/api/user/me", {
+          method: "GET",
+          cache: "no-store",
+          credentials: "include",
+        });
+        if (meRes.ok) {
+          const meRaw = await meRes.text();
+          let me: any = {};
+          try {
+            me = JSON.parse(meRaw || "{}");
+          } catch {}
+          const userData = me?.user || me?.data || me || {};
+          const avatarUrl = normalizeImgSrc(
+            userData.avatarUrl || userData.avatar_url || userData.avatar || ""
+          );
+          const firstName =
+            userData.firstName ||
+            userData.first_name ||
+            userData.username ||
+            "";
+          try {
+            if (avatarUrl) {
+              localStorage.setItem("lw_last_avatar", avatarUrl);
+              sessionStorage.setItem("lw_last_avatar", avatarUrl);
+            } else {
+              localStorage.removeItem("lw_last_avatar");
+              sessionStorage.removeItem("lw_last_avatar");
+            }
+            if (firstName) {
+              localStorage.setItem("lw_last_name", String(firstName));
+              sessionStorage.setItem("lw_last_name", String(firstName));
+            }
+          } catch {}
+        }
+      } catch {
+        // non-blocking; ignore if it fails
+      }
+
+      // 5) Go to app home (your authenticated area)
       router.replace("/dash");
     } catch (e: any) {
       setErr(e?.message || "Network error. Please try again.");
@@ -136,6 +211,9 @@ export default function MobileLogin() {
 
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-0 md:p-4">
+      {/* ✅ centered logo spinner during login */}
+      <LogoSpinner show={sending} />
+
       <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-2xl md:shadow-xl overflow-hidden">
         {/* Header */}
         <div className="flex justify-end items-center p-4 pt-6 bg-white">
@@ -152,16 +230,29 @@ export default function MobileLogin() {
           {/* Greeting */}
           <div className="flex items-center gap-3 mb-6">
             <div className="w-8 h-8 bg-gray-300 rounded-full overflow-hidden flex items-center justify-center relative">
-              <Image
-                src="/images/user-avatar.jpg"
-                alt="User Avatar"
-                width={48}
-                height={48}
-                className="w-full h-full object-cover"
-              />
+              {lastAvatar ? (
+                <Image
+                  src={lastAvatar}
+                  alt="Last user avatar"
+                  width={48}
+                  height={48}
+                  className="w-full h-full object-cover"
+                  unoptimized
+                />
+              ) : (
+                /* your original placeholder image */
+                <Image
+                  src="/images/user-avatar.jpg"
+                  alt="User Avatar"
+                  width={48}
+                  height={48}
+                  className="w-full h-full object-cover"
+                />
+              )}
             </div>
             <span className="text-md font-bold text-gray-800">
-              Hi <span className="text-xl">👋</span>
+              Hi{lastName ? `, ${lastName}` : ""}{" "}
+              <span className="text-xl">👋</span>
             </span>
           </div>
 

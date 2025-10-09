@@ -11,6 +11,9 @@ import {
   ArrowDownFromLine,
 } from "lucide-react";
 
+/* ✅ Centered logo spinner overlay */
+import LogoSpinner from "../../../components/loaders/LogoSpinner";
+
 /* --------------------------- Types --------------------------- */
 type Txn = {
   id: string;
@@ -42,7 +45,6 @@ const ICON_BG: Record<Txn["icon"], string> = {
 function fmtDateTime(iso: string) {
   try {
     const d = new Date(iso);
-    // e.g., "3rd Oct, 12:19 PM"
     const day = d.getDate();
     const ord =
       day % 10 === 1 && day !== 11
@@ -65,7 +67,6 @@ function fmtDateTime(iso: string) {
 }
 
 function fmtGroupDate(iso: string) {
-  // dd/mm/yyyy (03/10/2025)
   try {
     const d = new Date(iso);
     const dd = String(d.getDate()).padStart(2, "0");
@@ -77,7 +78,7 @@ function fmtGroupDate(iso: string) {
   }
 }
 
-/* ------------------------------ Mappers (copied from RecentTransactions) ------------------------------ */
+/* ------------------------------ Mappers ------------------------------ */
 function pickArray(payload: any): any[] {
   if (!payload) return [];
 
@@ -161,10 +162,8 @@ const TABS: { key: TabKey; label: string }[] = [
 function matchTab(tab: TabKey, t: Txn) {
   switch (tab) {
     case "deposit":
-      // treat positive non-commission as deposit
       return t.amount > 0 && t.icon !== "commission";
     case "topup":
-      // treat recharge-like transactions as top-ups
       return t.icon === "recharge";
     case "earnings":
       return t.icon === "commission";
@@ -180,7 +179,6 @@ export default function FullTransactionsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // initial tab from query (?tab=earnings)
   const initialTab = (searchParams.get("tab") as TabKey) || "all";
 
   const [tab, setTab] = useState<TabKey>(initialTab);
@@ -234,7 +232,6 @@ export default function FullTransactionsPage() {
           } else {
             setData((prev) => [...prev, ...txns]);
           }
-          // crude hasMore: if we got less than 20, assume end
           setHasMore(txns.length >= 20);
         }
       } catch (e: any) {
@@ -244,7 +241,6 @@ export default function FullTransactionsPage() {
       }
     }
 
-    // first mount or when page increments
     load(page);
 
     return () => {
@@ -259,9 +255,6 @@ export default function FullTransactionsPage() {
       return;
     }
     setPage(1);
-    // We don't refetch immediately; we filter client-side.
-    // If you want server-side filtering, wire query params the backend supports.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, query]);
 
   // filtered view
@@ -291,6 +284,9 @@ export default function FullTransactionsPage() {
 
   return (
     <div className="min-h-screen bg-white">
+      {/* ✅ Centered logo spinner overlay while fetching */}
+      <LogoSpinner show={loading} invert blurStrength={2} />
+
       {/* Top bar */}
       <div className="sticky top-0 z-10 bg-white">
         <div className="flex items-center gap-2 p-3">

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -9,6 +9,7 @@ import {
   Phone,
   CircleDot,
 } from "lucide-react";
+import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 
 /* ----------------------------- tiny date utils ---------------------------- */
 const startOfMonth = (d: Date) => new Date(d.getFullYear(), d.getMonth(), 1);
@@ -88,6 +89,7 @@ const TX: Array<{
 
 export default function UsersProfilePage() {
   const router = useRouter();
+  const [isRouting, startTransition] = useTransition();
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const matrix = useMemo(() => getMonthMatrix(currentMonth), [currentMonth]);
@@ -104,14 +106,22 @@ export default function UsersProfilePage() {
     <div className="min-h-screen bg-white">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-white">
-        <div className="flex items-center p-4">
+        <div className="flex items-center justify-between p-4">
           <button
-            onClick={() => router.push("/customer")}
-            className="flex items-center text-gray-600 hover:text-gray-800"
+            onClick={() =>
+              startTransition(() => {
+                router.push("/customer");
+              })
+            }
+            className="flex items-center text-gray-600 hover:text-gray-800 disabled:opacity-60"
+            disabled={isRouting}
           >
             <ArrowLeft className="w-5 h-5 mr-2" />
             <span className="text-sm font-medium">Back</span>
           </button>
+
+          {/* Inline spinner while routing — no overlay */}
+          {isRouting ? <LogoSpinner show={true} /> : null}
         </div>
       </div>
 
@@ -156,7 +166,7 @@ export default function UsersProfilePage() {
           </div>
         </div>
 
-        {/* Calendar (matches your design) */}
+        {/* Calendar */}
         <div className="mt-4 rounded-2xl border border-gray-200 p-3">
           <div className="flex items-center justify-between">
             <div className="text-xl font-semibold">
@@ -221,10 +231,15 @@ export default function UsersProfilePage() {
           <div className="flex items-center justify-between mb-2">
             <div className="text-sm font-semibold">Recent Transactions</div>
             <button
-              className="text-xs text-gray-500 hover:text-gray-700"
-              onClick={() => router.push("/users/transactions")}
+              className="text-xs text-gray-500 hover:text-gray-700 inline-flex items-center gap-2 disabled:opacity-60"
+              onClick={() =>
+                startTransition(() => {
+                  router.push("/users/transactions");
+                })
+              }
+              disabled={isRouting}
             >
-              See all
+              {isRouting ? <LogoSpinner show={true} /> : "See all"}
             </button>
           </div>
 

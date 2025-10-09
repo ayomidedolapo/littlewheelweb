@@ -1,10 +1,11 @@
 /* app/customer/vault/vault-details/page.tsx */
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { ArrowLeft, HelpCircle } from "lucide-react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
+import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 
 /* ---------- helpers ---------- */
 type APIVault = {
@@ -108,6 +109,9 @@ export default function VaultDetailsPage() {
   const [rows, setRows] = useState<VaultRow[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  // route transition (for subtle global feedback)
+  const [isRouting, startTransition] = useTransition();
+
   // read token once; don't cause refetch loops
   const token = useMemo(() => getAuthToken(), []);
 
@@ -204,17 +208,23 @@ export default function VaultDetailsPage() {
     if (customerId) q.set("customerId", customerId);
     q.set("vaultId", v.id); // REAL api id
     const slug = makeSafeSlug(v.name, v.id);
-    router.push(`/customer/vault/${encodeURIComponent(slug)}?${q.toString()}`);
+    startTransition(() =>
+      router.push(`/customer/vault/${encodeURIComponent(slug)}?${q.toString()}`)
+    );
   };
 
   return (
-    <div className="min-h-screen bg-white flex items-start justify-center p-0 md:p-4">
+    <div
+      className="min-h-screen bg-white flex items-start justify-center p-0 md:p-4"
+      aria-busy={isRouting}
+    >
       <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-3xl md:shadow-xl overflow-hidden">
         {/* Header */}
         <div className="px-4 pt-4 pb-2 flex items-center justify-between">
           <button
-            onClick={() => router.back()}
-            className="inline-flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900"
+            onClick={() => startTransition(() => router.back())}
+            className="inline-flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900 disabled:opacity-60"
+            disabled={isRouting}
           >
             <ArrowLeft className="h-4 w-4" />
             Back
@@ -270,12 +280,22 @@ export default function VaultDetailsPage() {
           )}
 
           {loading ? (
-            Array.from({ length: 5 }).map((_, i) => (
+            <>
               <div
-                key={i}
-                className="h-24 rounded-2xl border border-gray-200 bg-gray-50 animate-pulse"
-              />
-            ))
+                role="status"
+                aria-live="polite"
+                className="mb-3 inline-flex items-center gap-2 text-xs text-gray-700"
+              >
+                <LogoSpinner className="w-4 h-4" />
+                Loading…
+              </div>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="h-24 rounded-2xl border border-gray-200 bg-gray-50 animate-pulse"
+                />
+              ))}
+            </>
           ) : rows.length === 0 ? (
             /* ----- EMPTY STATE IMAGE (centered) ----- */
             <div className="flex items-center justify-center py-30">
@@ -299,10 +319,11 @@ export default function VaultDetailsPage() {
                   key={v.id}
                   onClick={() => pushVaultDetail(v)}
                   aria-label={`Open ${v.name}`}
-                  className="w-full text-left rounded-2xl border border-gray-200 bg-white p-3 flex gap-3 hover:bg-gray-50 transition"
+                  className="w-full text-left rounded-2xl border border-gray-200 bg-white p-3 flex gap-3 hover:bg-gray-50 transition disabled:opacity-60"
+                  disabled={isRouting}
                 >
                   {/* icon */}
-                  <div className="shrink-0 flex items-center justify-center h-[58px] w-[58px] rounded-xl bg-gray-50 border border-gray-200">
+                  <div className="shrink-0 flex items-center justify-center h-[58px] w/[58px] rounded-xl bg-gray-50 border border-gray-200">
                     <Image
                       src="/uploads/Little wheel personal vault bw 1.png"
                       alt="Vault"

@@ -10,6 +10,7 @@ import {
   Building2,
   Globe2,
 } from "lucide-react";
+import LogoSpinner from "../../../../components/loaders/LogoSpinner"; // ← update path if your folders differ
 
 const FALLBACK_AFTER_ADDRESS = "/agent-login";
 
@@ -92,7 +93,6 @@ export default function AddressPage() {
   const [bearerToken, setBearerToken] = useState<string>("");
 
   useEffect(() => {
-    // Prefer the sessionId from query (shared across steps), then sessionStorage (same key as previous page)
     const fromQs = (sp.get("sessionId") || "").trim();
     let sid = fromQs;
     try {
@@ -102,7 +102,6 @@ export default function AddressPage() {
 
     setSignupSessionId(sid);
 
-    // Try token from cookie first (if server set a readable cookie), then localStorage
     let tok = getCookie("lw_token") || "";
     if (!tok) {
       try {
@@ -112,7 +111,6 @@ export default function AddressPage() {
     setBearerToken(tok);
   }, [sp]);
 
-  // If we have a session but no token, try to obtain a V1 token (same flow as Personal Details)
   const ensuringTokenRef = useRef(false);
   useEffect(() => {
     if (bearerToken || !signupSessionId || ensuringTokenRef.current) return;
@@ -134,7 +132,6 @@ export default function AddressPage() {
           } catch {}
         }
       } catch {
-        // ignore; user can retry Save later
       } finally {
         ensuringTokenRef.current = false;
       }
@@ -163,7 +160,6 @@ export default function AddressPage() {
       setCity((prev) => (prev ? prev : "Ibadan"));
       setLga((prev) => (prev ? prev : "Ibadan North"));
     } else {
-      // If you want to force user to re-select when they switch state:
       setCity("");
       setLga("");
     }
@@ -188,7 +184,6 @@ export default function AddressPage() {
     setSaving(true);
     setError(null);
 
-    // Ensure we have a token (attempt one last time if needed)
     let token = bearerToken;
     if (!token && signupSessionId) {
       try {
@@ -221,12 +216,11 @@ export default function AddressPage() {
       city: city.trim(),
       lga: lga.trim(),
       address: address.trim(),
-      ...(signupSessionId ? { sessionId: signupSessionId } : {}), // not used by your route, but harmless
+      ...(signupSessionId ? { sessionId: signupSessionId } : {}),
     };
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      // Send both for safety; your route reads x-lw-auth then falls back to cookie
       Authorization: `Bearer ${token}`,
       "x-lw-auth": token,
       ...(signupSessionId ? { "x-session-id": signupSessionId } : {}),
@@ -282,7 +276,6 @@ export default function AddressPage() {
   const menuItem =
     "w-full text-left px-3 py-2 text-sm hover:bg-gray-50 focus:bg-gray-50 focus:outline-none";
 
-  // close dropdowns on outside click
   const stateMenuRef = useRef<HTMLDivElement | null>(null);
   const lgaMenuRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -305,12 +298,16 @@ export default function AddressPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-0 md:p-4">
-      <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-2xl md:shadow-xl overflow-hidden flex flex-col">
+      <div
+        className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-2xl md:shadow-xl overflow-hidden flex flex-col"
+        aria-busy={saving}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-4 pt-6 pb-2">
           <button
             onClick={goBack}
-            className="flex items-center text-gray-700 hover:text-gray-900"
+            className="flex items-center text-gray-700 hover:text-gray-900 disabled:opacity-60"
+            disabled={saving}
           >
             <ArrowLeft className="w-5 h-5 mr-2" />
             <span className="text-sm font-medium">Back</span>
@@ -487,12 +484,13 @@ export default function AddressPage() {
           <button
             onClick={saveAndContinue}
             disabled={!valid || saving}
-            className={`mb-5 w-full h-12 rounded-xl font-semibold text-white transition ${
+            className={`mb-5 w-full h-12 rounded-xl font-semibold text-white transition inline-flex items-center justify-center gap-2 ${
               !valid || saving
                 ? "bg-gray-300 text-gray-600 cursor-not-allowed"
                 : "bg-black hover:bg-black/90"
             }`}
           >
+            {saving ? <LogoSpinner show={true} /> : null}
             {saving ? "Saving…" : "Save and continue"}
           </button>
         </div>
