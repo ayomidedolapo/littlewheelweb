@@ -3,49 +3,7 @@
 import { useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Landmark, Lock } from "lucide-react";
-
-/* ---------- tiny spinner + overlay (same as BottomTabs) ---------- */
-function Spinner({ className = "w-4 h-4 text-black" }: { className?: string }) {
-  return (
-    <svg
-      className={`animate-spin ${className}`}
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <circle
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="4"
-        fill="none"
-        className="opacity-25"
-      />
-      <path
-        fill="currentColor"
-        className="opacity-90"
-        d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"
-      />
-    </svg>
-  );
-}
-function LoadingOverlay({ show }: { show: boolean }) {
-  if (!show) return null;
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-[1px] flex items-center justify-center"
-    >
-      <div className="rounded-xl bg-white px-4 py-3 shadow-2xl flex items-center gap-3">
-        <Spinner className="w-5 h-5" />
-        <span className="text-[13px] font-semibold text-gray-900">
-          Loading…
-        </span>
-      </div>
-    </div>
-  );
-}
+import LogoSpinner from "../../../../../components/loaders/LogoSpinner"; // ✅ use your loader
 
 export default function WithdrawalSettingsPage() {
   const router = useRouter();
@@ -70,8 +28,8 @@ export default function WithdrawalSettingsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50" aria-busy={isPending}>
-      {/* global overlay while routing */}
-      <LoadingOverlay show={isPending} />
+      {/* global logo overlay while routing */}
+      <LogoSpinner show={isPending} invert />
 
       {/* Header */}
       <div className="bg-white">

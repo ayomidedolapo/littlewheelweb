@@ -14,53 +14,30 @@ import {
   Search as SearchIcon,
   RotateCcw,
 } from "lucide-react";
+import LogoSpinner from "../../../components/loaders/LogoSpinner";
 
-/* ---------- tiny spinner + overlay (same pattern) ---------- */
-function Spinner({ className = "w-5 h-5 text-black" }: { className?: string }) {
-  return (
-    <svg
-      className={`animate-spin ${className}`}
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <circle
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="4"
-        fill="none"
-        className="opacity-25"
-      />
-      <path
-        fill="currentColor"
-        className="opacity-90"
-        d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"
-      />
-    </svg>
-  );
-}
-function LoadingOverlay({
-  show,
-  label = "Loading…",
-}: {
-  show: boolean;
-  label?: string;
-}) {
-  if (!show) return null;
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-[1px] flex items-center justify-center"
-    >
-      <div className="rounded-xl bg-white px-4 py-3 shadow-2xl flex items-center gap-3">
-        <Spinner />
-        <span className="text-[13px] font-semibold text-gray-900">{label}</span>
-      </div>
-    </div>
-  );
-}
+/* ---------- overlay using shared LogoSpinner ---------- */
+// function LoadingOverlay({
+//   show,
+//   label = "Loading…",
+// }: {
+//   show: boolean;
+//   label?: string;
+// }) {
+//   if (!show) return null;
+//   return (
+//     <div
+//       role="status"
+//       aria-live="polite"
+//       className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-[1px] flex items-center justify-center"
+//     >
+//       <div className="rounded-xl bg-white px-4 py-3 shadow-2xl flex items-center gap-3">
+//         <LogoSpinner />
+//         <span className="text-[13px] font-semibold text-gray-900">{label}</span>
+//       </div>
+//     </div>
+//   );
+// }
 
 /* -------- shared types & helpers -------- */
 type Customer = {
@@ -562,315 +539,319 @@ export default function AllBeneficiariesPage() {
   const navDisabled = isRouting;
 
   return (
-    <div
-      className="min-h-screen bg-white flex items-start justify-center p-0 md:p-4"
-      aria-busy={isRouting}
-    >
-      {/* global overlay while routing */}
-      <LoadingOverlay show={isRouting} />
+    <>
+      <LogoSpinner show={isRouting} />
+      <div
+        className="min-h-screen bg-white flex items-start justify-center p-0 md:p-4"
+        aria-busy={isRouting}
+      >
+        {/* global overlay while routing */}
 
-      <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-3xl md:shadow-xl overflow-hidden">
-        {/* Top Bar */}
-        <div className="px-4 pt-6 pb-2 bg-white flex items-center justify-between">
-          <button
-            onClick={() => startTransition(() => router.back())}
-            disabled={navDisabled}
-            className="inline-flex items-center gap-2 text-[13px] font-semibold text-gray-900 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-md disabled:opacity-60"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            Back
-          </button>
+        <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-3xl md:shadow-xl overflow-hidden">
+          {/* Top Bar */}
+          <div className="px-4 pt-6 pb-2 bg-white flex items-center justify-between">
+            <button
+              onClick={() => startTransition(() => router.back())}
+              disabled={navDisabled}
+              className="inline-flex items-center gap-2 text-[13px] font-semibold text-gray-900 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-md disabled:opacity-60"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Back
+            </button>
 
-          <button
-            onClick={refresh}
-            disabled={navDisabled}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-700 hover:text-black disabled:opacity-60"
-            aria-label="Refresh"
-          >
-            <RotateCcw className="w-4 h-4" />
-            Refresh
-          </button>
-        </div>
+            <button
+              onClick={refresh}
+              disabled={navDisabled}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-700 hover:text-black disabled:opacity-60"
+              aria-label="Refresh"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Refresh
+            </button>
+          </div>
 
-        {/* Header */}
-        <div className="px-4 pb-3">
-          <h1 className="text-2xl font-extrabold text-black">
-            My Beneficiaries
-          </h1>
-          <p className="text-[12px] text-gray-500 mt-1">
-            {loading ? "Loading…" : `${visible.length} customers loaded`}
-          </p>
-        </div>
+          {/* Header */}
+          <div className="px-4 pb-3">
+            <h1 className="text-2xl font-extrabold text-black">
+              My Beneficiaries
+            </h1>
+            <p className="text-[12px] text-gray-500 mt-1">
+              {loading ? "Loading…" : `${visible.length} customers loaded`}
+            </p>
+          </div>
 
-        {/* Filter Row — dropdown (narrow & gray) + longer search */}
-        <div className="px-4 pb-4">
-          <div className="flex gap-2">
-            {/* Dropdown — narrower, gray background to stand out */}
-            <div className="relative" ref={menuRef}>
-              <button
-                type="button"
-                onClick={() => setMenuOpen((v) => !v)}
-                className="h-11 min-w-[128px] inline-flex items-center gap-2 pl-3 pr-2 rounded-lg border border-gray-200 bg-gray-50 text-sm font-semibold text-gray-900"
-              >
-                {(() => {
-                  const current = FILTERS.find((f) => f.key === filter)!;
-                  const Ico = current.Icon;
-                  return (
-                    <>
-                      <Ico className="w-4 h-4" />
-                      {current.label}
-                      <ChevronDown className="w-4 h-4 ml-1" />
-                    </>
-                  );
-                })()}
-              </button>
-
-              {menuOpen && (
-                <div className="absolute left-0 mt-2 w-56 rounded-2xl bg-white shadow-xl border border-gray-100 z-20 p-2">
-                  {FILTERS.map(({ key, label, Icon }) => {
-                    const selected = key === filter;
+          {/* Filter Row — dropdown (narrow & gray) + longer search */}
+          <div className="px-4 pb-4">
+            <div className="flex gap-2">
+              {/* Dropdown */}
+              <div className="relative" ref={menuRef}>
+                <button
+                  type="button"
+                  onClick={() => setMenuOpen((v) => !v)}
+                  className="h-11 min-w-[128px] inline-flex items-center gap-2 pl-3 pr-2 rounded-lg border border-gray-200 bg-gray-50 text-sm font-semibold text-gray-900"
+                >
+                  {(() => {
+                    const current = FILTERS.find((f) => f.key === filter)!;
+                    const Ico = current.Icon;
                     return (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => {
-                          setFilter(key);
-                          setMenuOpen(false);
-                          setQuery("");
-                        }}
-                        className={`w-full flex items-center justify-between px-3 py-3 rounded-lg ${
-                          selected ? "bg-gray-50" : "hover:bg-gray-50"
-                        }`}
-                      >
-                        <span className="inline-flex items-center gap-3 text-[13px] font-semibold text-gray-900">
-                          <Icon className="w-4 h-4" />
-                          {label}
-                        </span>
-                        {selected && (
-                          <Check className="w-4 h-4 text-gray-900" />
-                        )}
-                      </button>
+                      <>
+                        <Ico className="w-4 h-4" />
+                        {current.label}
+                        <ChevronDown className="w-4 h-4 ml-1" />
+                      </>
                     );
-                  })}
-                </div>
-              )}
-            </div>
+                  })()}
+                </button>
 
-            {/* Longer Search input */}
-            <div className="relative flex-1">
-              <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-black w-4 h-4" />
-              <input
-                type={filter === "phone" ? "tel" : "text"}
-                inputMode={filter === "phone" ? "numeric" : "text"}
-                pattern={filter === "phone" ? "[0-9]*" : undefined}
-                value={query}
-                onChange={(e) =>
-                  setQuery(
-                    filter === "phone"
-                      ? e.target.value.replace(/\D/g, "")
-                      : e.target.value
-                  )
-                }
-                placeholder={FILTERS.find((f) => f.key === filter)?.placeholder}
-                className="w-full h-11 pl-10 pr-3 bg-white border border-gray-200 rounded-lg text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Body: list / empty / loading — CARD UI identical to Customers page */}
-        <div className="px-4 pb-6">
-          {loading ? (
-            <div className="space-y-3">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="h-24 bg-gray-50 rounded-xl animate-pulse"
-                />
-              ))}
-            </div>
-          ) : errorMsg ? (
-            <div className="rounded-xl border border-rose-100 bg-rose-50 p-3 text-[12px] text-rose-700">
-              {errorMsg}
-            </div>
-          ) : visible.length === 0 ? (
-            <div className="text-center py-14">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <SearchIcon className="w-8 h-8 text-gray-400" />
-              </div>
-              <p className="text-gray-500 text-sm font-medium">
-                No beneficiaries match your search
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {visible.map((c) => {
-                const rawPhone = c.phoneNumber || c.phone || "";
-                const phone = displayPhoneLocal(rawPhone);
-                const vb =
-                  typeof c.vaultBalance === "number" ? c.vaultBalance : 0;
-
-                return (
-                  <button
-                    key={c.id}
-                    onClick={() => goToPersonalVault(c.id)}
-                    disabled={navDisabled}
-                    className="w-full text-left rounded-xl border border-gray-200 bg-white p-4 shadow-sm active:scale-[0.995] transition disabled:opacity-60 disabled:cursor-not-allowed"
-                    aria-label={`Open ${c.firstName} ${c.lastName} personal vault`}
-                  >
-                    {/* Top: avatar/photo + name */}
-                    <div className="flex items-center gap-3 mb-3">
-                      <Avatar customer={c} size={40} />
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-gray-900 truncate">
-                          {c.firstName} {c.lastName}
-                        </p>
-                        {c.email ? (
-                          <p className="text-[11px] text-gray-500 truncate">
-                            {c.email}
-                          </p>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    {/* Middle: balance + phone */}
-                    <div className="flex items-center justify-between text-xs">
-                      <p className="text-gray-600">
-                        Vault Balance:{" "}
-                        <span
-                          className="font-semibold"
-                          style={{ color: C.deposit }}
+                {menuOpen && (
+                  <div className="absolute left-0 mt-2 w-56 rounded-2xl bg-white shadow-xl border border-gray-100 z-20 p-2">
+                    {FILTERS.map(({ key, label, Icon }) => {
+                      const selected = key === filter;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => {
+                            setFilter(key);
+                            setMenuOpen(false);
+                            setQuery("");
+                          }}
+                          className={`w-full flex items-center justify-between px-3 py-3 rounded-lg ${
+                            selected ? "bg-gray-50" : "hover:bg-gray-50"
+                          }`}
                         >
-                          {fmtNairaCompact(vb)}
-                        </span>
-                      </p>
-                      <p className="text-gray-600">
-                        Phone No:{" "}
-                        <span className="font-semibold text-gray-900">
-                          {phone}
-                        </span>
-                      </p>
-                    </div>
+                          <span className="inline-flex items-center gap-3 text-[13px] font-semibold text-gray-900">
+                            <Icon className="w-4 h-4" />
+                            {label}
+                          </span>
+                          {selected && (
+                            <Check className="w-4 h-4 text-gray-900" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
 
-                    {/* Actions row */}
-                    <div className="mt-3 flex items-center gap-8 text-[13px] font-semibold">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openPicker("deposit", c.id);
-                        }}
-                        className="inline-flex items-center gap-1.5"
-                        style={{ color: C.deposit }}
-                        disabled={navDisabled}
-                      >
-                        <Image
-                          src="/uploads/mdi_instant-deposit.png"
-                          alt="Deposit"
-                          width={16}
-                          height={16}
-                          className="w-4 h-4"
-                        />
-                        Deposit
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          goToVaultOverview(c.id);
-                        }}
-                        className="inline-flex items-center gap-1.5"
-                        style={{ color: C.vault }}
-                        disabled={navDisabled}
-                      >
-                        <Image
-                          src="/uploads/fluent_vault-24-filled.png"
-                          alt="Check vault"
-                          width={16}
-                          height={16}
-                          className="w-4 h-4"
-                        />
-                        Check vault
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openPicker("withdraw", c.id);
-                        }}
-                        className="inline-flex items-center gap-1.5"
-                        style={{ color: C.withdraw }}
-                        disabled={navDisabled}
-                      >
-                        <Image
-                          src="/uploads/ph_hand-withdraw-fill.png"
-                          alt="Withdraw"
-                          width={16}
-                          height={16}
-                          className="w-4 h-4"
-                        />
-                        Withdraw
-                      </button>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ===== Simple action picker (optional small modal) ===== */}
-      {pickerOpen && selectedCustomerId && (
-        <div className="fixed inset-0 z-50">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setPickerOpen(false)}
-          />
-          <div className="absolute inset-x-0 bottom-0 bg-white rounded-3xl p-5 shadow-2xl">
-            <div className="mx-auto h-1.5 w-16 rounded-full bg-gray-200 mb-3" />
-            <h3 className="text-base font-semibold text-gray-900 mb-4">
-              Choose Action
-            </h3>
-            <div className="space-y-3">
-              <button
-                onClick={() => {
-                  const cid = selectedCustomerId!;
-                  setPickerOpen(false);
-                  setActiveCustomer(cid);
-                  nav(
-                    `/customer/vault/deposit?customerId=${encodeURIComponent(
-                      cid
-                    )}`
-                  );
-                }}
-                className="w-full h-12 rounded-xl bg-black text-white font-semibold disabled:opacity-60"
-                disabled={navDisabled}
-              >
-                Deposit
-              </button>
-              <button
-                onClick={() => {
-                  const cid = selectedCustomerId!;
-                  setPickerOpen(false);
-                  setActiveCustomer(cid);
-                  nav(
-                    `/customer/vault/withdraw?customerId=${encodeURIComponent(
-                      cid
-                    )}`
-                  );
-                }}
-                className="w-full h-12 rounded-xl bg-gray-200 text-gray-900 font-semibold disabled:opacity-60"
-                disabled={navDisabled}
-              >
-                Withdraw
-              </button>
+              {/* Longer Search input */}
+              <div className="relative flex-1">
+                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-black w-4 h-4" />
+                <input
+                  type={filter === "phone" ? "tel" : "text"}
+                  inputMode={filter === "phone" ? "numeric" : "text"}
+                  pattern={filter === "phone" ? "[0-9]*" : undefined}
+                  value={query}
+                  onChange={(e) =>
+                    setQuery(
+                      filter === "phone"
+                        ? e.target.value.replace(/\D/g, "")
+                        : e.target.value
+                    )
+                  }
+                  placeholder={
+                    FILTERS.find((f) => f.key === filter)?.placeholder
+                  }
+                  className="w-full h-11 pl-10 pr-3 bg-white border border-gray-200 rounded-lg text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                />
+              </div>
             </div>
           </div>
+
+          {/* Body: list / empty / loading */}
+          <div className="px-4 pb-6">
+            {loading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-24 bg-gray-50 rounded-xl animate-pulse"
+                  />
+                ))}
+              </div>
+            ) : errorMsg ? (
+              <div className="rounded-xl border border-rose-100 bg-rose-50 p-3 text-[12px] text-rose-700">
+                {errorMsg}
+              </div>
+            ) : visible.length === 0 ? (
+              <div className="text-center py-14">
+                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <SearchIcon className="w-8 h-8 text-gray-400" />
+                </div>
+                <p className="text-gray-500 text-sm font-medium">
+                  No beneficiaries match your search
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {visible.map((c) => {
+                  const rawPhone = c.phoneNumber || c.phone || "";
+                  const phone = displayPhoneLocal(rawPhone);
+                  const vb =
+                    typeof c.vaultBalance === "number" ? c.vaultBalance : 0;
+
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => goToPersonalVault(c.id)}
+                      disabled={navDisabled}
+                      className="w-full text-left rounded-xl border border-gray-200 bg-white p-4 shadow-sm active:scale-[0.995] transition disabled:opacity-60 disabled:cursor-not-allowed"
+                      aria-label={`Open ${c.firstName} ${c.lastName} personal vault`}
+                    >
+                      {/* Top: avatar/photo + name */}
+                      <div className="flex items-center gap-3 mb-3">
+                        <Avatar customer={c} size={40} />
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">
+                            {c.firstName} {c.lastName}
+                          </p>
+                          {c.email ? (
+                            <p className="text-[11px] text-gray-500 truncate">
+                              {c.email}
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      {/* Middle: balance + phone */}
+                      <div className="flex items-center justify-between text-xs">
+                        <p className="text-gray-600">
+                          Vault Balance:{" "}
+                          <span
+                            className="font-semibold"
+                            style={{ color: C.deposit }}
+                          >
+                            {fmtNairaCompact(vb)}
+                          </span>
+                        </p>
+                        <p className="text-gray-600">
+                          Phone No:{" "}
+                          <span className="font-semibold text-gray-900">
+                            {phone}
+                          </span>
+                        </p>
+                      </div>
+
+                      {/* Actions row */}
+                      <div className="mt-3 flex items-center gap-8 text-[13px] font-semibold">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openPicker("deposit", c.id);
+                          }}
+                          className="inline-flex items-center gap-1.5"
+                          style={{ color: C.deposit }}
+                          disabled={navDisabled}
+                        >
+                          <Image
+                            src="/uploads/mdi_instant-deposit.png"
+                            alt="Deposit"
+                            width={16}
+                            height={16}
+                            className="w-4 h-4"
+                          />
+                          Deposit
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            goToVaultOverview(c.id);
+                          }}
+                          className="inline-flex items-center gap-1.5"
+                          style={{ color: C.vault }}
+                          disabled={navDisabled}
+                        >
+                          <Image
+                            src="/uploads/fluent_vault-24-filled.png"
+                            alt="Check vault"
+                            width={16}
+                            height={16}
+                            className="w-4 h-4"
+                          />
+                          Check vault
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openPicker("withdraw", c.id);
+                          }}
+                          className="inline-flex items-center gap-1.5"
+                          style={{ color: C.withdraw }}
+                          disabled={navDisabled}
+                        >
+                          <Image
+                            src="/uploads/ph_hand-withdraw-fill.png"
+                            alt="Withdraw"
+                            width={16}
+                            height={16}
+                            className="w-4 h-4"
+                          />
+                          Withdraw
+                        </button>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
-      )}
-    </div>
+
+        {/* ===== Simple action picker (optional small modal) ===== */}
+        {pickerOpen && selectedCustomerId && (
+          <div className="fixed inset-0 z-50">
+            <div
+              className="absolute inset-0 bg-black/40"
+              onClick={() => setPickerOpen(false)}
+            />
+            <div className="absolute inset-x-0 bottom-0 bg-white rounded-3xl p-5 shadow-2xl">
+              <div className="mx-auto h-1.5 w-16 rounded-full bg-gray-200 mb-3" />
+              <h3 className="text-base font-semibold text-gray-900 mb-4">
+                Choose Action
+              </h3>
+              <div className="space-y-3">
+                <button
+                  onClick={() => {
+                    const cid = selectedCustomerId!;
+                    setPickerOpen(false);
+                    setActiveCustomer(cid);
+                    nav(
+                      `/customer/vault/deposit?customerId=${encodeURIComponent(
+                        cid
+                      )}`
+                    );
+                  }}
+                  className="w-full h-12 rounded-xl bg-black text-white font-semibold disabled:opacity-60"
+                  disabled={navDisabled}
+                >
+                  Deposit
+                </button>
+                <button
+                  onClick={() => {
+                    const cid = selectedCustomerId!;
+                    setPickerOpen(false);
+                    setActiveCustomer(cid);
+                    nav(
+                      `/customer/vault/withdraw?customerId=${encodeURIComponent(
+                        cid
+                      )}`
+                    );
+                  }}
+                  className="w-full h-12 rounded-xl bg-gray-200 text-gray-900 font-semibold disabled:opacity-60"
+                  disabled={navDisabled}
+                >
+                  Withdraw
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
   );
 }

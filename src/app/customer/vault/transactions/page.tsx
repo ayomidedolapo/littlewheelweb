@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { ArrowLeft, Check, Search } from "lucide-react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
+import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 
 /* ---------------- helpers & types ---------------- */
 
@@ -109,6 +110,9 @@ export default function VaultTransactionsPage() {
   const [loading, setLoading] = useState(true);
   const [txs, setTxs] = useState<Tx[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  // global route spinner (keeps UX consistent with other pages)
+  const [isRouting, startTransition] = useTransition();
 
   // stable token (read once)
   const token = useMemo(() => getAuthToken(), []);
@@ -248,7 +252,7 @@ export default function VaultTransactionsPage() {
     );
   }, [filtered]);
 
-  const goBack = () => router.back();
+  const goBack = () => startTransition(() => router.back());
 
   // navigate to transaction details (pass through enough to render immediately)
   const openDetails = (t: Tx) => {
@@ -261,23 +265,36 @@ export default function VaultTransactionsPage() {
     qs.set("at", t.at);
     if (t.ref) qs.set("ref", t.ref);
     if (t.vaultId) qs.set("vaultId", String(t.vaultId));
-    router.push(`/customer/vault/transaction-details?${qs.toString()}`);
+
+    startTransition(() =>
+      router.push(`/customer/vault/transaction-details?${qs.toString()}`)
+    );
   };
 
   /* ---------------- UI ---------------- */
 
   return (
-    <div className="min-h-screen bg-white flex items-start justify-center p-0 md:p-4">
+    <div
+      className="min-h-screen bg-white flex items-start justify-center p-0 md:p-4"
+      aria-busy={isRouting}
+    >
       <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-3xl md:shadow-xl overflow-hidden">
         {/* Header */}
         <div className="px-4 pt-4 pb-2 flex items-center gap-2">
           <button
             onClick={goBack}
-            className="inline-flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900"
+            className="inline-flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900 disabled:opacity-60"
+            disabled={isRouting}
           >
             <ArrowLeft className="h-4 w-4" />
             Back
           </button>
+          {isRouting && (
+            <span className="inline-flex items-center gap-1 text-[11px] text-gray-500">
+              <LogoSpinner className="w-3.5 h-3.5" />
+              loading…
+            </span>
+          )}
         </div>
 
         {/* Title + Filters */}
@@ -327,14 +344,24 @@ export default function VaultTransactionsPage() {
         {/* List */}
         <div className="px-4 pb-6">
           {loading ? (
-            <div className="space-y-3">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="h-20 rounded-xl bg-gray-50 animate-pulse"
-                />
-              ))}
-            </div>
+            <>
+              <div
+                role="status"
+                aria-live="polite"
+                className="mb-3 inline-flex items-center gap-2 text-xs text-gray-700"
+              >
+                <LogoSpinner className="w-4 h-4" />
+                Loading…
+              </div>
+              <div className="space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-20 rounded-xl bg-gray-50 animate-pulse"
+                  />
+                ))}
+              </div>
+            </>
           ) : error ? (
             <p className="text-sm text-rose-600">{error}</p>
           ) : grouped.length === 0 ? (
@@ -362,10 +389,11 @@ export default function VaultTransactionsPage() {
                       <button
                         key={t.id}
                         onClick={() => openDetails(t)}
-                        className="w-full text-left bg-white px-4 py-3 active:bg-gray-50"
+                        className="w-full text-left bg-white px-4 py-3 active:bg-gray-50 disabled:opacity-60"
                         aria-label={`Open ${t.label} of ${fmtNGN(
                           t.amount
                         )} on ${dateTimePretty(t.at)}`}
+                        disabled={isRouting}
                       >
                         <div className="flex items-center gap-3">
                           {/* left icon circle (green like screenshot) */}

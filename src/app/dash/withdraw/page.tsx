@@ -5,53 +5,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, UserRound, Landmark, X } from "lucide-react";
-
-/* ---------- tiny spinner + overlay (same pattern you liked) ---------- */
-function Spinner({ className = "w-5 h-5 text-black" }: { className?: string }) {
-  return (
-    <svg
-      className={`animate-spin ${className}`}
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <circle
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="4"
-        fill="none"
-        className="opacity-25"
-      />
-      <path
-        fill="currentColor"
-        className="opacity-90"
-        d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"
-      />
-    </svg>
-  );
-}
-function LoadingOverlay({
-  show,
-  label = "Loading…",
-}: {
-  show: boolean;
-  label?: string;
-}) {
-  if (!show) return null;
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-[1px] flex items-center justify-center"
-    >
-      <div className="rounded-xl bg-white px-4 py-3 shadow-2xl flex items-center gap-3">
-        <Spinner />
-        <span className="text-[13px] font-semibold text-gray-900">{label}</span>
-      </div>
-    </div>
-  );
-}
+import LogoSpinner from "../../../components/loaders/LogoSpinner"; // ← ✅ import your logo loader
 
 /* ---------------- money helpers ---------------- */
 const fmt = (v: number) =>
@@ -228,7 +182,7 @@ export default function CommissionWithdrawalPage() {
     }
   }, [tokenHeader]);
 
-  // Initial load + focus/visibility refresh (like dashboard)
+  // Initial load + refresh hooks
   useEffect(() => {
     loadCommissionBalance();
   }, [loadCommissionBalance]);
@@ -384,13 +338,11 @@ export default function CommissionWithdrawalPage() {
       setAmount("");
       setMethod("");
 
-      // mark balances dirty (so dashboard and other tabs refresh)
       try {
         localStorage.setItem("lw_balance_dirty", String(Date.now()));
       } catch {}
 
       await loadCommissionBalance();
-      // No nav. If you want a toast, replace alert with your toaster.
       alert("Withdrawal request submitted successfully.");
     } catch (e: any) {
       setSubmitErr(e?.message || "Withdrawal failed.");
@@ -405,8 +357,12 @@ export default function CommissionWithdrawalPage() {
   /* ---------------- UI ---------------- */
   return (
     <div className="min-h-screen bg-white" aria-busy={overlayOn}>
-      {/* global overlay only when confirming (long action) */}
-      <LoadingOverlay show={overlayOn} label={overlayLabel} />
+      {/* 🔥 Logo spinner replaces the old overlay: shows when submitting or initial data is loading */}
+      <LogoSpinner
+        show={overlayOn || loadingBalance || loadingBank}
+        invert
+        blurStrength={1.2}
+      />
 
       {/* Top Bar */}
       <div className="sticky top-0 z-10 bg-white">

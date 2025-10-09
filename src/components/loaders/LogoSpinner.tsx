@@ -15,29 +15,27 @@ type Props = {
   show: boolean;
   /** Put the image in /public; default is your logo */
   src?: string; // default: "./uploads/Layer_x0020_1.png"
-  /** Base diameter in px (before scale) */
-  size?: number; // default: 64
-  /** Horizontal travel span as fraction of viewport width (0..1) */
-  travelFrac?: number; // default: 0.6  (±30vw)
-  /** Travel speed in px/sec */
-  speed?: number; // default: 240
-  /** Minimum and maximum scale across the span */
-  minScale?: number; // default: 0.85
-  maxScale?: number; // default: 1.25
+  /** Base diameter in px */
+  size?: number; // default: 96
   /** Spin period (seconds per full turn) */
   spinPeriodSec?: number; // default: 0.9
+  /** Backdrop color; set "" to disable */
+  backdrop?: string; // default: "rgba(0,0,0,0.24)"
+  /** Blur intensity for the backdrop */
+  blurPx?: number; // default: 2  (lighter blur)
+  /** Invert the image (turn black logo to white) */
+  invert?: boolean; // default: true
   className?: string;
 };
 
 export default function LogoSpinner({
   show,
   src = "./uploads/Layer_x0020_1.png",
-  size = 64,
-  travelFrac = 0.6,
-  speed = 240,
-  minScale = 0.85,
-  maxScale = 1.25,
+  size = 90,
   spinPeriodSec = 0.9,
+  backdrop = "rgba(0,0,0,0.24)",
+  blurPx = 2,
+  invert = true,
   className = "",
 }: Props) {
   if (!show) return null;
@@ -45,15 +43,10 @@ export default function LogoSpinner({
   const safeSrc = normalizeSrc(src);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const rafRef = useRef<number | null>(null);
-
-  // animation state
-  const xRef = useRef(0); // px (centered origin)
-  const dirRef = useRef(1); // +1 right, -1 left
-  const angleRef = useRef(0); // degrees
   const lastTsRef = useRef<number | null>(null);
+  const angleRef = useRef<number>(0);
 
   useEffect(() => {
-    const travelHalf = Math.max(40, (window.innerWidth * travelFrac) / 2);
     const spinDegPerSec = 360 / Math.max(0.1, spinPeriodSec);
 
     const step = (ts: number) => {
@@ -64,30 +57,11 @@ export default function LogoSpinner({
       }
 
       const last = lastTsRef.current ?? ts;
-      const dt = Math.min(0.032, (ts - last) / 1000); // clamp for stability
+      const dt = Math.min(0.032, (ts - last) / 1000);
       lastTsRef.current = ts;
 
-      // move
-      xRef.current += dirRef.current * speed * dt;
-
-      // bounce at edges so it stays on-screen
-      if (xRef.current > travelHalf) {
-        xRef.current = travelHalf;
-        dirRef.current = -1;
-      } else if (xRef.current < -travelHalf) {
-        xRef.current = -travelHalf;
-        dirRef.current = 1;
-      }
-
-      // progressive scale across span (no reset)
-      const tNorm = (xRef.current + travelHalf) / (2 * travelHalf); // 0..1
-      const scale = minScale + (maxScale - minScale) * tNorm;
-
-      // continuous spin
       angleRef.current = (angleRef.current + spinDegPerSec * dt) % 360;
-
-      // apply ONE combined transform → no circular orbit bug
-      el.style.transform = `translate3d(${xRef.current}px, 0, 0) scale(${scale}) rotate(${angleRef.current}deg)`;
+      el.style.transform = `rotate(${angleRef.current}deg)`;
 
       rafRef.current = requestAnimationFrame(step);
     };
@@ -98,15 +72,35 @@ export default function LogoSpinner({
       rafRef.current = null;
       lastTsRef.current = null;
     };
-  }, [travelFrac, speed, minScale, maxScale, spinPeriodSec]);
+  }, [spinPeriodSec]);
 
   return (
     <div
       aria-live="polite"
       aria-busy="true"
-      className={`fixed inset-0 z-[70] pointer-events-none flex items-center justify-center ${className}`}
+      className={`fixed inset-0 z-[70] ${className}`}
+      style={{
+        pointerEvents: "none",
+        background: backdrop,
+        backdropFilter: `blur(${blurPx}px)`,
+        WebkitBackdropFilter: `blur(${blurPx}px)`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
     >
-      <div className="relative">
+      {/* Centered spinner */}
+      <div
+        style={{
+          position: "relative",
+          width: size,
+          height: size,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          filter: "drop-shadow(0 8px 18px rgba(0,0,0,0.22))",
+        }}
+      >
         <Image
           ref={imgRef as any}
           src={safeSrc}
@@ -116,8 +110,13 @@ export default function LogoSpinner({
           priority
           unoptimized
           style={{
-            willChange: "transform",
+            willChange: "transform, filter",
             transformOrigin: "50% 50%",
+            display: "block",
+            // invert the dark logo to white, and lift mid-tones so it's crisp
+            filter: invert
+              ? "invert(1) brightness(1.2) contrast(1.05)"
+              : undefined,
           }}
         />
       </div>

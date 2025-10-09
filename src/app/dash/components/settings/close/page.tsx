@@ -3,52 +3,10 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Trash2, Landmark, CheckCircle2, X } from "lucide-react";
+import LogoSpinner from "../../../../../components/loaders/LogoSpinner";
 
 const CLOSE_ACCOUNT_URL = "/api/v1/users/close-account";
 type CloseAction = "DE_ACTIVATE" | "DELETE";
-
-/* ---------- tiny spinner + overlay ---------- */
-function Spinner({ className = "w-4 h-4 text-black" }: { className?: string }) {
-  return (
-    <svg
-      className={`animate-spin ${className}`}
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <circle
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="4"
-        fill="none"
-        className="opacity-25"
-      />
-      <path
-        fill="currentColor"
-        className="opacity-90"
-        d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"
-      />
-    </svg>
-  );
-}
-function LoadingOverlay({ show }: { show: boolean }) {
-  if (!show) return null;
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-[1px] flex items-center justify-center"
-    >
-      <div className="rounded-xl bg-white px-4 py-3 shadow-2xl flex items-center gap-3">
-        <Spinner className="w-5 h-5" />
-        <span className="text-[13px] font-semibold text-gray-900">
-          Loading…
-        </span>
-      </div>
-    </div>
-  );
-}
 
 /* ---------------- Bottom Sheet (edge-to-edge) ---------------- */
 function BottomSheet({
@@ -222,6 +180,8 @@ export default function CloseAccountPage() {
   });
 
   const [isPending, startTransition] = useTransition();
+  const [submitting, setSubmitting] = useState(false); // ✅ ensure overlay during API call
+
   const goBack = () => router.back();
 
   const postClose = async (payload: {
@@ -247,7 +207,9 @@ export default function CloseAccountPage() {
 
   const submitAction = () => {
     if (!choice) return;
-    startTransition(async () => {
+    setSubmitting(true); // ✅ show spinner while posting
+    // use Transition only for navigation/UX smoothness after success
+    (async () => {
       try {
         await postClose({ action: choice, feedback });
         setSheetOpen(false);
@@ -259,7 +221,9 @@ export default function CloseAccountPage() {
               : "Account deactivated. You can reactivate anytime.",
           kind: "ok",
         });
-        setTimeout(() => router.replace("/agent-login"), 900);
+        startTransition(() => {
+          setTimeout(() => router.replace("/agent-login"), 900);
+        });
       } catch {
         setToast({
           show: true,
@@ -269,8 +233,10 @@ export default function CloseAccountPage() {
               : "Failed to deactivate. Please try again.",
           kind: "err",
         });
+      } finally {
+        setSubmitting(false); // ✅ hide spinner
       }
-    });
+    })();
   };
 
   const primaryLabel =
@@ -281,9 +247,13 @@ export default function CloseAccountPage() {
       : "Select an option";
   const PrimaryIcon = choice === "DELETE" ? Trash2 : Landmark;
 
+  const overlayOn = isPending || submitting; // ✅ when to show the logo overlay
+
   return (
     <>
-      <LoadingOverlay show={isPending} />
+      {/* global centered logo spinner */}
+      <LogoSpinner show={overlayOn} invert />
+
       <Toast
         show={toast.show}
         label={toast.msg}
@@ -339,7 +309,7 @@ export default function CloseAccountPage() {
           >
             <div className="mx-auto w-full max-w-sm px-4 pb-2">
               <button
-                disabled={!choice || isPending}
+                disabled={!choice || overlayOn}
                 onClick={() => setSheetOpen(true)} // OPEN SHEET FOR BOTH OPTIONS
                 className={`w-full rounded-2xl h-12 flex items-center justify-center gap-2 text-white
                   ${
@@ -384,20 +354,16 @@ export default function CloseAccountPage() {
 
         <button
           onClick={submitAction}
-          disabled={isPending}
+          disabled={overlayOn || !choice}
           className={`mt-4 w-full h-12 rounded-2xl text-white font-semibold disabled:opacity-70 ${
             choice === "DELETE" ? "bg-rose-500" : "bg-gray-900"
           }`}
         >
-          {isPending ? (
-            <span className="inline-flex items-center gap-2">
-              <Spinner className="w-4 h-4 text-white" /> Processing…
-            </span>
-          ) : choice === "DELETE" ? (
-            "Confirm Delete"
-          ) : (
-            "Confirm Deactivate"
-          )}
+          {overlayOn
+            ? "Processing…"
+            : choice === "DELETE"
+            ? "Confirm Delete"
+            : "Confirm Deactivate"}
         </button>
       </BottomSheet>
     </>

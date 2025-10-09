@@ -10,6 +10,7 @@ import {
   RefreshCcw,
   X,
 } from "lucide-react";
+import LogoSpinner from "../../../../../components/loaders/LogoSpinner";
 
 /* ---------------- helpers ---------------- */
 const isBrowser = typeof window !== "undefined";
@@ -328,7 +329,10 @@ export default function FaceCapturePage() {
                 : "bg-black/30 cursor-not-allowed"
             }`}
           >
-            {submitting ? "Submitting…" : "Proceed"}
+            <span className="inline-flex items-center gap-2">
+              {submitting && <LogoSpinner className="w-4 h-4" />}
+              {submitting ? "Submitting…" : "Proceed"}
+            </span>
           </button>
         </div>
       </div>
@@ -375,7 +379,11 @@ export default function FaceCapturePage() {
                 }}
               />
               {!videoReady && (
-                <p className="text-[12px] text-gray-600 mt-2">
+                <p
+                  className="text-[12px] text-gray-600 mt-2 inline-flex items-center gap-2"
+                  role="status"
+                >
+                  <LogoSpinner className="w-4 h-4" />
                   Initializing camera…
                 </p>
               )}
@@ -396,7 +404,10 @@ export default function FaceCapturePage() {
                     : "bg-black hover:bg-black/90"
                 }`}
               >
-                {processingPhoto ? "Processing…" : "Capture"}
+                <span className="inline-flex items-center gap-2">
+                  {processingPhoto && <LogoSpinner className="w-4 h-4" />}
+                  {processingPhoto ? "Processing…" : "Capture"}
+                </span>
               </button>
               <button
                 onClick={closeCamera}

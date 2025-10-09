@@ -7,52 +7,8 @@ import { Search, Plus, RotateCcw, ChevronRight } from "lucide-react";
 import Image from "next/image";
 import BottomTabs from "../dash/components/BottomTabs";
 
-/* ---------- tiny spinner + overlay ---------- */
-function Spinner({ className = "w-5 h-5 text-black" }: { className?: string }) {
-  return (
-    <svg
-      className={`animate-spin ${className}`}
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <circle
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="4"
-        fill="none"
-        className="opacity-25"
-      />
-      <path
-        fill="currentColor"
-        className="opacity-90"
-        d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"
-      />
-    </svg>
-  );
-}
-function LoadingOverlay({
-  show,
-  label = "Loading…",
-}: {
-  show: boolean;
-  label?: string;
-}) {
-  if (!show) return null;
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-[1px] flex items-center justify-center"
-    >
-      <div className="rounded-xl bg-white px-4 py-3 shadow-2xl flex items-center gap-3">
-        <Spinner />
-        <span className="text-[13px] font-semibold text-gray-900">{label}</span>
-      </div>
-    </div>
-  );
-}
+/* ✅ Logo spinner pattern (exact as BottomTabs) */
+import LogoSpinner from "../../components/loaders/LogoSpinner";
 
 /* -------- types & utils -------- */
 type Customer = {
@@ -136,7 +92,6 @@ function extractArray(payload: any): any[] {
 }
 
 /* ---------- phone helpers ---------- */
-// Display without +234/234 and without a leading 0 afterwards
 function displayPhoneLocal(input?: string) {
   const digits = (input || "").replace(/\D/g, "");
   let v = digits;
@@ -344,6 +299,7 @@ export default function CustomerPage() {
   const [vaultsLoading, setVaultsLoading] = useState(false);
   const [vaultsErr, setVaultsErr] = useState<string | null>(null);
 
+  /* ✅ Use startTransition so the LogoSpinner shows while navigating */
   const routePush = (href: string) => {
     startTransition(() => {
       router.push(href);
@@ -533,12 +489,14 @@ export default function CustomerPage() {
     };
   }, [beneficiaries.length]);
 
-  /* ---------- 2) Number-only search ---------- */
+  /* ---------- 2) Number-only search (require 6+ digits) ---------- */
   useEffect(() => {
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
 
     const qDigits = search.replace(/\D/g, "").trim();
-    if (!qDigits) {
+
+    // ✅ Require at least 6 digits before doing anything
+    if (!qDigits || qDigits.length < 6) {
       setSearchResults([]);
       setSearching(false);
       return;
@@ -547,7 +505,6 @@ export default function CustomerPage() {
     debounceRef.current = window.setTimeout(async () => {
       setSearching(true);
       try {
-        // Still call upstream (if it supports query), but we’ll filter locally by number anyway
         const qs = new URLSearchParams({
           page: "1",
           limit: "100",
@@ -662,10 +619,14 @@ export default function CustomerPage() {
   const visible = useMemo(() => {
     const qDigits = search.replace(/\D/g, "").trim();
 
+    // ✅ If user started typing but hasn't reached 6 digits, show nothing
+    if (qDigits && qDigits.length < 6) {
+      return [];
+    }
+
     if (qDigits) {
       return (searchResults || []).filter((c) => {
         const phone = (c.phoneNumber || c.phone || "").replace(/\D/g, "");
-        // compare against phone stripped of +234/234/leading 0
         const normalized = displayPhoneLocal(phone);
         return normalized.includes(qDigits);
       });
@@ -690,383 +651,406 @@ export default function CustomerPage() {
     );
   };
 
-  return (
-    <div className="min-h-screen bg-white flex items-start justify-center p-0 md:p-4">
-      {/* global route loader */}
-      <LoadingOverlay show={isRouting} label="Loading…" />
+  // For showing the result count only when 6+ digits entered
+  const searchDigits = search.replace(/\D/g, "").trim();
+  const canShowCount = searchDigits.length >= 6;
 
-      <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-3xl md:shadow-xl overflow-hidden">
-        {/* Header */}
-        <div className="bg-white px-4 pt-8 pb-6 border-b border-gray-100">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-xl font-bold text-black">Customers</h1>
+  return (
+    <>
+      {/* ✅ Global route spinner (exact BottomTabs pattern) */}
+      <LogoSpinner show={isRouting} />
+
+      <div className="min-h-screen bg-white flex items-start justify-center p-0 md:p-4">
+        {/* global route loader (kept) */}
+
+        <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-3xl md:shadow-xl overflow-hidden">
+          {/* Header */}
+          <div className="bg-white px-4 pt-8 pb-6 border-b border-gray-100">
+            <div className="flex items-center justify-between mb-4">
+              <h1 className="text-xl font-bold text-black">Customers</h1>
+              <button
+                onClick={refresh}
+                disabled={navDisabled}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-700 hover:text-black disabled:opacity-60 disabled:cursor-not-allowed"
+                aria-label="Refresh"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Refresh
+              </button>
+            </div>
+
+            {/* Search (number only) */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-black w-4 h-4" />
+              <input
+                type="tel"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={search}
+                onChange={(e) => setSearch(e.target.value.replace(/\D/g, ""))}
+                placeholder="Search by phone number"
+                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+              />
+              {canShowCount && (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-500">
+                  {searching ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <LogoSpinner show={true} />
+                      Searching…
+                    </span>
+                  ) : (
+                    `${visible.length} result(s)`
+                  )}
+                </span>
+              )}
+            </div>
+
+            {errorMsg && !search && (
+              <p className="mt-3 text-[12px] text-rose-600" role="alert">
+                {errorMsg}
+              </p>
+            )}
+          </div>
+
+          {/* NEW: “My Beneficiaries” header row with View all */}
+          <div className="px-4 py-4 border-b border-gray-100 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-extrabold text-black">
+                My Beneficiaries
+              </span>
+              {enriching && (
+                <span className="text-xs text-gray-500">
+                  (updating balances…)
+                </span>
+              )}
+            </div>
             <button
-              onClick={refresh}
+              type="button"
+              onClick={() => routePush("/customer/all")}
               disabled={navDisabled}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-700 hover:text-black disabled:opacity-60 disabled:cursor-not-allowed"
-              aria-label="Refresh"
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-800 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-md disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <RotateCcw className="w-4 h-4" />
-              Refresh
+              View all
+              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Search (number only) */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-black w-4 h-4" />
-            <input
-              type="tel"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={search}
-              onChange={(e) => setSearch(e.target.value.replace(/\D/g, ""))}
-              placeholder="Search by phone number"
-              className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-            />
-            {search && (
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-500">
-                {searching ? "Searching..." : `${visible.length} result(s)`}
-              </span>
-            )}
-          </div>
-
-          {errorMsg && !search && (
-            <p className="mt-3 text-[12px] text-rose-600" role="alert">
-              {errorMsg}
-            </p>
-          )}
-        </div>
-
-        {/* NEW: “My Beneficiaries” header row with View all */}
-        <div className="px-4 py-4 border-b border-gray-100 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-extrabold text-black">
-              My Beneficiaries
-            </span>
-            {enriching && (
-              <span className="text-xs text-gray-500">
-                (updating balances…)
-              </span>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => routePush("/customer/all")}
-            disabled={navDisabled}
-            className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-800 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-md disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            View all
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Body: list / empty / loading */}
-        <div className="px-4 py-4">
-          {searching && (
-            <div className="mb-3 inline-flex items-center gap-2 text-xs text-gray-600">
-              <Spinner className="w-4 h-4 text-gray-700" />
-              Searching…
-            </div>
-          )}
-
-          {loading && !search ? (
-            <div className="space-y-3">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="h-24 bg-gray-50 rounded-xl animate-pulse"
-                />
-              ))}
-            </div>
-          ) : visible.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Search className="w-8 h-8 text-gray-400" />
+          {/* Body: list / empty / loading */}
+          <div className="px-4 py-4">
+            {searching && canShowCount && (
+              <div className="mb-3 inline-flex items-center gap-2 text-xs text-gray-600">
+                <LogoSpinner show={true} />
+                Searching…
               </div>
-              <p className="text-gray-500 text-sm font-medium">
-                {search
-                  ? "No users match your phone number"
-                  : "No customers with deposits yet"}
-              </p>
-              {!search && (
-                <p className="text-gray-400 text-xs mt-1">
-                  Onboard a customer to see them here.
-                </p>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {visible.map((c) => {
-                const rawPhone = c.phoneNumber || c.phone || "";
-                const phone = displayPhoneLocal(rawPhone);
-                const vb =
-                  typeof c.vaultBalance === "number" ? c.vaultBalance : 0;
-
-                return (
-                  <button
-                    key={c.id}
-                    onClick={() => goToPersonalVault(c.id)}
-                    disabled={navDisabled}
-                    className="w-full text-left rounded-xl border border-gray-200 bg-white p-4 shadow-sm active:scale-[0.995] transition disabled:opacity-60 disabled:cursor-not-allowed"
-                    aria-label={`Open ${c.firstName} ${c.lastName} personal vault`}
-                  >
-                    {/* Top: avatar/photo + name */}
-                    <div className="flex items-center gap-3 mb-3">
-                      <Avatar customer={c} size={40} />
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-gray-900 truncate">
-                          {c.firstName} {c.lastName}
-                        </p>
-                        {c.email ? (
-                          <p className="text-[11px] text-gray-500 truncate">
-                            {c.email}
-                          </p>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    {/* Middle: balance + phone (phone shown without +234/234/leading 0) */}
-                    <div className="flex items-center justify-between text-xs">
-                      <p className="text-gray-600">
-                        Vault Balance:{" "}
-                        <span
-                          className="font-semibold"
-                          style={{ color: C.deposit }}
-                        >
-                          {fmtNairaCompact(vb)}
-                        </span>
-                      </p>
-                      <p className="text-gray-600">
-                        Phone No:{" "}
-                        <span className="font-semibold text-gray-900">
-                          {phone}
-                        </span>
-                      </p>
-                    </div>
-
-                    {/* Actions row */}
-                    <div className="mt-3 flex items-center gap-8 text-[13px] font-semibold">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openPicker("deposit", c.id);
-                        }}
-                        className="inline-flex items-center gap-1.5"
-                        style={{ color: C.deposit }}
-                        disabled={navDisabled}
-                      >
-                        <Image
-                          src="/uploads/mdi_instant-deposit.png"
-                          alt="Deposit"
-                          width={16}
-                          height={16}
-                          className="w-4 h-4"
-                        />
-                        Deposit
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          goToVaultOverview(c.id);
-                        }}
-                        className="inline-flex items-center gap-1.5"
-                        style={{ color: C.vault }}
-                        disabled={navDisabled}
-                      >
-                        <Image
-                          src="/uploads/fluent_vault-24-filled.png"
-                          alt="Check vault"
-                          width={16}
-                          height={16}
-                          className="w-4 h-4"
-                        />
-                        Check vault
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openPicker("withdraw", c.id);
-                        }}
-                        className="inline-flex items-center gap-1.5"
-                        style={{ color: C.withdraw }}
-                        disabled={navDisabled}
-                      >
-                        <Image
-                          src="/uploads/ph_hand-withdraw-fill.png"
-                          alt="Withdraw"
-                          width={16}
-                          height={16}
-                          className="w-4 h-4"
-                        />
-                        Withdraw
-                      </button>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Tabs */}
-        <BottomTabs value="customers" onChange={() => {}} className="mt-6" />
-      </div>
-
-      {/* Floating Onboard Button */}
-      <div
-        className="fixed right-4 z-50 pointer-events-none"
-        style={{ top: `calc(env(safe-area-inset-top) + 600px)` }}
-      >
-        <button
-          type="button"
-          onClick={() => routePush("/onboard-form")}
-          aria-label="Onboard new user"
-          disabled={navDisabled}
-          className="pointer-events-auto inline-flex items-center gap-2 rounded-sm bg-black px-5 py-3
-               text-white text-[12px] font-semibold shadow-xl shadow-black/40 active:scale-[0.98] transition disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-black">
-            <Plus className="h-4 w-4" strokeWidth={2.5} />
-          </span>
-          Onboard new user
-        </button>
-      </div>
-
-      {/* ===== Vault Picker Modal (Deposit / Withdraw) ===== */}
-      {pickerOpen && (
-        <div className="fixed inset-0 z-50">
-          {/* backdrop */}
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setPickerOpen(false)}
-          />
-          {/* sheet */}
-          <div className="absolute inset-x-0 bottom-0 bg-white rounded-3xl p-5 shadow-2xl">
-            <div className="mx-auto h-1.5 w-16 rounded-full bg-gray-200 mb-3" />
-
-            <h3 className="text-base font-semibold text-gray-900 mb-4">
-              Choose Preferred Vault
-            </h3>
-
-            {vaultsErr && (
-              <p className="text-[12px] text-rose-600 mb-3">{vaultsErr}</p>
             )}
 
-            {vaultsLoading ? (
+            {loading && !search ? (
               <div className="space-y-3">
                 {Array.from({ length: 3 }).map((_, i) => (
                   <div
                     key={i}
-                    className="h-20 rounded-xl bg-gray-50 animate-pulse"
+                    className="h-24 bg-gray-50 rounded-xl animate-pulse"
                   />
                 ))}
               </div>
-            ) : vaults.length === 0 ? (
-              <p className="text-sm text-gray-500">No vaults yet.</p>
+            ) : visible.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Search className="w-8 h-8 text-gray-400" />
+                </div>
+                <p className="text-gray-500 text-sm font-medium">
+                  {searchDigits.length > 0 && searchDigits.length < 6
+                    ? "Enter at least the first 6 digits"
+                    : search
+                    ? "No users match your phone number"
+                    : "No customers with deposits yet"}
+                </p>
+                {!search && (
+                  <p className="text-gray-400 text-xs mt-1">
+                    Onboard a customer to see them here.
+                  </p>
+                )}
+              </div>
             ) : (
-              <div className="space-y-3 max-h-[55vh] overflow-auto pr-1">
-                {vaults.map((v) => {
-                  const pct = v.target
-                    ? Math.min(100, Math.round((v.balance / v.target) * 100))
-                    : 0;
-                  const isActive = selectedVaultId === v.id;
+              <div className="space-y-3">
+                {visible.map((c) => {
+                  const rawPhone = c.phoneNumber || c.phone || "";
+                  const phone = displayPhoneLocal(rawPhone);
+                  const vb =
+                    typeof c.vaultBalance === "number" ? c.vaultBalance : 0;
+
                   return (
                     <button
-                      key={v.id}
-                      onClick={() => setSelectedVaultId(v.id)}
-                      className={`w-full text-left rounded-xl border p-3 bg-white flex items-center gap-3 ${
-                        isActive ? "border-black" : "border-gray-200"
-                      }`}
+                      key={c.id}
+                      onClick={() => goToPersonalVault(c.id)}
+                      disabled={navDisabled}
+                      className="w-full text-left rounded-xl border border-gray-200 bg-white p-4 shadow-sm active:scale-[0.995] transition disabled:opacity-60 disabled:cursor-not-allowed"
+                      aria-label={`Open ${c.firstName} ${c.lastName} personal vault`}
                     >
-                      <div className="shrink-0">
-                        <Image
-                          src="/uploads/Little wheel personal vault bw 1.png"
-                          alt="Vault"
-                          width={56}
-                          height={56}
-                          className="w-14 h-14 object-contain"
-                          priority
-                        />
-                      </div>
-
-                      <div className="flex-1">
-                        <p className="text-[13px] font-semibold text-gray-900 leading-tight">
-                          {v.name}
-                        </p>
-                        <p className="text-[11px] text-gray-600">
-                          Amount: <strong>{fmtNaira2(v.daily)}</strong> (DAILY)
-                        </p>
-
-                        <div className="mt-2 flex items-center gap-2">
-                          <div className="h-2 flex-1 rounded-full bg-gray-200 overflow-hidden">
-                            <div
-                              className="h-full rounded-full"
-                              style={{
-                                width: `${pct}%`,
-                                backgroundColor: "#10B981",
-                              }}
-                            />
-                          </div>
-                          <span className="text-[11px] text-gray-600">
-                            {isFinite(pct) ? pct : 0}%
-                          </span>
+                      {/* Top: avatar/photo + name */}
+                      <div className="flex items-center gap-3 mb-3">
+                        <Avatar customer={c} size={40} />
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">
+                            {c.firstName} {c.lastName}
+                          </p>
+                          {c.email ? (
+                            <p className="text-[11px] text-gray-500 truncate">
+                              {c.email}
+                            </p>
+                          ) : null}
                         </div>
                       </div>
 
-                      <div className="text-right text-[12px] font-semibold">
-                        <span className="text-red-600">
-                          {fmtNaira2(v.balance)}
-                        </span>
-                        <span className="text-gray-400">/</span>
-                        <span className="text-green-600">
-                          {fmtNaira2(v.target)}
-                        </span>
+                      {/* Middle: balance + phone */}
+                      <div className="flex items-center justify-between text-xs">
+                        <p className="text-gray-600">
+                          Vault Balance:{" "}
+                          <span
+                            className="font-semibold"
+                            style={{ color: C.deposit }}
+                          >
+                            {fmtNairaCompact(vb)}
+                          </span>
+                        </p>
+                        <p className="text-gray-600">
+                          Phone No:{" "}
+                          <span className="font-semibold text-gray-900">
+                            {phone}
+                          </span>
+                        </p>
+                      </div>
+
+                      {/* Actions row */}
+                      <div className="mt-3 flex items-center gap-8 text-[13px] font-semibold">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openPicker("deposit", c.id);
+                          }}
+                          className="inline-flex items-center gap-1.5"
+                          style={{ color: C.deposit }}
+                          disabled={navDisabled}
+                        >
+                          <Image
+                            src="/uploads/mdi_instant-deposit.png"
+                            alt="Deposit"
+                            width={16}
+                            height={16}
+                            className="w-4 h-4"
+                          />
+                          Deposit
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            goToVaultOverview(c.id);
+                          }}
+                          className="inline-flex items-center gap-1.5"
+                          style={{ color: C.vault }}
+                          disabled={navDisabled}
+                        >
+                          <Image
+                            src="/uploads/fluent_vault-24-filled.png"
+                            alt="Check vault"
+                            width={16}
+                            height={16}
+                            className="w-4 h-4"
+                          />
+                          Check vault
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openPicker("withdraw", c.id);
+                          }}
+                          className="inline-flex items-center gap-1.5"
+                          style={{ color: C.withdraw }}
+                          disabled={navDisabled}
+                        >
+                          <Image
+                            src="/uploads/ph_hand-withdraw-fill.png"
+                            alt="Withdraw"
+                            width={16}
+                            height={16}
+                            className="w-4 h-4"
+                          />
+                          Withdraw
+                        </button>
                       </div>
                     </button>
                   );
                 })}
               </div>
             )}
-
-            <button
-              onClick={proceed}
-              disabled={!selectedVaultId || !selectedCustomerId || navDisabled}
-              className={`mt-4 w-full h-12 rounded-2xl font-semibold ${
-                selectedVaultId && selectedCustomerId && !navDisabled
-                  ? "bg-black text-white"
-                  : "bg-gray-200 text-gray-500 cursor-not-allowed"
-              }`}
-            >
-              Select and Proceed
-            </button>
-
-            <button
-              onClick={() => {
-                setPickerOpen(false);
-                if (selectedCustomerId) {
-                  setActiveCustomer(selectedCustomerId);
-                  routePush(
-                    `/customer/vault/create?customerId=${encodeURIComponent(
-                      selectedCustomerId
-                    )}`
-                  );
-                } else {
-                  routePush("/customer/vault/create");
-                }
-              }}
-              disabled={navDisabled}
-              className="mt-3 w-full text-center text-[13px] font-semibold text-black underline disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              Create New Vault
-            </button>
           </div>
+
+          {/* Tabs */}
+          <BottomTabs value="customers" onChange={() => {}} className="mt-6" />
+
+          {/* ✅ Bottom padding spacer */}
+          <div className="h-15" />
         </div>
-      )}
-    </div>
+
+        {/* Floating Onboard Button */}
+        <div
+          className="fixed right-4 z-50 pointer-events-none"
+          style={{ top: `calc(env(safe-area-inset-top) + 600px)` }}
+        >
+          <button
+            type="button"
+            onClick={() => routePush("/onboard-form")}
+            aria-label="Onboard new user"
+            disabled={navDisabled}
+            className="pointer-events-auto inline-flex items-center gap-2 rounded-sm bg-black px-5 py-3
+               text-white text-[12px] font-semibold shadow-xl shadow-black/40 active:scale-[0.98] transition disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-black">
+              <Plus className="h-4 w-4" strokeWidth={2.5} />
+            </span>
+            Onboard new user
+          </button>
+        </div>
+
+        {/* ===== Vault Picker Modal (Deposit / Withdraw) ===== */}
+        {pickerOpen && (
+          <div className="fixed inset-0 z-50">
+            {/* backdrop */}
+            <div
+              className="absolute inset-0 bg-black/40"
+              onClick={() => setPickerOpen(false)}
+            />
+            {/* sheet */}
+            <div className="absolute inset-x-0 bottom-0 bg-white rounded-3xl p-5 shadow-2xl">
+              <div className="mx-auto h-1.5 w-16 rounded-full bg-gray-200 mb-3" />
+
+              <h3 className="text-base font-semibold text-gray-900 mb-4">
+                Choose Preferred Vault
+              </h3>
+
+              {vaultsErr && (
+                <p className="text-[12px] text-rose-600 mb-3">{vaultsErr}</p>
+              )}
+
+              {vaultsLoading ? (
+                <div className="space-y-3">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="h-20 rounded-xl bg-gray-50 animate-pulse"
+                    />
+                  ))}
+                </div>
+              ) : vaults.length === 0 ? (
+                <p className="text-sm text-gray-500">No vaults yet.</p>
+              ) : (
+                <div className="space-y-3 max-h-[55vh] overflow-auto pr-1">
+                  {vaults.map((v) => {
+                    const pct = v.target
+                      ? Math.min(100, Math.round((v.balance / v.target) * 100))
+                      : 0;
+                    const isActive = selectedVaultId === v.id;
+                    return (
+                      <button
+                        key={v.id}
+                        onClick={() => setSelectedVaultId(v.id)}
+                        className={`w-full text-left rounded-xl border p-3 bg-white flex items-center gap-3 ${
+                          isActive ? "border-black" : "border-gray-200"
+                        }`}
+                      >
+                        <div className="shrink-0">
+                          <Image
+                            src="/uploads/Little wheel personal vault bw 1.png"
+                            alt="Vault"
+                            width={56}
+                            height={56}
+                            className="w-14 h-14 object-contain"
+                            priority
+                          />
+                        </div>
+
+                        <div className="flex-1">
+                          <p className="text-[13px] font-semibold text-gray-900 leading-tight">
+                            {v.name}
+                          </p>
+                          <p className="text-[11px] text-gray-600">
+                            Amount: <strong>{fmtNaira2(v.daily)}</strong>{" "}
+                            (DAILY)
+                          </p>
+
+                          <div className="mt-2 flex items-center gap-2">
+                            <div className="h-2 flex-1 rounded-full bg-gray-200 overflow-hidden">
+                              <div
+                                className="h-full rounded-full"
+                                style={{
+                                  width: `${pct}%`,
+                                  backgroundColor: "#10B981",
+                                }}
+                              />
+                            </div>
+                            <span className="text-[11px] text-gray-600">
+                              {isFinite(pct) ? pct : 0}%
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-right text-[12px] font-semibold">
+                          <span className="text-red-600">
+                            {fmtNaira2(v.balance)}
+                          </span>
+                          <span className="text-gray-400">/</span>
+                          <span className="text-green-600">
+                            {fmtNaira2(v.target)}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              <button
+                onClick={proceed}
+                disabled={
+                  !selectedVaultId || !selectedCustomerId || navDisabled
+                }
+                className={`mt-4 w-full h-12 rounded-2xl font-semibold ${
+                  selectedVaultId && selectedCustomerId && !navDisabled
+                    ? "bg-black text-white"
+                    : "bg-gray-200 text-gray-500 cursor-not-allowed"
+                }`}
+              >
+                Select and Proceed
+              </button>
+
+              <button
+                onClick={() => {
+                  setPickerOpen(false);
+                  if (selectedCustomerId) {
+                    setActiveCustomer(selectedCustomerId);
+                    routePush(
+                      `/customer/vault/create?customerId=${encodeURIComponent(
+                        selectedCustomerId
+                      )}`
+                    );
+                  } else {
+                    routePush("/customer/vault/create");
+                  }
+                }}
+                disabled={navDisabled}
+                className="mt-3 w-full text-center text-[13px] font-semibold text-black underline disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                Create New Vault
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
   );
 }

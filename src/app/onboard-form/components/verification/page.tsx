@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
+import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 
 const OTP_LEN = 4;
 
@@ -109,7 +110,6 @@ export default function MobileVerification() {
   };
 
   const handleProceed = async () => {
-    // If you re-enable OTP later, this will verify it.
     if (!isComplete || submitting) return;
     const token = sessionStorage.getItem("lw_reg_token");
     if (!token) {
@@ -181,14 +181,18 @@ export default function MobileVerification() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-0 md:p-4">
       <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-2xl md:shadow-xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center p-4 pt-8 bg-white">
+        <div className="flex items-center justify-between p-4 pt-8 bg-white">
           <button
             onClick={() => router.back()}
-            className="flex items-center text-gray-600 hover:text-gray-800"
+            className="flex items-center text-gray-600 hover:text-gray-800 disabled:opacity-60"
+            disabled={submitting || resending}
           >
             <ArrowLeft className="w-5 h-5 mr-2" />
             <span className="text-sm font-medium">Back</span>
           </button>
+
+          {/* Inline spinner (no overlay) whenever we’re busy */}
+          {(submitting || resending) && <LogoSpinner show={true} />}
         </div>
 
         {/* Body */}
@@ -204,9 +208,16 @@ export default function MobileVerification() {
             <button
               onClick={handleSendAgain}
               disabled={resending}
-              className="text-gray-900 text-sm underline hover:text-gray-700 disabled:opacity-60"
+              className="text-gray-900 text-sm underline hover:text-gray-700 disabled:opacity-60 inline-flex items-center gap-2"
             >
-              {resending ? "Sending…" : "Send code again"}
+              {resending ? (
+                <>
+                  <LogoSpinner show={true} />
+                  Sending…
+                </>
+              ) : (
+                "Send code again"
+              )}
             </button>
           </div>
 
@@ -252,13 +263,20 @@ export default function MobileVerification() {
           <button
             onClick={handleProceed}
             disabled={!proceedEnabled}
-            className={`w-full font-semibold py-4 px-6 rounded-xl transition-colors text-sm ${
+            className={`w-full font-semibold py-4 px-6 rounded-xl transition-colors text-sm inline-flex items-center justify-center gap-2 ${
               proceedEnabled
                 ? "bg-black text-white hover:bg-black/90"
                 : "bg-gray-200 text-gray-500"
             }`}
           >
-            {submitting ? "Verifying…" : "Proceed"}
+            {submitting ? (
+              <>
+                <LogoSpinner show={true} />
+                Verifying…
+              </>
+            ) : (
+              "Proceed"
+            )}
           </button>
 
           {/* Skip for now */}

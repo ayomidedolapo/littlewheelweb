@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, Edit3, Crown, X, CheckCircle2 } from "lucide-react";
+import LogoSpinner from "../../../../../components/loaders/LogoSpinner";
 
 /* ---------------- types & helpers ---------------- */
 type VirtualAccount = {
@@ -206,8 +207,12 @@ export default function ProfilePage() {
     }
   };
 
+  const showOverlay = loading || saving; // page-level spinner
+
   return (
     <div className="min-h-screen bg-gray-50">
+      <LogoSpinner show={showOverlay} invert />
+
       {/* Header */}
       <div className="bg-white">
         <div className="max-w-md mx-auto px-4 py-3">
@@ -407,8 +412,6 @@ function UpgradeToTier2Modal({
 }) {
   const router = useRouter();
 
-  /* ---- hooks at top (no conditionals) ---- */
-
   // What does backend already have?
   const backendHasPhone = !!onlyDigits(mePhone || "");
   const backendHasEmail = !!(meEmail || "").trim();
@@ -457,14 +460,14 @@ function UpgradeToTier2Modal({
   const needEmail = !backendHasEmail;
   const middleOk = !!middleName.trim() || backendHasMiddle;
 
-  // If everything needed is already present, auto-redirect after a short delay
+  // If everything needed is already present, auto-redirect
   useEffect(() => {
     if (!open) return;
     const allGood = backendHasPhone && backendHasEmail && middleOk;
     if (allGood) {
       const t = setTimeout(() => {
         router.replace("/dash/components/kyc");
-      }, 350); // brief moment so the sheet can appear, then go
+      }, 350);
       return () => clearTimeout(t);
     }
   }, [open, backendHasPhone, backendHasEmail, middleOk, router]);
@@ -482,7 +485,7 @@ function UpgradeToTier2Modal({
     } catch {}
   };
 
-  // prepare when opened (prefills + re-mark verified if backend had them)
+  // prepare when opened
   useEffect(() => {
     if (!open) return;
     setErr(null);
@@ -493,7 +496,7 @@ function UpgradeToTier2Modal({
 
     if (backendHasPhone) setPState("verified");
     if (backendHasEmail) setEState("verified");
-  }, [open, mePhone, meEmail, meMiddleName]); // HOOK NOT CONDITIONAL
+  }, [open, mePhone, meEmail, meMiddleName]); // eslint-disable-line
 
   // auto verify on 4 digits
   useEffect(() => {
@@ -542,7 +545,7 @@ function UpgradeToTier2Modal({
     const respSid = j?.sessionId || j?.data?.sessionId;
     if (respSid) keepSession(respSid);
 
-    if (r.status === 409) return j || { ok: true, ignored: true }; // idempotent OK
+    if (r.status === 409) return j || { ok: true, ignored: true };
     if (!r.ok || j?.success === false) {
       throw new Error(j?.message || `HTTP ${r.status}`);
     }
@@ -620,7 +623,7 @@ function UpgradeToTier2Modal({
         mode: "SELF_CREATED",
         middleName: (middleName || meMiddleName || "").trim(),
       });
-      router.replace("/dash/components/kyc"); // manual redirect after submit
+      router.replace("/dash/components/kyc");
     } catch (e: any) {
       setErr(e?.message || "Couldn’t complete profile.");
     } finally {
@@ -628,11 +631,20 @@ function UpgradeToTier2Modal({
     }
   };
 
+  const modalOverlayOn =
+    submitting ||
+    pState === "sending" ||
+    pState === "verifying" ||
+    eState === "sending" ||
+    eState === "verifying";
+
   return (
     <div
       className={`fixed inset-0 z-50 ${open ? "" : "pointer-events-none"}`}
       aria-hidden={!open}
     >
+      <LogoSpinner show={open && modalOverlayOn} invert />
+
       {/* Backdrop */}
       <div
         onClick={onClose}

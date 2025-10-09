@@ -15,6 +15,7 @@ import {
   Mail,
   RefreshCcw,
 } from "lucide-react";
+import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 
 /** Utility: simple email check */
 function isEmail(v: string) {
@@ -65,7 +66,6 @@ export default function PersonalDetailsPage() {
     if (!form.dob) e.dob = "Date of birth is required.";
     if (!form.email.trim()) e.email = "Email is required.";
     else if (!isEmail(form.email)) e.email = "Enter a valid email.";
-    // avatarUrl optional
     return e;
   }, [form]);
 
@@ -238,9 +238,9 @@ export default function PersonalDetailsPage() {
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim(),
         middleName: form.middleName.trim() || undefined,
-        avatarUrl: form.avatarUrl.trim() || undefined, // dataURL or normal URL
-        gender: form.gender.toUpperCase(), // "MALE" | "FEMALE" | "OTHER"
-        dob: form.dob, // YYYY-MM-DD
+        avatarUrl: form.avatarUrl.trim() || undefined,
+        gender: form.gender.toUpperCase(),
+        dob: form.dob,
         token,
         email: form.email.trim(),
         username: form.username.trim(),
@@ -564,7 +564,14 @@ export default function PersonalDetailsPage() {
                   : "bg-gray-200 text-gray-500 cursor-not-allowed"
               }`}
             >
-              {submitting ? "Saving…" : "Save and Continue"}
+              {submitting ? (
+                <span className="inline-flex items-center gap-2">
+                  <LogoSpinner className="w-4 h-4" />
+                  Saving…
+                </span>
+              ) : (
+                "Save and Continue"
+              )}
             </button>
           </div>
         </div>
@@ -607,7 +614,11 @@ export default function PersonalDetailsPage() {
                 }}
               />
               {!videoReady && (
-                <p className="text-[12px] text-gray-600 mt-2">
+                <p
+                  className="text-[12px] text-gray-600 mt-2 inline-flex items-center gap-2"
+                  role="status"
+                >
+                  <LogoSpinner className="w-4 h-4" />
                   Initializing camera…
                 </p>
               )}
@@ -619,11 +630,14 @@ export default function PersonalDetailsPage() {
                 disabled={!videoReady || processingPhoto}
                 className={`flex-1 h-11 rounded-xl text-white font-semibold ${
                   !videoReady || processingPhoto
-                    ? "bg-black/50 cursor-not-allowed"
+                    ? "bg.black/50 cursor-not-allowed"
                     : "bg-black hover:bg-black/90"
                 }`}
               >
-                {processingPhoto ? "Processing…" : "Capture"}
+                <span className="inline-flex items-center gap-2">
+                  {processingPhoto && <LogoSpinner className="w-4 h-4" />}
+                  {processingPhoto ? "Processing…" : "Capture"}
+                </span>
               </button>
               <button
                 onClick={closeCamera}

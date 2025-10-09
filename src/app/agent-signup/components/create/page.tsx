@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -9,6 +9,7 @@ import {
   Mail as MailIcon,
   CheckCircle2,
 } from "lucide-react";
+import LogoSpinner from "../../../../components/loaders/LogoSpinner"; // ← update path if needed
 
 /** Routes */
 const LOGIN_ROUTE = "/agent-login";
@@ -372,7 +373,6 @@ export default function CreateExactDualOTP() {
     setPageError(null);
 
     const cleanEmail = email.trim().toLowerCase();
-    // persist email so step 5 can reuse
     try {
       sessionStorage.setItem(SKEY.EMAIL, cleanEmail);
       localStorage.setItem(LKEY.SIGNUP_EMAIL, cleanEmail);
@@ -380,7 +380,6 @@ export default function CreateExactDualOTP() {
 
     setEState("sending");
 
-    // EXACTLY what your route expects for step 3:
     const payload = {
       step: 3,
       email: cleanEmail,
@@ -409,7 +408,6 @@ export default function CreateExactDualOTP() {
     const code = eOtp.join("");
     if (code.length !== 4 || eState === "verifying") return;
 
-    // EXACTLY what your route expects for step 4:
     const payload = {
       step: 4,
       emailOtp: code,
@@ -431,7 +429,6 @@ export default function CreateExactDualOTP() {
       return;
     }
 
-    // If backend issues a token here, persist it
     const token = getToken(data);
     if (token) persistToken(token);
 
@@ -588,7 +585,7 @@ export default function CreateExactDualOTP() {
                 </span>
               </div>
 
-              {/* number input (relative for button on the right) */}
+              {/* number input */}
               <div className="relative flex-1">
                 <div className="flex items-center gap-2 rounded-md px-3 py-2 bg-gray-100">
                   <PhoneIcon className="w-4 h-4 text-gray-900" />
@@ -608,7 +605,7 @@ export default function CreateExactDualOTP() {
                   />
                 </div>
 
-                {/* right action INSIDE the input */}
+                {/* right action */}
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
                   {pState === "verified" ? (
                     <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-emerald-600">
@@ -625,7 +622,7 @@ export default function CreateExactDualOTP() {
                         pState === "verifying" ||
                         pState === "verified"
                       }
-                      className={`text-[12px] font-semibold ${
+                      className={`text-[12px] font-semibold inline-flex items-center gap-2 ${
                         !phoneIsValid ||
                         pState === "sending" ||
                         pState === "verifying" ||
@@ -634,7 +631,14 @@ export default function CreateExactDualOTP() {
                           : "text-emerald-600"
                       }`}
                     >
-                      {pState === "sending" ? "Sending…" : "Get code"}
+                      {pState === "sending" ? (
+                        <>
+                          <LogoSpinner show={true} />
+                          Sending…
+                        </>
+                      ) : (
+                        "Get code"
+                      )}
                     </button>
                   )}
                 </div>
@@ -671,7 +675,9 @@ export default function CreateExactDualOTP() {
 
                   <div className="mt-2 text-[11px] text-gray-500">
                     {pState === "verifying" ? (
-                      <span className="text-gray-700">Verifying…</span>
+                      <span className="inline-flex items-center gap-2 text-gray-700">
+                        <LogoSpinner show={true} /> Verifying…
+                      </span>
                     ) : pState === "error" ? (
                       <span className="text-red-600">Invalid code.</span>
                     ) : null}{" "}
@@ -740,7 +746,7 @@ export default function CreateExactDualOTP() {
                       eState === "verified" ||
                       !emailIsValid
                     }
-                    className={`text-[12px] font-semibold ${
+                    className={`text-[12px] font-semibold inline-flex items-center gap-2 ${
                       eState === "sending" ||
                       eState === "verifying" ||
                       eState === "verified" ||
@@ -749,7 +755,14 @@ export default function CreateExactDualOTP() {
                         : "text-emerald-600"
                     }`}
                   >
-                    {eState === "sending" ? "Sending…" : "Verify email"}
+                    {eState === "sending" ? (
+                      <>
+                        <LogoSpinner show={true} />
+                        Sending…
+                      </>
+                    ) : (
+                      "Verify email"
+                    )}
                   </button>
                 )}
               </div>
@@ -785,7 +798,9 @@ export default function CreateExactDualOTP() {
 
                   <div className="mt-2 text-[11px] text-gray-500">
                     {eState === "verifying" ? (
-                      <span className="text-gray-700">Verifying…</span>
+                      <span className="inline-flex items-center gap-2 text-gray-700">
+                        <LogoSpinner show={true} /> Verifying…
+                      </span>
                     ) : eState === "error" ? (
                       <span className="text-red-600">Invalid email code.</span>
                     ) : null}{" "}

@@ -1,10 +1,11 @@
 /* app/customer/vault/transaction-details/page.tsx */
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { Download, Share2 } from "lucide-react";
+import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 
 /* ---------------- helpers ---------------- */
 
@@ -110,6 +111,9 @@ type Tx = {
 export default function TransactionDetailsPage() {
   const router = useRouter();
   const sp = useSearchParams();
+
+  // ✅ Global route spinner (same pattern used elsewhere)
+  const [isRouting, startTransition] = useTransition();
 
   // this node is what we capture for PNG/PDF
   const receiptRef = useRef<HTMLDivElement>(null);
@@ -232,7 +236,6 @@ export default function TransactionDetailsPage() {
                   t.includes("TOPUP")
                 );
               })(),
-              // capture many possible ref fields
               ref:
                 found.reference ||
                 found.transactionReference ||
@@ -386,7 +389,6 @@ export default function TransactionDetailsPage() {
             *{box-sizing:border-box}
             body{margin:0;background:#fff;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Helvetica,Arial}
             .wrap{max-width:500px;margin:16px auto;padding:0 8px}
-            /* Ensure images render in print */
             img{max-width:100%;height:auto}
           </style>
         </head>
@@ -419,21 +421,33 @@ export default function TransactionDetailsPage() {
 
   const goBackToTransactions = () => {
     const cid = customerId || "";
-    router.replace(
-      `/customer/vault/transactions${
-        cid ? `?customerId=${encodeURIComponent(cid)}` : ""
-      }`
+    startTransition(() =>
+      router.replace(
+        `/customer/vault/transactions${
+          cid ? `?customerId=${encodeURIComponent(cid)}` : ""
+        }`
+      )
     );
   };
 
   /* ---------------- UI ---------------- */
 
   return (
-    <div className="min-h-screen bg-[#F4F6FA] flex items-start justify-center">
+    <div
+      className="min-h-screen bg-[#F4F6FA] flex items-start justify-center"
+      aria-busy={isRouting}
+    >
+      {/* ✅ Global route spinner */}
+      <LogoSpinner show={isRouting} />
+
       <div className="w-full max-w-[500px] min-h-screen bg-[#F4F6FA] mt-10 md:min-h-0 md:rounded-3xl md:shadow-xl overflow-hidden">
         {/* Skeleton / Error */}
         {loading || !tx ? (
           <div className="px-4">
+            <div className="flex items-center gap-2 text-sm text-gray-700 mb-3">
+              <LogoSpinner className="w-4 h-4" />
+              Loading…
+            </div>
             <div className="h-[560px] rounded-[28px] bg-gray-100 animate-pulse" />
             <div className="h-4" />
             <div className="grid grid-cols-2 gap-3 px-1">

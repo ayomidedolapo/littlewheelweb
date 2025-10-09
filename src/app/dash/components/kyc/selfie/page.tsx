@@ -11,6 +11,7 @@ import {
   Smile,
   X,
 } from "lucide-react";
+import LogoSpinner from "../../../../../components/loaders/LogoSpinner"; // ← ✅ add your spinner
 
 /* ---------- types ---------- */
 type SavedBank = {
@@ -249,6 +250,9 @@ export default function TierTwoSelfiePage() {
   /* ---------- UI ---------- */
   return (
     <div className="min-h-screen bg-white">
+      {/* 🔥 show your centered logo spinner while capturing/submitting */}
+      <LogoSpinner show={processing || submitting} invert />
+
       {/* Top bar */}
       <div className="sticky top-0 z-10 bg-white">
         <button

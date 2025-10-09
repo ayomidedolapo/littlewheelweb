@@ -4,6 +4,9 @@
 import React, { useEffect, useMemo, useState, useTransition } from "react";
 import { Wallet, Banknote, ArrowDownFromLine } from "lucide-react";
 
+/* ✅ Logo spinner overlay (centered, inverted, light blur) */
+import LogoSpinner from "../../../components/loaders/LogoSpinner";
+
 type Txn = {
   id: string;
   type: "withdrawal" | "commission" | "recharge" | string;
@@ -17,49 +20,6 @@ const NGN = new Intl.NumberFormat("en-NG", {
   currency: "NGN",
   minimumFractionDigits: 0,
 });
-
-/* ---------- tiny spinner + overlay (same pattern) ---------- */
-function Spinner({ className = "w-5 h-5 text-black" }: { className?: string }) {
-  return (
-    <svg
-      className={`animate-spin ${className}`}
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <circle
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="4"
-        fill="none"
-        className="opacity-25"
-      />
-      <path
-        fill="currentColor"
-        className="opacity-90"
-        d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"
-      />
-    </svg>
-  );
-}
-function LoadingOverlay({ show }: { show: boolean }) {
-  if (!show) return null;
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-[1px] flex items-center justify-center"
-    >
-      <div className="rounded-xl bg-white px-4 py-3 shadow-2xl flex items-center gap-3">
-        <Spinner />
-        <span className="text-[13px] font-semibold text-gray-900">
-          Loading…
-        </span>
-      </div>
-    </div>
-  );
-}
 
 const ICONS: Record<Txn["icon"], React.ReactNode> = {
   withdraw: <Wallet className="w-4 h-4 text-red-600" />,
@@ -177,7 +137,7 @@ export default function RecentTransactions({
   const [fetched, setFetched] = useState<Txn[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // show loader when user taps "See all"
+  // show spinner overlay only while navigating to "See all"
   const [isPending, startTransition] = useTransition();
 
   // If parent didn't pass items, we'll fetch from API
@@ -246,8 +206,8 @@ export default function RecentTransactions({
 
   return (
     <>
-      {/* overlay shows only when user taps See all (during nav) */}
-      <LoadingOverlay show={isPending} />
+      {/* ✅ Centered logo spinner during route transition (See all) */}
+      <LogoSpinner show={isPending} invert blurStrength={3} />
 
       <section className="w-full" aria-busy={isPending}>
         {/* Header */}

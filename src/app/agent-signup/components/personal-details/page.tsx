@@ -16,6 +16,7 @@ import {
   X,
   RotateCcw,
 } from "lucide-react";
+import LogoSpinner from "../../../../components/loaders/LogoSpinner"; // ← adjust path if needed
 
 const NEXT_STEP_ROUTE = "/agent-signup/components/address";
 
@@ -98,7 +99,7 @@ export default function PersonalDetailsPage() {
   // validation
   const pinValid = useMemo(() => onlyDigits(pin).length === 5, [pin]);
   const firstValid = firstName.trim().length > 0;
-  const middleValid = middleName.trim().length > 0; // you marked * so I kept it required
+  const middleValid = middleName.trim().length > 0; // required per your UI
   const lastValid = lastName.trim().length > 0;
   const dobValid = !!dob;
   const usernameValid = isValidUsername(username);
@@ -333,6 +334,16 @@ export default function PersonalDetailsPage() {
         return;
       }
 
+      /* ---------- NEW: persist first name for the Welcome page ---------- */
+      try {
+        const fn = firstName.trim();
+        if (fn) {
+          sessionStorage.setItem("lw_first_name", fn);
+          localStorage.setItem("lw_first_name", fn);
+        }
+      } catch {}
+      /* ------------------------------------------------------------------ */
+
       router.push(NEXT_STEP_ROUTE);
     } catch (e: any) {
       setError(e?.message || "Network error. Please try again.");
@@ -369,7 +380,7 @@ export default function PersonalDetailsPage() {
               <div className="mt-2">
                 <button
                   onClick={resetAndStartOver}
-                  className="inline-flex items-center rounded-lg bg-black px-3 py-1.5 text-[12px] font-semibold text-white"
+                  className="inline-flex items-center gap-2 rounded-lg bg-black px-3 py-1.5 text-[12px] font-semibold text-white"
                 >
                   Start over
                 </button>
@@ -400,7 +411,8 @@ export default function PersonalDetailsPage() {
                 )}
               </div>
               <div className="text-left">
-                <div className="text-sm text-gray-900 font-medium">
+                <div className="text-sm text-gray-900 font-medium inline-flex items-center gap-2">
+                  {processingPhoto && <LogoSpinner show={true} />}
                   {processingPhoto
                     ? "Processing…"
                     : avatarPreview
@@ -603,13 +615,20 @@ export default function PersonalDetailsPage() {
           <button
             onClick={saveAndContinue}
             disabled={!formValid || saving}
-            className={`mb-5 w-full h-12 rounded-xl font-semibold text-white transition ${
+            className={`mb-5 w-full h-12 rounded-xl font-semibold text-white transition inline-flex items-center justify-center gap-2 ${
               !formValid || saving
                 ? "bg-gray-300 text-gray-600 cursor-not-allowed"
                 : "bg-black hover:bg-black/90"
             }`}
           >
-            {saving ? "Saving…" : "Save and continue"}
+            {saving ? (
+              <>
+                <LogoSpinner show={true} />
+                Saving…
+              </>
+            ) : (
+              "Save and continue"
+            )}
           </button>
         </div>
       </div>
@@ -639,8 +658,8 @@ export default function PersonalDetailsPage() {
                 style={{ transform: "scaleX(-1)" }}
               />
               {!videoReady && (
-                <p className="text-[12px] text-gray-600 mt-2">
-                  Initializing camera…
+                <p className="text-[12px] text-gray-600 mt-2 inline-flex items-center gap-2">
+                  <LogoSpinner show={true} /> Initializing camera…
                 </p>
               )}
             </div>
@@ -649,13 +668,20 @@ export default function PersonalDetailsPage() {
               <button
                 onClick={capturePhoto}
                 disabled={!videoReady || processingPhoto}
-                className={`flex-1 h-11 rounded-xl text-white font-semibold ${
+                className={`flex-1 h-11 rounded-xl text-white font-semibold inline-flex items-center justify-center gap-2 ${
                   !videoReady || processingPhoto
                     ? "bg-black/50 cursor-not-allowed"
                     : "bg-black hover:bg-black/90"
                 }`}
               >
-                {processingPhoto ? "Processing…" : "Capture"}
+                {processingPhoto ? (
+                  <>
+                    <LogoSpinner show={true} />
+                    Processing…
+                  </>
+                ) : (
+                  "Capture"
+                )}
               </button>
               <button
                 onClick={closeCamera}

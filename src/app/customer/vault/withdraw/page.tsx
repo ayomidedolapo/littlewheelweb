@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, HelpCircle, X, AlertCircle } from "lucide-react";
 import Image from "next/image";
+import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 
 /* ---------- helpers ---------- */
 const NGN = (v: number) =>
@@ -306,12 +307,6 @@ export default function WithdrawFromVaultPage() {
         return;
       }
 
-      // Optional: enforce a soft minimum
-      // if (amt < 1000) {
-      //   setError("Minimum withdrawal amount is ₦1,000.");
-      //   return;
-      // }
-
       // Idempotency (helps upstream avoid duplicates)
       const idemKey = `wd-${customerId}-${vaultId}-${amt}-${Date.now()}`;
 
@@ -325,13 +320,11 @@ export default function WithdrawFromVaultPage() {
         narration: `Vault withdrawal ${
           vault?.name ? `(${vault.name})` : ""
         }`.trim(),
-        // Prefer server-stored method id if available
         ...(savedBank?.withdrawalMethodId
           ? { withdrawalMethodId: savedBank.withdrawalMethodId }
           : savedBank?.id
           ? { withdrawalMethodId: savedBank.id }
           : {}),
-        // Bank meta (harmless if backend ignores when using saved method id)
         ...(savedBank
           ? {
               bankName: savedBank.bank.name,
@@ -357,7 +350,6 @@ export default function WithdrawFromVaultPage() {
         }
       );
 
-      // parse response
       const ct = res.headers.get("content-type") || "";
       const data = ct.includes("application/json")
         ? await res.json().catch(() => ({}))
@@ -369,7 +361,6 @@ export default function WithdrawFromVaultPage() {
           (typeof data === "string" && data) ||
           `Initialize failed (HTTP ${res.status}).`;
 
-        // If our proxy returned aggregated variant errors, show the most specific one
         if (typeof data === "object" && Array.isArray(data?.variantsTried)) {
           const specific =
             data.variantsTried.find((v: any) => v?.errors || v?.message) ||
@@ -386,7 +377,6 @@ export default function WithdrawFromVaultPage() {
         throw new Error(msg);
       }
 
-      // Extract a reference
       const ref =
         (typeof data === "object" &&
           (data?.data?.id ||
@@ -441,6 +431,18 @@ export default function WithdrawFromVaultPage() {
           <p className="text-[12px] text-gray-600 mt-1">
             Facilitate withdrawal for your customer
           </p>
+
+          {/* subtle inline loader while fetching page data */}
+          {loading && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="mt-2 inline-flex items-center gap-2 text-xs text-gray-700"
+            >
+              <LogoSpinner className="w-4 h-4" />
+              Loading…
+            </div>
+          )}
         </div>
 
         {/* amount card */}
@@ -652,8 +654,9 @@ export default function WithdrawFromVaultPage() {
             <button
               onClick={initWithdraw}
               disabled={submitting}
-              className="mt-5 w-full h-12 rounded-2xl bg-black text-white font-semibold active:scale-[0.99] disabled:opacity-60"
+              className="mt-5 w-full h-12 rounded-2xl bg-black text-white font-semibold active:scale-[0.99] disabled:opacity-60 inline-flex items-center justify-center gap-2"
             >
+              {submitting && <LogoSpinner className="w-4 h-4" />}{" "}
               {submitting ? "Processing…" : "Confirm"}
             </button>
           </div>

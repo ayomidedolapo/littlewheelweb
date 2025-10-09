@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Check } from "lucide-react";
+import LogoSpinner from "../../../../components/loaders/LogoSpinner"; // ← ✅ add loader (no size prop)
 
 /* ---------- small helpers (reused from withdraw page) ---------- */
 function bankLogoUrl(name: string, provided?: string) {
@@ -135,11 +136,14 @@ export default function TierTwoPage() {
       sessionStorage.setItem("tier2_bvn", bvn);
       sessionStorage.setItem("tier2_bank", JSON.stringify(savedBank));
     } catch {}
-    router.push("/dash/components/kyc/selfie"); // next page for selfie + POST /api/v1/user/upgrade-tier
+    router.push("/dash/components/kyc/selfie");
   };
 
   return (
     <div className="min-h-screen bg-white">
+      {/* 🔥 show your centered logo spinner while bank info is loading */}
+      <LogoSpinner show={loadingBank} invert />
+
       {/* Top bar */}
       <div className="sticky top-0 z-10 bg-white">
         <button
