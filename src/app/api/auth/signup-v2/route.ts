@@ -1,11 +1,24 @@
+// app/api/auth/signup-v2/route.ts
 import { NextResponse } from "next/server";
 
-/* helpers */
+/* ========== small helpers ========== */
 const trimTrailingSlash = (s: string) => (s || "").replace(/\/+$/, "");
 const joinUrl = (base: string, path: string) =>
   `${trimTrailingSlash(base)}/${String(path || "").replace(/^\/+/, "")}`;
 const readHeaderSessionId = (h: Headers) =>
   h.get("x-session-id") || h.get("x-lw-session-id") || "";
+
+/** Extract first client IP from common proxy headers */
+function readClientIp(req: Request) {
+  const h = req.headers;
+  const cf = h.get("CF-Connecting-IP");
+  if (cf) return cf;
+  const xff = h.get("X-Forwarded-For") || h.get("x-forwarded-for");
+  if (xff) return xff.split(",")[0].trim();
+  const xr = h.get("x-real-ip");
+  if (xr) return xr;
+  return "";
+}
 
 function setSessionCookie(res: NextResponse, sessionId: string) {
   if (!sessionId) return;
@@ -28,12 +41,83 @@ const toE164Plus234 = (raw?: string) => {
   return `+234${d}`;
 };
 
-/* config */
+/* ========== config ========== */
 const V2 = trimTrailingSlash(process.env.BACKEND_API_URL_V2 || "");
 const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS ?? 45000);
 
+/* ========== Turnstile ========== */
+const TURNSTILE_SECRET = (process.env.TURNSTILE_SECRET_KEY || "").trim();
+const TURNSTILE_VERIFY_URL =
+  "https://challenges.cloudflare.com/turnstile/v0/siteverify";
+
+/** Optional dev bypass (never used in production) */
+const ALLOW_TURNSTILELESS_DEV =
+  (process.env.ALLOW_TURNSTILELESS_DEV || "").toLowerCase() === "true";
+
+/** Read token from body or headers */
+function readTurnstileToken(req: Request, body: any) {
+  // common header Cloudflare uses on forms is "cf-turnstile-response"
+  const hdr =
+    req.headers.get("cf-turnstile-response") ||
+    req.headers.get("x-turnstile-token") ||
+    "";
+  const inBody =
+    String(
+      body?.captchaToken ||
+        body?.turnstileToken ||
+        body?.token ||
+        body?.["cf-turnstile-response"] ||
+        ""
+    ).trim() || "";
+  return (hdr || "").trim() || inBody;
+}
+
+/** Verify Turnstile token server-side */
+async function verifyTurnstile(token: string, ip?: string) {
+  if (!TURNSTILE_SECRET) {
+    return { ok: false as const, reason: "Missing TURNSTILE_SECRET_KEY env" };
+  }
+  try {
+    const res = await fetch(TURNSTILE_VERIFY_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TURNSTILE_SECRET,
+        response: token,
+        ...(ip ? { remoteip: ip } : {}),
+        idempotency_key:
+          (crypto as any).randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
+      }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (json?.success) return { ok: true as const, data: json };
+    return {
+      ok: false as const,
+      data: json,
+      reason: Array.isArray(json?.["error-codes"])
+        ? json["error-codes"].join(",")
+        : "turnstile-failed",
+    };
+  } catch (e: any) {
+    return { ok: false as const, reason: e?.message || "turnstile-error" };
+  }
+}
+
+/* ========== handler ========== */
 export async function POST(req: Request) {
+  /* --- DEBUG: env banner --- */
+  console.log("=== /api/auth/signup-v2 DEBUG BEGIN ===");
+  console.log("env:", {
+    NODE_ENV: process.env.NODE_ENV,
+    ALLOW_TURNSTILELESS_DEV: ALLOW_TURNSTILELESS_DEV,
+    TURNSTILE_SECRET_present: !!TURNSTILE_SECRET,
+    TURNSTILE_SECRET_len: TURNSTILE_SECRET.length || 0,
+    BASE_V2: V2 || "MISSING",
+  });
+
   if (!V2) {
+    console.log("[signup] Missing BACKEND_API_URL_V2");
+    console.log("=== /api/auth/signup-v2 DEBUG END ===");
     return NextResponse.json(
       { success: false, message: "Missing BACKEND_API_URL_V2 env" },
       { status: 500 }
@@ -44,6 +128,8 @@ export async function POST(req: Request) {
   try {
     body = await req.json();
   } catch {
+    console.log("[signup] Invalid JSON body");
+    console.log("=== /api/auth/signup-v2 DEBUG END ===");
     return NextResponse.json(
       { success: false, message: "Invalid JSON body" },
       { status: 400 }
@@ -52,10 +138,81 @@ export async function POST(req: Request) {
 
   const step = Number(body?.step);
   if (![1, 2, 3, 4, 5].includes(step)) {
+    console.log("[signup] Invalid step:", step);
+    console.log("=== /api/auth/signup-v2 DEBUG END ===");
     return NextResponse.json(
       { success: false, message: "Invalid or missing step (1..5 required)" },
       { status: 400 }
     );
+  }
+
+  const ip = readClientIp(req);
+  const pnMasked = (body?.phoneNumber || "")
+    .toString()
+    .replace(/(\+?234)(\d{0,6})\d+/, "$1$2***");
+  console.log("incoming:", {
+    step,
+    phone_masked: pnMasked || undefined,
+    hasEmail: !!body?.email,
+    hasPhoneOtp: !!body?.phoneOtp,
+    hasEmailOtp: !!body?.emailOtp,
+    sessionId_len: (body?.sessionId || "").toString().length || 0,
+    clientIp: ip || "unknown",
+  });
+
+  /* ---- Turnstile enforcement ----
+     Phone steps are typically the critical ones. If you also want email gated,
+     add 3 & 4 to the array below. */
+  const isProd = process.env.NODE_ENV === "production";
+  const shouldEnforce = [1, 2].includes(step) || false;
+
+  if (shouldEnforce) {
+    const tsToken = readTurnstileToken(req, body);
+    const allowDevBypass = !isProd && ALLOW_TURNSTILELESS_DEV;
+
+    if (!tsToken) {
+      if (allowDevBypass) {
+        console.warn(
+          "[signup] Turnstile token missing — allowed in dev (set ALLOW_TURNSTILELESS_DEV=false to enforce)"
+        );
+      } else {
+        console.log("[signup] Missing Turnstile token → rejecting");
+        console.log("=== /api/auth/signup-v2 DEBUG END ===");
+        return NextResponse.json(
+          { success: false, message: "Missing Turnstile token" },
+          { status: 400 }
+        );
+      }
+    } else {
+      const verdict = await verifyTurnstile(tsToken, ip);
+      if (!verdict.ok) {
+        console.log(
+          "[signup] Turnstile failed:",
+          verdict.reason,
+          verdict.data || ""
+        );
+        console.log("=== /api/auth/signup-v2 DEBUG END ===");
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Turnstile verification failed",
+            details: verdict.data ?? verdict.reason ?? "unknown",
+          },
+          { status: 403 }
+        );
+      } else {
+        const { data } = verdict;
+        console.log("[signup] Turnstile OK:", {
+          action: data?.action,
+          cdata: data?.cdata ? "[present]" : undefined,
+          hostname: data?.hostname,
+          challenge_ts: data?.challenge_ts,
+        });
+        // Optional hardening:
+        // if (step === 1 && data?.action !== "send_phone_code") { ... }
+        // if (step === 2 && data?.action !== "verify_phone") { ... }
+      }
+    }
   }
 
   const incomingSession =
@@ -77,17 +234,21 @@ export async function POST(req: Request) {
     case 1: {
       const pn = toE164Plus234(body?.phoneNumber);
       if (!pn) {
+        console.log("[signup] step 1 missing phoneNumber");
+        console.log("=== /api/auth/signup-v2 DEBUG END ===");
         return NextResponse.json(
           { success: false, message: "phoneNumber required for step 1" },
           { status: 400 }
         );
       }
-      payload.phoneNumber = pn; // *** +234xxxx ***
+      payload.phoneNumber = pn;
       break;
     }
     case 2: {
       const code = String(body?.phoneOtp || "");
       if (!code) {
+        console.log("[signup] step 2 missing phoneOtp");
+        console.log("=== /api/auth/signup-v2 DEBUG END ===");
         return NextResponse.json(
           { success: false, message: "phoneOtp required for step 2" },
           { status: 400 }
@@ -101,6 +262,8 @@ export async function POST(req: Request) {
         .trim()
         .toLowerCase();
       if (!em) {
+        console.log("[signup] step 3 missing email");
+        console.log("=== /api/auth/signup-v2 DEBUG END ===");
         return NextResponse.json(
           { success: false, message: "email required for step 3" },
           { status: 400 }
@@ -112,6 +275,8 @@ export async function POST(req: Request) {
     case 4: {
       const code = String(body?.emailOtp || "");
       if (!code) {
+        console.log("[signup] step 4 missing emailOtp");
+        console.log("=== /api/auth/signup-v2 DEBUG END ===");
         return NextResponse.json(
           { success: false, message: "emailOtp required for step 4" },
           { status: 400 }
@@ -126,6 +291,8 @@ export async function POST(req: Request) {
         .trim()
         .toLowerCase();
       if (!pn || !em) {
+        console.log("[signup] step 5 missing phone/email");
+        console.log("=== /api/auth/signup-v2 DEBUG END ===");
         return NextResponse.json(
           {
             success: false,
@@ -134,7 +301,7 @@ export async function POST(req: Request) {
           { status: 400 }
         );
       }
-      payload.phoneNumber = pn; // *** +234xxxx ***
+      payload.phoneNumber = pn;
       payload.email = em;
       payload.role = String(body?.role || "AGENT");
       payload.mode = String(body?.mode || "SELF_CREATED");
@@ -148,6 +315,11 @@ export async function POST(req: Request) {
   const url = joinUrl(V2, "/auth/signup");
 
   try {
+    console.log("[signup] → upstream POST", {
+      url,
+      step,
+      hasSession: !!incomingSession,
+    });
     const upstream = await fetch(url, {
       method: "POST",
       headers,
@@ -168,6 +340,17 @@ export async function POST(req: Request) {
     const bodySession = data?.sessionId || data?.data?.sessionId || null;
     const finalSession = bodySession || headerSession || incomingSession || "";
 
+    console.log(
+      "[signup] upstream status:",
+      upstream.status,
+      upstream.statusText,
+      {
+        headerSession_len: (headerSession || "").length || 0,
+        bodySession_len: (bodySession || "").length || 0,
+        finalSession_len: finalSession.length || 0,
+      }
+    );
+
     const resp = NextResponse.json(
       { ...data, sessionId: finalSession || undefined },
       { status: upstream.status }
@@ -187,9 +370,12 @@ export async function POST(req: Request) {
 
     if (finalSession) setSessionCookie(resp, finalSession);
 
+    console.log("=== /api/auth/signup-v2 DEBUG END ===");
     return resp;
   } catch (e: any) {
     const aborted = e?.name === "AbortError" || e === "timeout";
+    console.error("[signup] upstream error:", e);
+    console.log("=== /api/auth/signup-v2 DEBUG END ===");
     return NextResponse.json(
       {
         success: false,

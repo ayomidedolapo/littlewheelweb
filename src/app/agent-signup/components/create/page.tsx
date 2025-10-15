@@ -1,3 +1,4 @@
+/* app/agent-signup/components/create/page.tsx */
 "use client";
 
 import Image from "next/image";
@@ -9,33 +10,59 @@ import {
   Mail as MailIcon,
   CheckCircle2,
 } from "lucide-react";
-import LogoSpinner from "../../../../components/loaders/LogoSpinner"; // ← update path if needed
+import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 
 /** Routes */
 const LOGIN_ROUTE = "/agent-login";
 const NEXT_STEP_ROUTE = "/agent-signup/components/personal-details";
 
-/** Optional reCAPTCHA */
-const RECAPTCHA_SITE_KEY =
-  process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY ||
-  "6LeVK6wqAAAAAOwOobMbFE4LgsjJi1cX6rgmXzpm";
+/** ---------- Turnstile (invisible) ---------- */
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
 
-async function getCaptchaToken(action: string): Promise<string | null> {
+function ensureTurnstileScript(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined") return resolve();
+    const w = window as any;
+    if (w.turnstile && typeof w.turnstile.execute === "function")
+      return resolve();
+
+    const existing = document.querySelector<HTMLScriptElement>(
+      'script[data-lw="turnstile"]'
+    );
+    if (existing) {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => resolve(), { once: true });
+      return;
+    }
+    const s = document.createElement("script");
+    s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+    s.async = true;
+    s.defer = true;
+    s.setAttribute("data-lw", "turnstile");
+    s.onload = () => resolve();
+    s.onerror = () => resolve();
+    document.head.appendChild(s);
+  });
+}
+
+async function getTurnstileToken(action: string): Promise<string | null> {
   try {
-    const g: any = (globalThis as any).grecaptcha;
-    if (!g || !RECAPTCHA_SITE_KEY) return null;
-    await new Promise<void>((resolve) => g.ready(() => resolve()));
-    const token = await g.execute(RECAPTCHA_SITE_KEY, { action });
-    return typeof token === "string" && token.length > 0 ? token : null;
+    if (!TURNSTILE_SITE_KEY) return null;
+    await ensureTurnstileScript();
+    const w = window as any;
+    if (!w.turnstile || typeof w.turnstile.execute !== "function") return null;
+    const token: string = await w.turnstile
+      .execute(TURNSTILE_SITE_KEY, { action })
+      .catch(() => null);
+    return token && typeof token === "string" ? token : null;
   } catch {
     return null;
   }
 }
+/** ---------- /Turnstile ---------- */
 
 /** Helpers */
 const digitsOnly = (s: string) => s.replace(/\D/g, "");
-
-/** Nigeria-only E.164 (+234XXXXXXXXXX) with robust normalization */
 const toE164 = (raw: string) => {
   let d = digitsOnly(raw);
   if (d.startsWith("234")) d = d.slice(3);
@@ -43,7 +70,6 @@ const toE164 = (raw: string) => {
   d = d.slice(-10);
   return `+234${d}`;
 };
-
 const isValidEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 
 /** Per-tab storage keys */
@@ -75,8 +101,6 @@ type StepState =
   | "verifying"
   | "verified"
   | "error";
-
-/** visual state for OTP inputs */
 const otpBorder = (state: StepState) =>
   state === "verified"
     ? "border-emerald-500"
@@ -84,7 +108,7 @@ const otpBorder = (state: StepState) =>
     ? "border-red-500"
     : "border-gray-300";
 
-/** ---------- token helpers ---------- */
+/** token helpers */
 function getToken(data: any): string | null {
   return (
     data?.token ||
@@ -99,7 +123,6 @@ function getToken(data: any): string | null {
     null
   );
 }
-
 function persistToken(tok: string | null | undefined) {
   if (!tok) return;
   try {
@@ -110,7 +133,7 @@ function persistToken(tok: string | null | undefined) {
   } catch {}
 }
 
-/** (optional) bridge to v1 */
+/** optional bridge */
 async function bridgeV1Token(e164: string, otp: string) {
   try {
     const r = await fetch("/api/auth/bridge-v1-token", {
@@ -139,6 +162,9 @@ async function bridgeV1Token(e164: string, otp: string) {
 export default function CreateExactDualOTP() {
   const router = useRouter();
 
+  /** centered overlay spinner like login — used for ANY clickable action */
+  const [sending, setSending] = useState(false);
+
   /** device token */
   const [deviceToken, setDeviceToken] = useState("web-client");
   useEffect(() => {
@@ -165,7 +191,6 @@ export default function CreateExactDualOTP() {
       return "";
     }
   });
-
   const [phone, setPhone] = useState<string>(() => {
     try {
       const p =
@@ -177,7 +202,6 @@ export default function CreateExactDualOTP() {
       return "";
     }
   });
-
   const [email, setEmail] = useState<string>(() => {
     try {
       return (
@@ -192,13 +216,10 @@ export default function CreateExactDualOTP() {
 
   /** states */
   const [pageError, setPageError] = useState<string | null>(null);
-
   const [pState, setPState] = useState<StepState>("idle");
   const [eState, setEState] = useState<StepState>("idle");
-
   const [pOtp, setPOtp] = useState<string[]>(["", "", "", ""]);
   const [eOtp, setEOtp] = useState<string[]>(["", "", "", ""]);
-
   const pRefs = useRef<Array<HTMLInputElement | null>>([]);
   const eRefs = useRef<Array<HTMLInputElement | null>>([]);
 
@@ -209,8 +230,9 @@ export default function CreateExactDualOTP() {
   }, [phone]);
   const emailIsValid = useMemo(() => isValidEmail(email), [email]);
 
-  /** continue when BOTH verified and sessionId exists */
-  const canContinue = pState === "verified" && !!sessionId;
+  /** allow continue if EITHER phone OR email verified (and we have a session) */
+  const canContinue =
+    (pState === "verified" || eState === "verified") && !!sessionId;
 
   /** helpers */
   const saveSessionId = (sid: string | null | undefined) => {
@@ -221,7 +243,6 @@ export default function CreateExactDualOTP() {
       localStorage.setItem(LKEY.SIGNUP_SESSION, sid);
     } catch {}
   };
-
   const persistInputs = (e164: string, cleanEmail: string) => {
     try {
       sessionStorage.setItem(SKEY.PHONE, e164);
@@ -234,7 +255,6 @@ export default function CreateExactDualOTP() {
   async function callSignupV2(body: Record<string, any>) {
     const ac = new AbortController();
     const t = setTimeout(() => ac.abort("timeout"), 45000);
-
     try {
       const r = await fetch("/api/auth/signup-v2", {
         method: "POST",
@@ -273,14 +293,21 @@ export default function CreateExactDualOTP() {
 
   /** ---------- PHONE: step 1 (send) & step 2 (verify) ---------- */
   const sendPhoneCode = async () => {
-    if (!phoneIsValid || pState === "sending" || pState === "verifying") return;
+    if (
+      !phoneIsValid ||
+      pState === "sending" ||
+      pState === "verifying" ||
+      sending
+    )
+      return;
     setPageError(null);
 
     const e164 = toE164(phone);
-    const cleanEmail = email.trim().toLowerCase();
+    const cleanEmail = (email || "").trim().toLowerCase();
     persistInputs(e164, cleanEmail);
 
-    const captchaToken = await getCaptchaToken("send_phone_code");
+    setSending(true);
+    const captchaToken = await getTurnstileToken("send_phone_code");
 
     const payload: any = {
       step: 1,
@@ -296,6 +323,7 @@ export default function CreateExactDualOTP() {
 
     setPState("sending");
     const { r, data } = await callSignupV2(payload);
+    setSending(false);
 
     if (!r.ok || data?.success === false) {
       setPState("error");
@@ -310,7 +338,6 @@ export default function CreateExactDualOTP() {
     saveSessionId(
       data?.sessionId || data?.data?.sessionId || data?.data?.data?.sessionId
     );
-
     setPOtp(["", "", "", ""]);
     setPState("code_sent");
     requestAnimationFrame(() => pRefs.current[0]?.focus());
@@ -318,10 +345,10 @@ export default function CreateExactDualOTP() {
 
   const verifyPhoneCode = async () => {
     const code = pOtp.join("");
-    if (code.length !== 4 || pState === "verifying") return;
+    if (code.length !== 4 || pState === "verifying" || sending) return;
 
-    const e164 = toE164(phone);
-    const captchaToken = await getCaptchaToken("verify_phone");
+    setSending(true);
+    const captchaToken = await getTurnstileToken("verify_phone");
 
     const payload: any = {
       step: 2,
@@ -332,6 +359,7 @@ export default function CreateExactDualOTP() {
 
     setPState("verifying");
     const { r, data } = await callSignupV2(payload);
+    setSending(false);
 
     if (!r.ok || data?.success === false) {
       setPState("error");
@@ -345,11 +373,10 @@ export default function CreateExactDualOTP() {
       return;
     }
 
-    // Token if issued
     const token = getToken(data);
     if (token) persistToken(token);
 
-    // Keep verified phone + session for later steps
+    const e164 = toE164(phone);
     persistInputs(e164, (email || "").trim().toLowerCase());
     saveSessionId(
       data?.sessionId || data?.data?.sessionId || data?.data?.data?.sessionId
@@ -363,30 +390,40 @@ export default function CreateExactDualOTP() {
   };
 
   const resendPhoneCode = async () => {
-    if (!phoneIsValid) return;
+    if (!phoneIsValid || sending) return;
     await sendPhoneCode();
   };
 
   /** ---------- EMAIL: step 3 (send) & step 4 (verify) ---------- */
   const sendEmailCode = async () => {
-    if (!emailIsValid || eState === "sending" || eState === "verifying") return;
+    if (
+      !emailIsValid ||
+      eState === "sending" ||
+      eState === "verifying" ||
+      sending
+    )
+      return;
     setPageError(null);
 
-    const cleanEmail = email.trim().toLowerCase();
+    const cleanEmail = (email || "").trim().toLowerCase();
     try {
       sessionStorage.setItem(SKEY.EMAIL, cleanEmail);
       localStorage.setItem(LKEY.SIGNUP_EMAIL, cleanEmail);
     } catch {}
 
-    setEState("sending");
+    setSending(true);
+    const captchaToken = await getTurnstileToken("send_email_code");
 
+    setEState("sending");
     const payload = {
       step: 3,
       email: cleanEmail,
       ...(sessionId ? { sessionId } : {}),
+      ...(captchaToken ? { captchaToken } : {}),
     };
 
     const { r, data } = await callSignupV2(payload);
+    setSending(false);
 
     if (!r.ok || data?.success === false) {
       setEState("error");
@@ -406,16 +443,21 @@ export default function CreateExactDualOTP() {
 
   const verifyEmailCode = async () => {
     const code = eOtp.join("");
-    if (code.length !== 4 || eState === "verifying") return;
+    if (code.length !== 4 || eState === "verifying" || sending) return;
+
+    setSending(true);
+    const captchaToken = await getTurnstileToken("verify_email");
 
     const payload = {
       step: 4,
       emailOtp: code,
       ...(sessionId ? { sessionId } : {}),
+      ...(captchaToken ? { captchaToken } : {}),
     };
 
     setEState("verifying");
     const { r, data } = await callSignupV2(payload);
+    setSending(false);
 
     if (!r.ok || data?.success === false) {
       setEState("error");
@@ -441,7 +483,7 @@ export default function CreateExactDualOTP() {
   };
 
   const resendEmailCode = async () => {
-    if (!emailIsValid) return;
+    if (!emailIsValid || sending) return;
     await sendEmailCode();
   };
 
@@ -518,32 +560,57 @@ export default function CreateExactDualOTP() {
     else if (e.key === "ArrowRight" && i < 3) refs.current[i + 1]?.focus();
   };
 
-  /** Continue -> next step */
-  const goNext = () => {
-    if (!canContinue) return;
+  /** navigation helpers to show spinner on every clickable action */
+  const goLogin = async () => {
+    if (sending) return;
+    setSending(true);
+    router.push(LOGIN_ROUTE);
+  };
+  const goBack = async () => {
+    if (sending) return;
+    setSending(true);
+    router.back();
+  };
+
+  /** Continue -> next step (either channel verified) */
+  const goNext = async () => {
+    if (!canContinue || sending) return;
+    setSending(true);
     try {
-      const e164 = toE164(phone);
-      sessionStorage.setItem(SKEY.EMAIL, email.trim().toLowerCase());
-      sessionStorage.setItem(SKEY.PHONE, e164);
-      localStorage.setItem(LKEY.SIGNUP_PHONE, e164);
+      const cleanEmail = (email || "").trim().toLowerCase();
+      sessionStorage.setItem(SKEY.EMAIL, cleanEmail);
       localStorage.setItem(LKEY.SIGNUP_SESSION, sessionId);
-      if (email)
-        localStorage.setItem(LKEY.SIGNUP_EMAIL, email.trim().toLowerCase());
-    } catch {}
-    router.push(
-      `${NEXT_STEP_ROUTE}?sessionId=${encodeURIComponent(sessionId)}`
-    );
+
+      if (phoneIsValid) {
+        const e164 = toE164(phone);
+        sessionStorage.setItem(SKEY.PHONE, e164);
+        localStorage.setItem(LKEY.SIGNUP_PHONE, e164);
+      }
+      if (cleanEmail) {
+        localStorage.setItem(LKEY.SIGNUP_EMAIL, cleanEmail);
+      }
+    } finally {
+      router.push(
+        `${NEXT_STEP_ROUTE}?sessionId=${encodeURIComponent(sessionId)}`
+      );
+    }
   };
 
   /** UI */
   return (
     <div className="min-h-screen bg-white flex items-center justify-center p-0 md:p-4">
+      {/* ✅ Centered overlay spinner like login, shown for ALL click actions */}
+      <LogoSpinner show={sending} />
+
       <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-2xl md:shadow-xl overflow-hidden flex flex-col">
         {/* Top bar */}
         <div className="flex items-center px-4 pt-4">
           <button
-            onClick={() => router.back()}
-            className="inline-flex items-center text-[13px] text-gray-700 hover:text-gray-900"
+            onClick={goBack}
+            disabled={sending}
+            className={`inline-flex items-center text-[13px] ${
+              sending ? "text-gray-400" : "text-gray-700 hover:text-gray-900"
+            }`}
           >
             <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-gray-100 mr-2">
               <ArrowLeft className="w-4 h-4" />
@@ -566,10 +633,8 @@ export default function CreateExactDualOTP() {
             Mobile Number
           </label>
 
-          {/* Phone input row */}
           <div className="mt-2">
             <div className="flex items-center gap-2">
-              {/* +234 pill */}
               <div className="flex items-center gap-2 rounded-md bg-gray-200 px-3 py-2">
                 <div className="w-5 h-5 rounded-full overflow-hidden ring-1 ring-gray-200">
                   <Image
@@ -585,7 +650,6 @@ export default function CreateExactDualOTP() {
                 </span>
               </div>
 
-              {/* number input */}
               <div className="relative flex-1">
                 <div className="flex items-center gap-2 rounded-md px-3 py-2 bg-gray-100">
                   <PhoneIcon className="w-4 h-4 text-gray-900" />
@@ -595,7 +659,7 @@ export default function CreateExactDualOTP() {
                     pattern="[0-9]*"
                     placeholder="9032700990"
                     value={phone}
-                    readOnly={pState === "verified"}
+                    readOnly={pState === "verified" || sending}
                     onChange={(e) => {
                       setPhone(digitsOnly(e.target.value).slice(0, 11));
                       if (pState !== "verified") setPState("idle");
@@ -617,12 +681,14 @@ export default function CreateExactDualOTP() {
                       type="button"
                       onClick={sendPhoneCode}
                       disabled={
+                        sending ||
                         !phoneIsValid ||
                         pState === "sending" ||
                         pState === "verifying" ||
                         pState === "verified"
                       }
                       className={`text-[12px] font-semibold inline-flex items-center gap-2 ${
+                        sending ||
                         !phoneIsValid ||
                         pState === "sending" ||
                         pState === "verifying" ||
@@ -631,21 +697,14 @@ export default function CreateExactDualOTP() {
                           : "text-emerald-600"
                       }`}
                     >
-                      {pState === "sending" ? (
-                        <>
-                          <LogoSpinner show={true} />
-                          Sending…
-                        </>
-                      ) : (
-                        "Get code"
-                      )}
+                      {pState === "sending" ? "Verifying…" : "Verify"}
                     </button>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Phone OTP area */}
+            {/* Phone OTP */}
             {(pState === "code_sent" ||
               pState === "verifying" ||
               pState === "error") && (
@@ -665,7 +724,7 @@ export default function CreateExactDualOTP() {
                         inputMode="numeric"
                         pattern="[0-9]*"
                         maxLength={1}
-                        disabled={pState === "verified"}
+                        disabled={pState === "verified" || sending}
                         className={`w-12 h-12 rounded-[10px] border ${otpBorder(
                           pState
                         )} bg-white text-center text-[18px] font-semibold outline-none`}
@@ -687,9 +746,11 @@ export default function CreateExactDualOTP() {
                         <button
                           type="button"
                           onClick={resendPhoneCode}
-                          disabled={pState === "verified" || !phoneIsValid}
+                          disabled={
+                            sending || pState === "verified" || !phoneIsValid
+                          }
                           className={`underline underline-offset-2 ${
-                            pState === "verified" || !phoneIsValid
+                            sending || pState === "verified" || !phoneIsValid
                               ? "text-gray-400 cursor-not-allowed"
                               : "text-gray-900"
                           }`}
@@ -709,7 +770,6 @@ export default function CreateExactDualOTP() {
             Email
           </label>
 
-          {/* Email input row */}
           <div className="mt-2">
             <div className="relative">
               <div className="flex items-center gap-2 rounded-md bg-gray-100 px-3 py-2">
@@ -718,7 +778,7 @@ export default function CreateExactDualOTP() {
                   type="email"
                   placeholder="test@gmail.com"
                   value={email}
-                  readOnly={eState === "verified"}
+                  readOnly={eState === "verified" || sending}
                   onChange={(e) => {
                     setEmail(e.target.value);
                     if (eState !== "verified") setEState("idle");
@@ -741,12 +801,14 @@ export default function CreateExactDualOTP() {
                     type="button"
                     onClick={sendEmailCode}
                     disabled={
+                      sending ||
                       eState === "sending" ||
                       eState === "verifying" ||
                       eState === "verified" ||
                       !emailIsValid
                     }
                     className={`text-[12px] font-semibold inline-flex items-center gap-2 ${
+                      sending ||
                       eState === "sending" ||
                       eState === "verifying" ||
                       eState === "verified" ||
@@ -755,14 +817,7 @@ export default function CreateExactDualOTP() {
                         : "text-emerald-600"
                     }`}
                   >
-                    {eState === "sending" ? (
-                      <>
-                        <LogoSpinner show={true} />
-                        Sending…
-                      </>
-                    ) : (
-                      "Verify email"
-                    )}
+                    {eState === "sending" ? "Verifying…" : "Verify"}
                   </button>
                 )}
               </div>
@@ -775,7 +830,6 @@ export default function CreateExactDualOTP() {
                 <p className="text-[11px] text-gray-800 mb-2">
                   Enter 4-digits code sent to your email
                 </p>
-
                 <div className="flex flex-col items-center">
                   <div className="flex items-center gap-4">
                     {[0, 1, 2, 3].map((i) => (
@@ -788,7 +842,7 @@ export default function CreateExactDualOTP() {
                         inputMode="numeric"
                         pattern="[0-9]*"
                         maxLength={1}
-                        disabled={eState === "verified"}
+                        disabled={eState === "verified" || sending}
                         className={`w-12 h-12 rounded-[10px] border ${otpBorder(
                           eState
                         )} bg-white text-center text-[18px] font-semibold outline-none`}
@@ -810,9 +864,11 @@ export default function CreateExactDualOTP() {
                         <button
                           type="button"
                           onClick={resendEmailCode}
-                          disabled={eState === "verified" || !emailIsValid}
+                          disabled={
+                            sending || eState === "verified" || !emailIsValid
+                          }
                           className={`underline underline-offset-2 ${
-                            eState === "verified" || !emailIsValid
+                            sending || eState === "verified" || !emailIsValid
                               ? "text-gray-400 cursor-not-allowed"
                               : "text-gray-900"
                           }`}
@@ -840,8 +896,9 @@ export default function CreateExactDualOTP() {
               Already have an account?{" "}
             </span>
             <button
-              onClick={() => router.push(LOGIN_ROUTE)}
-              className="text-[12px] font-semibold text-gray-900 underline underline-offset-2"
+              onClick={goLogin}
+              disabled={sending}
+              className="text-[12px] font-semibold text-gray-900 underline underline-offset-2 disabled:text-gray-400"
             >
               Login
             </button>
@@ -863,11 +920,11 @@ export default function CreateExactDualOTP() {
 
           <button
             onClick={goNext}
-            disabled={!canContinue}
+            disabled={!canContinue || sending}
             className={`mt-4 w-full h-12 rounded-xl text-[14px] font-semibold ${
-              canContinue
-                ? "bg-black text-white hover:bg-black/90"
-                : "bg-gray-200 text-gray-500 cursor-not-allowed"
+              !canContinue || sending
+                ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                : "bg-black text-white hover:bg-black/90"
             }`}
           >
             Continue

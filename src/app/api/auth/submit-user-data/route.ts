@@ -6,6 +6,64 @@ const clean = (s = "") => s.replace(/\/+$/, "");
 const V1 = clean(process.env.BACKEND_API_URL || "");
 const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS ?? 45000);
 
+/* ---------- Turnstile config ---------- */
+const TURNSTILE_SECRET = (process.env.TURNSTILE_SECRET_KEY || "").trim();
+const TURNSTILE_VERIFY_URL =
+  "https://challenges.cloudflare.com/turnstile/v0/siteverify";
+
+function readClientIp(req: NextRequest) {
+  const cf = req.headers.get("CF-Connecting-IP");
+  if (cf) return cf;
+  const xff =
+    req.headers.get("X-Forwarded-For") || req.headers.get("x-forwarded-for");
+  if (xff) return xff.split(",")[0].trim();
+  const xr = req.headers.get("x-real-ip");
+  if (xr) return xr;
+  return "";
+}
+
+function readTurnstileToken(body: any) {
+  return (
+    String(
+      body?.captchaToken ||
+        body?.turnstileToken ||
+        body?.["cf-turnstile-response"] ||
+        ""
+    ).trim() || ""
+  );
+}
+
+async function verifyTurnstile(token: string, ip?: string) {
+  if (!TURNSTILE_SECRET) {
+    return { ok: false, reason: "Missing TURNSTILE_SECRET_KEY env" as const };
+  }
+  try {
+    const res = await fetch(TURNSTILE_VERIFY_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TURNSTILE_SECRET,
+        response: token,
+        ...(ip ? { remoteip: ip } : {}),
+        idempotency_key:
+          crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
+      }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (json?.success) return { ok: true as const, data: json };
+    return {
+      ok: false as const,
+      data: json,
+      reason: Array.isArray(json?.["error-codes"])
+        ? json["error-codes"].join(",")
+        : "turnstile-failed",
+    };
+  } catch (e: any) {
+    return { ok: false as const, reason: e?.message || "turnstile-error" };
+  }
+}
+/* ---------- /Turnstile config ---------- */
+
 async function readCookie(name: string) {
   try {
     const cookieStore = await cookies();
@@ -55,6 +113,35 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
+
+  /* 🔐 Enforce Turnstile for this step (recommended)
+     If you prefer OPTIONAL enforcement:
+       - Only verify when a token is present, otherwise skip.
+       - Replace the 'if (!token) return 400' with 'if (!token) { /* skip *\/ }'
+  */
+  const tokenTs = readTurnstileToken(body);
+  if (!tokenTs) {
+    return NextResponse.json(
+      { success: false, message: "Missing Turnstile token" },
+      { status: 400 }
+    );
+  }
+  const ip = readClientIp(req);
+  const verdict = await verifyTurnstile(tokenTs, ip);
+  if (!verdict.ok) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Turnstile verification failed",
+        details: verdict.data ?? verdict.reason ?? "unknown",
+      },
+      { status: 403 }
+    );
+  }
+  // (Optional hardening) If you set action="signup_details" on the client:
+  // const { action, hostname } = verdict.data || {};
+  // if (action !== "signup_details") return NextResponse.json({ success:false, message:"Bad action" }, { status: 403 });
+  // if (hostname !== "littlewheel.app") return NextResponse.json({ success:false, message:"Bad hostname" }, { status: 403 });
 
   const bearer = await readBearer(req);
   const sessionId =
@@ -117,7 +204,7 @@ export async function POST(req: NextRequest) {
   console.log("Bearer token first 50 chars:", bearer.substring(0, 50) + "...");
   console.log(
     "Bearer token last 20 chars:",
-    "..." + bearer.substring(bearer.length - 20)
+    "..." + bearer.substring(Math.max(0, bearer.length - 20))
   );
   console.log("Token length:", bearer.length);
   console.log("Token starts with:", bearer.substring(0, 10));
@@ -133,8 +220,12 @@ export async function POST(req: NextRequest) {
   console.log("Making request to V1:", {
     url,
     headers: {
-      ...headers,
-      Authorization: `Bearer [${bearer.length} chars]`,
+      ...Object.fromEntries(
+        Object.entries(headers).map(([k, v]) => [
+          k,
+          k === "Authorization" ? `Bearer [${bearer.length} chars]` : v,
+        ])
+      ),
     },
     payload: {
       ...payload,
