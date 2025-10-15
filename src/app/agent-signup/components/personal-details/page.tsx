@@ -24,6 +24,54 @@ const NEXT_STEP_ROUTE = "/agent-signup/components/address";
 // per-tab storage keys
 const SKEY = { SESSION_ID: "lw_flow_sessionId" };
 
+/* ---------- Turnstile (invisible execute) ---------- */
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
+
+/** Load Turnstile script once (idempotent) */
+function ensureTurnstileScript(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined") return resolve();
+    const w = window as any;
+
+    if (w.turnstile && typeof w.turnstile.execute === "function") {
+      return resolve();
+    }
+    const existing = document.querySelector<HTMLScriptElement>(
+      'script[data-lw="turnstile"]'
+    );
+    if (existing) {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => resolve(), { once: true });
+      return;
+    }
+    const s = document.createElement("script");
+    s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+    s.async = true;
+    s.defer = true;
+    s.setAttribute("data-lw", "turnstile");
+    s.onload = () => resolve();
+    s.onerror = () => resolve();
+    document.head.appendChild(s);
+  });
+}
+
+/** Execute Turnstile and return a short-lived, single-use token (or null) */
+async function getTurnstileToken(action: string): Promise<string | null> {
+  try {
+    if (!TURNSTILE_SITE_KEY) return null;
+    await ensureTurnstileScript();
+    const w = window as any;
+    if (!w.turnstile || typeof w.turnstile.execute !== "function") return null;
+    const token: string = await w.turnstile
+      .execute(TURNSTILE_SITE_KEY, { action /*, cData: "agent-app"*/ })
+      .catch(() => null);
+    return token && typeof token === "string" ? token : null;
+  } catch {
+    return null;
+  }
+}
+/* ---------- /Turnstile ---------- */
+
 function getCookie(name: string) {
   if (typeof document === "undefined") return "";
   const m = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
@@ -247,7 +295,7 @@ function PersonalDetailsInner() {
       const localStorageToken = localStorage.getItem("lw_token") || "";
       actualToken = bearerToken || cookieToken || localStorageToken || "";
 
-      // Optional: If still no token but we have sessionId, try your bridge endpoint
+      // Optional bridge via sessionId
       if (!actualToken && sessionId) {
         try {
           const tokenResp = await fetch("/api/auth/get-v1-token", {
@@ -276,6 +324,9 @@ function PersonalDetailsInner() {
       return;
     }
 
+    /* 🔐 Get Turnstile token for this details step (optional but recommended) */
+    const captchaToken = await getTurnstileToken("signup_details");
+
     const payloadBase: Record<string, any> = {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
@@ -286,6 +337,7 @@ function PersonalDetailsInner() {
       gender,
       username: username.trim(),
       ...(sessionId ? { sessionId } : {}),
+      ...(captchaToken ? { captchaToken } : {}), // ← Turnstile token
     };
 
     if (avatarDataUrl) {
@@ -323,6 +375,8 @@ function PersonalDetailsInner() {
           json?.error ||
           (res.status === 401
             ? "Unauthorized - token may be invalid or expired"
+            : res.status === 403
+            ? "Verification failed. Please try again."
             : "Failed to save details");
 
         if (res.status === 401) {

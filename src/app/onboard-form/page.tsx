@@ -7,29 +7,6 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import LogoSpinner from "../../components/loaders/LogoSpinner";
 
-/* small overlay using the shared LogoSpinner */
-function LoadingOverlay({
-  show,
-  label = "Loading…",
-}: {
-  show: boolean;
-  label?: string;
-}) {
-  if (!show) return null;
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-[1px] flex items-center justify-center"
-    >
-      <div className="rounded-xl bg-white px-4 py-3 shadow-2xl flex items-center gap-3">
-        <LogoSpinner show={true} />
-        <span className="text-[13px] font-semibold text-gray-900">{label}</span>
-      </div>
-    </div>
-  );
-}
-
 /* ---------- helpers ---------- */
 function toNgE164(localish: string) {
   const d = localish.replace(/\D/g, "");
@@ -50,7 +27,6 @@ function getAuthToken() {
   }
 }
 
-/* ---------- component ---------- */
 export default function MobileSignup() {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [sending, setSending] = useState(false);
@@ -62,6 +38,7 @@ export default function MobileSignup() {
     return d.length >= 10 && d.length <= 11;
   }, [phoneNumber]);
 
+  // purely visual tick in the “Steps” list
   const isPhoneVerified = isFormValid;
 
   const handleBack = () => router.back();
@@ -121,6 +98,9 @@ export default function MobileSignup() {
       className="min-h-screen bg-gray-50 flex items-center justify-center p-0 md:p-4"
       aria-busy={sending}
     >
+      {/* ✅ Same centered spinner usage as your login page */}
+      <LogoSpinner show={sending} />
+
       <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-2xl md:shadow-xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center p-4 pt-8 bg-white">
@@ -247,14 +227,7 @@ export default function MobileSignup() {
               disabled={!isFormValid || sending}
               aria-busy={sending}
             >
-              {sending ? (
-                <span className="inline-flex items-center gap-2">
-                  <LogoSpinner show={true} />
-                  Sending…
-                </span>
-              ) : (
-                "Verify"
-              )}
+              {sending ? "Sending…" : "Verify"}
             </button>
           </div>
         </div>

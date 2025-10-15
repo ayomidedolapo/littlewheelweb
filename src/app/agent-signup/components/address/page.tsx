@@ -18,6 +18,54 @@ const FALLBACK_AFTER_ADDRESS = "/agent-login";
 /* ===== Consistent session key (same as earlier steps) ===== */
 const SKEY = { SESSION_ID: "lw_flow_sessionId" };
 
+/* ---------- Turnstile (invisible execute) ---------- */
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
+
+/** Load Turnstile script once (idempotent) */
+function ensureTurnstileScript(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined") return resolve();
+    const w = window as any;
+
+    if (w.turnstile && typeof w.turnstile.execute === "function") {
+      return resolve();
+    }
+    const existing = document.querySelector<HTMLScriptElement>(
+      'script[data-lw="turnstile"]'
+    );
+    if (existing) {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => resolve(), { once: true });
+      return;
+    }
+    const s = document.createElement("script");
+    s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+    s.async = true;
+    s.defer = true;
+    s.setAttribute("data-lw", "turnstile");
+    s.onload = () => resolve();
+    s.onerror = () => resolve();
+    document.head.appendChild(s);
+  });
+}
+
+/** Execute Turnstile and return a short-lived, single-use token (or null) */
+async function getTurnstileToken(action: string): Promise<string | null> {
+  try {
+    if (!TURNSTILE_SITE_KEY) return null;
+    await ensureTurnstileScript();
+    const w = window as any;
+    if (!w.turnstile || typeof w.turnstile.execute !== "function") return null;
+    const token: string = await w.turnstile
+      .execute(TURNSTILE_SITE_KEY, { action })
+      .catch(() => null);
+    return token && typeof token === "string" ? token : null;
+  } catch {
+    return null;
+  }
+}
+/* ---------- /Turnstile ---------- */
+
 /* ===== Nigeria states (unchanged) ===== */
 const NG_STATES = [
   "Abia",
@@ -212,6 +260,9 @@ function AddressPageInner() {
       return;
     }
 
+    /* 🔐 Get Turnstile token for address step (optional but recommended) */
+    const captchaToken = await getTurnstileToken("signup_address");
+
     const payload = {
       country: country.trim(),
       state: stateName.trim(),
@@ -219,6 +270,7 @@ function AddressPageInner() {
       lga: lga.trim(),
       address: address.trim(),
       ...(signupSessionId ? { sessionId: signupSessionId } : {}),
+      ...(captchaToken ? { captchaToken } : {}), // ← Turnstile token
     };
 
     const headers: Record<string, string> = {
@@ -256,6 +308,8 @@ function AddressPageInner() {
           json?.upstream?.message ||
           (res.status === 401
             ? "Session expired or invalid. Please verify your phone again."
+            : res.status === 403
+            ? "Verification failed. Please try again."
             : `Couldn’t save address (HTTP ${res.status}).`);
         setError(String(msg));
         setSaving(false);

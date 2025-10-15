@@ -1,12 +1,56 @@
-/* app/login/page.tsx (or wherever you mount it) */
+/* app/login/page.tsx */
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-/* ✅ Logo spinner (centered, no overlay) */
-import LogoSpinner from "../../components/loaders/LogoSpinner"; // adjust path if needed
+import LogoSpinner from "../../components/loaders/LogoSpinner";
+
+/* ---------- Turnstile (invisible execute) ---------- */
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
+
+function ensureTurnstileScript(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined") return resolve();
+    const w = window as any;
+    if (w.turnstile && typeof w.turnstile.execute === "function")
+      return resolve();
+
+    const existing = document.querySelector<HTMLScriptElement>(
+      'script[data-lw="turnstile"]'
+    );
+    if (existing) {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => resolve(), { once: true });
+      return;
+    }
+    const s = document.createElement("script");
+    s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+    s.async = true;
+    s.defer = true;
+    s.setAttribute("data-lw", "turnstile");
+    s.onload = () => resolve();
+    s.onerror = () => resolve();
+    document.head.appendChild(s);
+  });
+}
+
+async function getTurnstileToken(action: string): Promise<string | null> {
+  try {
+    if (!TURNSTILE_SITE_KEY) return null;
+    await ensureTurnstileScript();
+    const w = window as any;
+    if (!w.turnstile || typeof w.turnstile.execute !== "function") return null;
+    const token: string = await w.turnstile
+      .execute(TURNSTILE_SITE_KEY, { action })
+      .catch(() => null);
+    return token && typeof token === "string" ? token : null;
+  } catch {
+    return null;
+  }
+}
+/* ---------- /Turnstile ---------- */
 
 function toNgE164(localish: string) {
   const d = localish.replace(/\D/g, "");
@@ -14,7 +58,7 @@ function toNgE164(localish: string) {
   return `+234${local}`;
 }
 
-/* ✅ helpers to normalize avatar URLs like on dashboard */
+/* avatar helpers */
 function isBareBase64Jpeg(s?: string) {
   return !!s && /^\/9j\//.test(s);
 }
@@ -31,13 +75,12 @@ function normalizeImgSrc(u?: string) {
 export default function MobileLogin() {
   const router = useRouter();
 
-  const [phone, setPhone] = useState(""); // local digits only (10/11)
-  const [password, setPassword] = useState(""); // 5-digit PIN
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  /* ✅ last logged-in user avatar/name (for greeting circle) */
   const [lastAvatar, setLastAvatar] = useState<string>("");
   const [lastName, setLastName] = useState<string>("");
 
@@ -66,7 +109,7 @@ export default function MobileLogin() {
         const gen =
           typeof crypto !== "undefined" && "randomUUID" in crypto
             ? crypto.randomUUID()
-            : Math.random().toString(36).slice(2) + Date.now().toString(36);
+            : Math.random().toString(36).slice(0, 10) + Date.now().toString(36);
         localStorage.setItem("lw_device_token", gen);
         setDeviceToken(gen);
       }
@@ -81,14 +124,22 @@ export default function MobileLogin() {
   const pinValid = useMemo(() => /^\d{5}$/.test(password), [password]);
   const formValid = phoneValid && pinValid;
 
-  const gotoSignup = () => router.push("/agent-signup");
+  const goSignup = async () => {
+    if (sending) return;
+    setSending(true);
+    router.push("/agent-signup");
+  };
 
-  // Persists server-side HttpOnly cookie for cross-device sessions
+  const goForgotPin = async () => {
+    if (sending) return;
+    setSending(true);
+    router.push("/forgot-pin");
+  };
+
   async function persistAuthCookie(token: string) {
     const resp = await fetch("/api/auth/persist", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      // cookies are set by the route; no need to include credentials here
       body: JSON.stringify({ token }),
     });
     if (!resp.ok) {
@@ -105,15 +156,17 @@ export default function MobileLogin() {
     const e164 = toNgE164(phone);
 
     try {
-      // 1) Call your backend-facing login route
+      /* 🔐 fetch Turnstile token for login */
+      const captchaToken = await getTurnstileToken("login");
+
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // no token yet, so no credentials needed; the route will talk to your backend
         body: JSON.stringify({
           phoneNumber: e164,
           password,
           deviceToken,
+          ...(captchaToken ? { captchaToken } : {}),
         }),
       });
 
@@ -131,13 +184,14 @@ export default function MobileLogin() {
           data?.message?.message ||
           data?.message ||
           data?.error ||
-          "Login failed";
+          (res.status === 403
+            ? "Verification failed. Try again."
+            : "Login failed");
         setErr(String(msg));
         setSending(false);
         return;
       }
 
-      // 2) Extract token from whatever your backend returns
       const token =
         data?.token ||
         data?.access_token ||
@@ -152,16 +206,14 @@ export default function MobileLogin() {
         return;
       }
 
-      // 3) Persist HttpOnly cookie so all future requests are authenticated (cross-device)
       await persistAuthCookie(token);
 
-      // (Optional) keep a client copy ONLY for legacy pages still reading localStorage
       try {
         localStorage.setItem("authToken", token);
         localStorage.setItem("lw_token", token);
       } catch {}
 
-      /* ✅ 4) Get user profile → save avatar + display name for next login screen */
+      // Best-effort profile fetch to cache name/avatar
       try {
         const meRes = await fetch("/api/user/me", {
           method: "GET",
@@ -197,11 +249,8 @@ export default function MobileLogin() {
             }
           } catch {}
         }
-      } catch {
-        // non-blocking; ignore if it fails
-      }
+      } catch {}
 
-      // 5) Go to app home (your authenticated area)
       router.replace("/dash");
     } catch (e: any) {
       setErr(e?.message || "Network error. Please try again.");
@@ -210,16 +259,20 @@ export default function MobileLogin() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-0 md:p-4">
-      {/* ✅ centered logo spinner during login */}
+    <div
+      className="min-h-screen bg-gray-100 flex items-center justify-center p-0 md:p-4"
+      aria-busy={sending}
+    >
+      {/* Centered overlay spinner for ALL actions */}
       <LogoSpinner show={sending} />
 
       <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-2xl md:shadow-xl overflow-hidden">
         {/* Header */}
         <div className="flex justify-end items-center p-4 pt-6 bg-white">
           <button
-            onClick={gotoSignup}
-            className="text-gray-600 text-xs font-bold underline hover:text-gray-800 transition-colors"
+            onClick={goSignup}
+            disabled={sending}
+            className="text-gray-600 text-xs font-bold underline hover:text-gray-800 transition-colors disabled:text-gray-400"
           >
             Signup account
           </button>
@@ -240,7 +293,6 @@ export default function MobileLogin() {
                   unoptimized
                 />
               ) : (
-                /* your original placeholder image */
                 <Image
                   src="/images/user-avatar.jpg"
                   alt="User Avatar"
@@ -293,13 +345,17 @@ export default function MobileLogin() {
                     placeholder="000-0000-000"
                     value={phone}
                     onChange={(e) => {
+                      if (sending) return;
                       const value = e.target.value.replace(/\D/g, "");
                       if (value.length <= 11) setPhone(value);
                     }}
                     inputMode="numeric"
                     pattern="[0-9]*"
-                    className="flex-1 bg-transparent text-gray-700 placeholder-gray-400 outline-none text-sm"
-                    onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                    disabled={sending}
+                    className="flex-1 bg-transparent text-gray-700 placeholder-gray-400 outline-none text-sm disabled:cursor-not-allowed"
+                    onKeyDown={(e) =>
+                      !sending && e.key === "Enter" && handleLogin()
+                    }
                     aria-invalid={!phoneValid}
                   />
                 </div>
@@ -319,17 +375,22 @@ export default function MobileLogin() {
                 placeholder="•••••"
                 value={password}
                 onChange={(e) => {
+                  if (sending) return;
                   const v = e.target.value.replace(/\D/g, "").slice(0, 5);
                   setPassword(v);
                 }}
-                className="w-full bg-gray-100 rounded-xl px-3 py-3 text-gray-700 placeholder-gray-400 outline-none pr-10 text-sm tracking-widest"
-                onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                className="w-full bg-gray-100 rounded-xl px-3 py-3 text-gray-700 placeholder-gray-400 outline-none pr-10 text-sm tracking-widest disabled:cursor-not-allowed"
+                onKeyDown={(e) =>
+                  !sending && e.key === "Enter" && handleLogin()
+                }
                 aria-invalid={!pinValid}
+                disabled={sending}
               />
               <button
                 type="button"
-                onClick={() => setShowPassword((s) => !s)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600"
+                onClick={() => !sending && setShowPassword((s) => !s)}
+                disabled={sending}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 disabled:text-gray-300"
                 aria-label={showPassword ? "Hide PIN" : "Show PIN"}
               >
                 {showPassword ? (
@@ -342,18 +403,17 @@ export default function MobileLogin() {
 
             <div className="text-right mt-2">
               <button
-                onClick={() => router.push("/forgot-pin")}
-                className="text-gray-600 text-xs font-bold underline hover:text-gray-800 transition-colors"
+                onClick={goForgotPin}
+                disabled={sending}
+                className="text-gray-600 text-xs font-bold underline hover:text-gray-800 transition-colors disabled:text-gray-400"
               >
                 Forgot Login Pin
               </button>
             </div>
           </div>
 
-          {/* Spacer */}
           <div className="flex-1 min-h-[120px]" />
 
-          {/* Login */}
           <div className="pb-4">
             <button
               onClick={handleLogin}
@@ -363,6 +423,7 @@ export default function MobileLogin() {
                   : "bg-gray-300 text-gray-700 cursor-not-allowed"
               }`}
               disabled={!formValid || sending}
+              aria-busy={sending}
             >
               {sending ? "Logging in…" : "Login"}
             </button>
