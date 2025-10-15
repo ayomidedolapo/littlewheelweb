@@ -1,3 +1,4 @@
+// app/layout.tsx
 import "./globals.css";
 import type { Metadata } from "next";
 import localFont from "next/font/local";
@@ -5,11 +6,10 @@ import { ThemeProvider } from "@littlewheel/components";
 import { Toaster } from "sonner";
 import { cn } from "@littlewheel/lib/utils";
 import NextTopLoader from "nextjs-toploader";
-import Script from "next/script";
 import ConditionalHeader from "../components/ConditionalHeader";
 import ConditionalFooter from "../components/ConditionalFooter";
 
-// ... all your font definitions remain the same ...
+// Fonts (unchanged)
 const inter18pt = localFont({
   src: [
     {
@@ -345,22 +345,7 @@ export default function RootLayout({
     >
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <Script
-          src={`https://www.google.com/recaptcha/api.js?render=${process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY}`}
-          strategy="beforeInteractive"
-        />
-        <Script
-          src="https://www.googletagmanager.com/gtag/js?id=G-D8E9RJ9J4L"
-          strategy="afterInteractive"
-        />
-        <Script id="google-analytics" strategy="afterInteractive">
-          {`
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'G-D8E9RJ9J4L');
-  `}
-        </Script>
+        {/* Removed Google reCAPTCHA + Google Analytics scripts */}
       </head>
       <body
         className="antialiased bg-background text-foreground min-h-screen flex flex-col"
