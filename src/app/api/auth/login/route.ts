@@ -41,9 +41,9 @@ function readClientIp(req: NextRequest) {
 function readTurnstileToken(body: any) {
   return (
     String(
-      body?.captchaToken ||
-        body?.turnstileToken ||
-        body?.["cf-turnstile-response"] ||
+      body?.captchaToken || // legacy/local name
+        body?.turnstileToken || // alternate
+        body?.["cf-turnstile-response"] || // canonical
         ""
     ).trim() || ""
   );
@@ -54,17 +54,18 @@ async function verifyTurnstile(token: string, ip?: string) {
     return { ok: false as const, reason: "Missing TURNSTILE_SECRET_KEY env" };
   }
   try {
+    const body = new URLSearchParams({
+      secret: TURNSTILE_SECRET,
+      response: token,
+      ...(ip ? { remoteip: ip } : {}),
+    });
+
     const res = await fetch(TURNSTILE_VERIFY_URL, {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        secret: TURNSTILE_SECRET,
-        response: token,
-        ...(ip ? { remoteip: ip } : {}),
-        idempotency_key:
-          (crypto as any).randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
-      }),
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body,
     });
+
     const json = await res.json().catch(() => ({}));
     if (json?.success) return { ok: true as const, data: json };
     return {
@@ -107,7 +108,7 @@ export async function POST(req: NextRequest) {
       clientIp: ip || "(none)",
     });
 
-    /** 🔐 Turnstile verification (lenient in dev) */
+    /** 🔐 Turnstile verification (lenient in dev, enforced in prod) */
     if (!tsToken) {
       if (isProd || !ALLOW_DEV_WITHOUT_TURNSTILE) {
         console.warn("[login] Missing Turnstile token → rejecting");
@@ -133,7 +134,7 @@ export async function POST(req: NextRequest) {
           {
             success: false,
             message: "Turnstile verification failed",
-            details: verdict.data ?? verdict.reason ?? "unknown",
+            details: verdict.data ?? verdict.reason ?? "unknown", // bubble error-codes
           },
           { status: 403 }
         );
@@ -145,7 +146,9 @@ export async function POST(req: NextRequest) {
           cdata_present: !!data?.cdata,
           challenge_ts: data?.challenge_ts,
         });
-        // (optional) harden on action/hostname here
+        // Optional hardening:
+        // if (isProd && data?.action !== "login") { ... }
+        // if (isProd && data?.hostname && !/littlewheel\.app$/i.test(data.hostname)) { ... }
       }
     }
 
@@ -248,7 +251,7 @@ export async function POST(req: NextRequest) {
     return new NextResponse(
       JSON.stringify({
         success: true,
-        token, // optional to return; client doesn't need to store it
+        token, // client doesn’t need to store it; cookie set
         user: data?.user || data?.data?.user || null,
       }),
       { status: 200, headers }

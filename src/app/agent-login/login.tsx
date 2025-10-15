@@ -5,52 +5,20 @@ import { useEffect, useMemo, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import Script from "next/script";
 import LogoSpinner from "../../components/loaders/LogoSpinner";
 
-/* ---------- Turnstile (invisible execute) ---------- */
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
 
-function ensureTurnstileScript(): Promise<void> {
-  return new Promise((resolve) => {
-    if (typeof window === "undefined") return resolve();
-    const w = window as any;
-    if (w.turnstile && typeof w.turnstile.execute === "function")
-      return resolve();
-
-    const existing = document.querySelector<HTMLScriptElement>(
-      'script[data-lw="turnstile"]'
-    );
-    if (existing) {
-      existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener("error", () => resolve(), { once: true });
-      return;
-    }
-    const s = document.createElement("script");
-    s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
-    s.async = true;
-    s.defer = true;
-    s.setAttribute("data-lw", "turnstile");
-    s.onload = () => resolve();
-    s.onerror = () => resolve();
-    document.head.appendChild(s);
-  });
-}
-
-async function getTurnstileToken(action: string): Promise<string | null> {
-  try {
-    if (!TURNSTILE_SITE_KEY) return null;
-    await ensureTurnstileScript();
-    const w = window as any;
-    if (!w.turnstile || typeof w.turnstile.execute !== "function") return null;
-    const token: string = await w.turnstile
-      .execute(TURNSTILE_SITE_KEY, { action })
-      .catch(() => null);
-    return token && typeof token === "string" ? token : null;
-  } catch {
-    return null;
+declare global {
+  interface Window {
+    turnstile?: {
+      getResponse: (el?: Element | string) => string | null;
+      execute: (el?: Element | string) => void;
+      reset: (el?: Element | string) => void;
+    };
   }
 }
-/* ---------- /Turnstile ---------- */
 
 function toNgE164(localish: string) {
   const d = localish.replace(/\D/g, "");
@@ -58,7 +26,6 @@ function toNgE164(localish: string) {
   return `+234${local}`;
 }
 
-/* avatar helpers */
 function isBareBase64Jpeg(s?: string) {
   return !!s && /^\/9j\//.test(s);
 }
@@ -72,6 +39,44 @@ function normalizeImgSrc(u?: string) {
   return u;
 }
 
+/** Read token from managed widget; if missing and invisible, execute + poll. */
+async function getManagedTurnstileToken(
+  widgetSelector = "#ts-managed"
+): Promise<string | null> {
+  const el = document.querySelector(widgetSelector) as HTMLElement | null;
+  if (!el) {
+    console.error("[turnstile] widget element not found:", widgetSelector);
+    return null;
+  }
+
+  // First try to read any existing token
+  let token: string | null = null;
+  try {
+    token = window.turnstile?.getResponse?.(el) ?? null;
+  } catch (e) {
+    // ignore
+  }
+  if (token) return token;
+
+  // Attempt to execute (works for size="invisible")
+  try {
+    window.turnstile?.execute?.(el);
+  } catch (e) {
+    // ignore
+  }
+
+  // Poll for up to ~4s
+  const start = Date.now();
+  while (Date.now() - start < 4000) {
+    try {
+      token = window.turnstile?.getResponse?.(el) ?? null;
+    } catch {}
+    if (token) return token;
+    await new Promise((r) => setTimeout(r, 120));
+  }
+  return null;
+}
+
 export default function MobileLogin() {
   const router = useRouter();
 
@@ -83,6 +88,15 @@ export default function MobileLogin() {
 
   const [lastAvatar, setLastAvatar] = useState<string>("");
   const [lastName, setLastName] = useState<string>("");
+
+  // Toggle visible widget for debugging with ?tsvisible=1
+  const [tsVisible, setTsVisible] = useState(false);
+  useEffect(() => {
+    try {
+      const q = new URLSearchParams(location.search);
+      setTsVisible(q.has("tsvisible") || q.get("tsvisible") === "1");
+    } catch {}
+  }, []);
 
   useEffect(() => {
     try {
@@ -124,18 +138,6 @@ export default function MobileLogin() {
   const pinValid = useMemo(() => /^\d{5}$/.test(password), [password]);
   const formValid = phoneValid && pinValid;
 
-  const goSignup = async () => {
-    if (sending) return;
-    setSending(true);
-    router.push("/agent-signup");
-  };
-
-  const goForgotPin = async () => {
-    if (sending) return;
-    setSending(true);
-    router.push("/forgot-pin");
-  };
-
   async function persistAuthCookie(token: string) {
     const resp = await fetch("/api/auth/persist", {
       method: "POST",
@@ -156,28 +158,47 @@ export default function MobileLogin() {
     const e164 = toNgE164(phone);
 
     try {
-      /* 🔐 fetch Turnstile token for login */
-      const captchaToken = await getTurnstileToken("login");
+      // 1) Get Turnstile token from managed widget
+      if (!TURNSTILE_SITE_KEY) {
+        console.error(
+          "[turnstile] NEXT_PUBLIC_TURNSTILE_SITE_KEY is missing at build time"
+        );
+      }
+      let tsToken: string | null = await getManagedTurnstileToken(
+        "#ts-managed"
+      );
 
+      if (process.env.NODE_ENV === "production" && !tsToken) {
+        console.error(
+          "[turnstile] no token minted. Check Allowed Domains (must include host w/o port) and CSP frame/src/connect for challenges.cloudflare.com"
+        );
+        setErr("Couldn’t verify you. Please refresh and try again.");
+        setSending(false);
+        return;
+      }
+
+      // 2) Build request body (only include token if present)
+      const body: Record<string, any> = {
+        phoneNumber: e164,
+        password,
+        deviceToken,
+      };
+      if (tsToken) body["cf-turnstile-response"] = tsToken;
+
+      // 3) Call login
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phoneNumber: e164,
-          password,
-          deviceToken,
-          ...(captchaToken ? { captchaToken } : {}),
-        }),
+        body: JSON.stringify(body),
       });
 
       const raw = await res.text();
-      const data: any = (() => {
-        try {
-          return JSON.parse(raw);
-        } catch {
-          return { message: raw };
-        }
-      })();
+      let data: any;
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        data = { message: raw };
+      }
 
       if (!res.ok || data?.success === false) {
         const msg =
@@ -185,13 +206,16 @@ export default function MobileLogin() {
           data?.message ||
           data?.error ||
           (res.status === 403
-            ? "Verification failed. Try again."
+            ? `Verification failed${
+                data?.details ? `: ${JSON.stringify(data.details)}` : ""
+              }`
             : "Login failed");
         setErr(String(msg));
         setSending(false);
         return;
       }
 
+      // 4) Extract token
       const token =
         data?.token ||
         data?.access_token ||
@@ -206,14 +230,14 @@ export default function MobileLogin() {
         return;
       }
 
+      // 5) Persist cookies/session
       await persistAuthCookie(token);
-
       try {
         localStorage.setItem("authToken", token);
         localStorage.setItem("lw_token", token);
       } catch {}
 
-      // Best-effort profile fetch to cache name/avatar
+      // 6) Optional profile cache
       try {
         const meRes = await fetch("/api/user/me", {
           method: "GET",
@@ -258,16 +282,28 @@ export default function MobileLogin() {
     }
   };
 
+  const goSignup = async () => {
+    if (sending) return;
+    setSending(true);
+    router.push("/agent-signup");
+  };
+  const goForgotPin = async () => {
+    if (sending) return;
+    setSending(true);
+    router.push("/forgot-pin");
+  };
+
+  const widgetSize = tsVisible ? "normal" : "invisible";
+  const appearance = tsVisible ? "always" : "execute";
+
   return (
     <div
       className="min-h-screen bg-gray-100 flex items-center justify-center p-0 md:p-4"
       aria-busy={sending}
     >
-      {/* Centered overlay spinner for ALL actions */}
       <LogoSpinner show={sending} />
 
       <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-2xl md:shadow-xl overflow-hidden">
-        {/* Header */}
         <div className="flex justify-end items-center p-4 pt-6 bg-white">
           <button
             onClick={goSignup}
@@ -278,9 +314,7 @@ export default function MobileLogin() {
           </button>
         </div>
 
-        {/* Main */}
         <div className="px-6 py-4 bg-white">
-          {/* Greeting */}
           <div className="flex items-center gap-3 mb-6">
             <div className="w-8 h-8 bg-gray-300 rounded-full overflow-hidden flex items-center justify-center relative">
               {lastAvatar ? (
@@ -430,6 +464,26 @@ export default function MobileLogin() {
           </div>
         </div>
       </div>
+
+      {/* Managed Turnstile widget.
+          - Use ?tsvisible=1 to show visible "normal" widget for debugging.
+          - Default is invisible with "execute" appearance. */}
+      <div
+        id="ts-managed"
+        className="cf-turnstile"
+        data-sitekey={TURNSTILE_SITE_KEY}
+        data-action="login"
+        data-appearance={appearance} // "always" when visible; "execute" when invisible
+        data-size={widgetSize} // "normal" (visible) or "invisible"
+        data-retry="auto"
+        data-refresh-expired="auto"
+      />
+
+      {/* Official Turnstile script (managed mode). AfterInteractive is fine. */}
+      <Script
+        src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+        strategy="afterInteractive"
+      />
     </div>
   );
 }
