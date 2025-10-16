@@ -49,23 +49,16 @@ async function getManagedTurnstileToken(
     return null;
   }
 
-  // First try to read any existing token
   let token: string | null = null;
   try {
     token = window.turnstile?.getResponse?.(el) ?? null;
-  } catch (e) {
-    // ignore
-  }
+  } catch {}
   if (token) return token;
 
-  // Attempt to execute (works for size="invisible")
   try {
     window.turnstile?.execute?.(el);
-  } catch (e) {
-    // ignore
-  }
+  } catch {}
 
-  // Poll for up to ~4s
   const start = Date.now();
   while (Date.now() - start < 4000) {
     try {
@@ -89,7 +82,7 @@ export default function MobileLogin() {
   const [lastAvatar, setLastAvatar] = useState<string>("");
   const [lastName, setLastName] = useState<string>("");
 
-  // Toggle visible widget for debugging with ?tsvisible=1
+  // Optional toggle (?tsvisible=1); widget stays visible "normal" below.
   const [tsVisible, setTsVisible] = useState(false);
   useEffect(() => {
     try {
@@ -158,7 +151,6 @@ export default function MobileLogin() {
     const e164 = toNgE164(phone);
 
     try {
-      // 1) Get Turnstile token from managed widget
       if (!TURNSTILE_SITE_KEY) {
         console.error(
           "[turnstile] NEXT_PUBLIC_TURNSTILE_SITE_KEY is missing at build time"
@@ -177,7 +169,6 @@ export default function MobileLogin() {
         return;
       }
 
-      // 2) Build request body (only include token if present)
       const body: Record<string, any> = {
         phoneNumber: e164,
         password,
@@ -185,7 +176,6 @@ export default function MobileLogin() {
       };
       if (tsToken) body["cf-turnstile-response"] = tsToken;
 
-      // 3) Call login
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -215,7 +205,6 @@ export default function MobileLogin() {
         return;
       }
 
-      // 4) Extract token
       const token =
         data?.token ||
         data?.access_token ||
@@ -230,14 +219,12 @@ export default function MobileLogin() {
         return;
       }
 
-      // 5) Persist cookies/session
       await persistAuthCookie(token);
       try {
         localStorage.setItem("authToken", token);
         localStorage.setItem("lw_token", token);
       } catch {}
 
-      // 6) Optional profile cache
       try {
         const meRes = await fetch("/api/user/me", {
           method: "GET",
@@ -293,8 +280,9 @@ export default function MobileLogin() {
     router.push("/forgot-pin");
   };
 
-  const widgetSize = tsVisible ? "normal" : "invisible";
-  const appearance = tsVisible ? "always" : "execute";
+  // Widget back to original size & always visible
+  const widgetSize = "normal";
+  const appearance = "always";
 
   return (
     <div
@@ -434,16 +422,32 @@ export default function MobileLogin() {
                 )}
               </button>
             </div>
+          </div>
 
-            <div className="text-right mt-2">
-              <button
-                onClick={goForgotPin}
-                disabled={sending}
-                className="text-gray-600 text-xs font-bold underline hover:text-gray-800 transition-colors disabled:text-gray-400"
-              >
-                Forgot Login Pin
-              </button>
-            </div>
+          {/* Turnstile visible widget (normal size) */}
+          <div className="mb-2">
+            <div
+              id="ts-managed"
+              className="cf-turnstile"
+              data-sitekey={TURNSTILE_SITE_KEY}
+              data-action="login"
+              data-appearance={appearance} /* always */
+              data-size={widgetSize} /* normal */
+              data-theme="light"
+              data-retry="auto"
+              data-refresh-expired="auto"
+            />
+          </div>
+
+          {/* Forgot Login Pin right under the widget, right-aligned */}
+          <div className="text-right mt-2 mb-4">
+            <button
+              onClick={goForgotPin}
+              disabled={sending}
+              className="text-gray-600 text-xs font-bold underline hover:text-gray-800 transition-colors disabled:text-gray-400"
+            >
+              Forgot Login Pin
+            </button>
           </div>
 
           <div className="flex-1 min-h-[120px]" />
@@ -465,21 +469,7 @@ export default function MobileLogin() {
         </div>
       </div>
 
-      {/* Managed Turnstile widget.
-          - Use ?tsvisible=1 to show visible "normal" widget for debugging.
-          - Default is invisible with "execute" appearance. */}
-      <div
-        id="ts-managed"
-        className="cf-turnstile"
-        data-sitekey={TURNSTILE_SITE_KEY}
-        data-action="login"
-        data-appearance={appearance} // "always" when visible; "execute" when invisible
-        data-size={widgetSize} // "normal" (visible) or "invisible"
-        data-retry="auto"
-        data-refresh-expired="auto"
-      />
-
-      {/* Official Turnstile script (managed mode). AfterInteractive is fine. */}
+      {/* Cloudflare Turnstile script */}
       <Script
         src="https://challenges.cloudflare.com/turnstile/v0/api.js"
         strategy="afterInteractive"

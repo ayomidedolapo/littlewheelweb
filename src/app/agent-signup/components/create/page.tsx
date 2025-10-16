@@ -10,51 +10,40 @@ import {
   Mail as MailIcon,
   CheckCircle2,
 } from "lucide-react";
+import Script from "next/script";
 import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 
 /** Routes */
 const LOGIN_ROUTE = "/agent-login";
 const NEXT_STEP_ROUTE = "/agent-signup/components/personal-details";
 
-/** ---------- Turnstile (invisible) ---------- */
+/** ---------- Turnstile (managed visible widget) ---------- */
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
 
-function ensureTurnstileScript(): Promise<void> {
-  return new Promise((resolve) => {
-    if (typeof window === "undefined") return resolve();
-    const w = window as any;
-    if (w.turnstile && typeof w.turnstile.execute === "function")
-      return resolve();
-
-    const existing = document.querySelector<HTMLScriptElement>(
-      'script[data-lw="turnstile"]'
-    );
-    if (existing) {
-      existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener("error", () => resolve(), { once: true });
-      return;
-    }
-    const s = document.createElement("script");
-    s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
-    s.async = true;
-    s.defer = true;
-    s.setAttribute("data-lw", "turnstile");
-    s.onload = () => resolve();
-    s.onerror = () => resolve();
-    document.head.appendChild(s);
-  });
+declare global {
+  interface Window {
+    turnstile?: {
+      getResponse: (el?: Element | string) => string | null;
+      execute: (el?: Element | string) => void;
+      reset: (el?: Element | string) => void;
+    };
+  }
 }
 
-async function getTurnstileToken(action: string): Promise<string | null> {
+/** Grab token from the visible managed widget.
+ * If the user hasn't solved it yet, this will return null.
+ */
+async function getManagedTurnstileToken(
+  widgetSelector = "#ts-signup"
+): Promise<string | null> {
+  const el = document.querySelector(widgetSelector) as HTMLElement | null;
+  if (!el) {
+    console.error("[turnstile] widget element not found:", widgetSelector);
+    return null;
+  }
   try {
-    if (!TURNSTILE_SITE_KEY) return null;
-    await ensureTurnstileScript();
-    const w = window as any;
-    if (!w.turnstile || typeof w.turnstile.execute !== "function") return null;
-    const token: string = await w.turnstile
-      .execute(TURNSTILE_SITE_KEY, { action })
-      .catch(() => null);
-    return token && typeof token === "string" ? token : null;
+    const t = window.turnstile?.getResponse?.(el) ?? null;
+    return t && typeof t === "string" ? t : null;
   } catch {
     return null;
   }
@@ -307,7 +296,9 @@ export default function CreateExactDualOTP() {
     persistInputs(e164, cleanEmail);
 
     setSending(true);
-    const captchaToken = await getTurnstileToken("send_phone_code");
+
+    // ✅ Read token from visible Turnstile widget
+    const captchaToken = await getManagedTurnstileToken("#ts-signup");
 
     const payload: any = {
       step: 1,
@@ -348,7 +339,9 @@ export default function CreateExactDualOTP() {
     if (code.length !== 4 || pState === "verifying" || sending) return;
 
     setSending(true);
-    const captchaToken = await getTurnstileToken("verify_phone");
+
+    // ✅ Reuse the visible Turnstile token (or freshly solve if expired)
+    const captchaToken = await getManagedTurnstileToken("#ts-signup");
 
     const payload: any = {
       step: 2,
@@ -412,7 +405,9 @@ export default function CreateExactDualOTP() {
     } catch {}
 
     setSending(true);
-    const captchaToken = await getTurnstileToken("send_email_code");
+
+    // ✅ Read token from visible Turnstile widget
+    const captchaToken = await getManagedTurnstileToken("#ts-signup");
 
     setEState("sending");
     const payload = {
@@ -446,7 +441,9 @@ export default function CreateExactDualOTP() {
     if (code.length !== 4 || eState === "verifying" || sending) return;
 
     setSending(true);
-    const captchaToken = await getTurnstileToken("verify_email");
+
+    // ✅ Read token from visible Turnstile widget
+    const captchaToken = await getManagedTurnstileToken("#ts-signup");
 
     const payload = {
       step: 4,
@@ -883,6 +880,21 @@ export default function CreateExactDualOTP() {
             )}
           </div>
 
+          {/* 🔒 Visible Cloudflare Turnstile widget (normal size) */}
+          <div className="mt-4">
+            <div
+              id="ts-signup"
+              className="cf-turnstile"
+              data-sitekey={TURNSTILE_SITE_KEY}
+              data-action="signup"
+              data-appearance="always"
+              data-size="normal"
+              data-theme="light"
+              data-retry="auto"
+              data-refresh-expired="auto"
+            />
+          </div>
+
           {/* page error */}
           {pageError && (
             <p className="mt-3 text-[11px] text-rose-600" role="alert">
@@ -931,6 +943,12 @@ export default function CreateExactDualOTP() {
           </button>
         </div>
       </div>
+
+      {/* Official Turnstile script (managed mode) */}
+      <Script
+        src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+        strategy="afterInteractive"
+      />
     </div>
   );
 }

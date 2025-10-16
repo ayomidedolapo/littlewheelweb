@@ -160,9 +160,7 @@ export async function POST(req: Request) {
     clientIp: ip || "unknown",
   });
 
-  /* ---- Turnstile enforcement ----
-     Phone steps are typically the critical ones. If you also want email gated,
-     add 3 & 4 to the array below. */
+  /* ---- Turnstile enforcement ---- */
   const isProd = process.env.NODE_ENV === "production";
   const shouldEnforce = [1, 2].includes(step) || false;
 
@@ -208,9 +206,6 @@ export async function POST(req: Request) {
           hostname: data?.hostname,
           challenge_ts: data?.challenge_ts,
         });
-        // Optional hardening:
-        // if (step === 1 && data?.action !== "send_phone_code") { ... }
-        // if (step === 2 && data?.action !== "verify_phone") { ... }
       }
     }
   }
