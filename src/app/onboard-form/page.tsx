@@ -21,18 +21,35 @@ declare global {
   }
 }
 
-/** Read token from visible managed widget */
+/** Read token from managed widget; if missing, execute + poll (like login) */
 async function getManagedTurnstileToken(
   widgetSelector = "#ts-onboard"
 ): Promise<string | null> {
   const el = document.querySelector(widgetSelector) as HTMLElement | null;
-  if (!el) return null;
-  try {
-    const t = window.turnstile?.getResponse?.(el) ?? null;
-    return t && typeof t === "string" ? t : null;
-  } catch {
+  if (!el) {
+    console.error("[turnstile] widget element not found:", widgetSelector);
     return null;
   }
+
+  let token: string | null = null;
+  try {
+    token = window.turnstile?.getResponse?.(el) ?? null;
+  } catch {}
+  if (token) return token;
+
+  try {
+    window.turnstile?.execute?.(el);
+  } catch {}
+
+  const start = Date.now();
+  while (Date.now() - start < 4000) {
+    try {
+      token = window.turnstile?.getResponse?.(el) ?? null;
+    } catch {}
+    if (token) return token;
+    await new Promise((r) => setTimeout(r, 120));
+  }
+  return null;
 }
 /* ---------- /Turnstile ---------- */
 
@@ -76,12 +93,27 @@ export default function MobileSignup() {
     if (!isFormValid || sending) return;
     setSending(true);
     setError(null);
+
     try {
       const e164 = toNgE164(phoneNumber);
       const auth = getAuthToken();
 
-      // 🔐 Read token from visible Turnstile widget (checkbox)
-      const captchaToken = await getManagedTurnstileToken("#ts-onboard");
+      // 🔐 Same robust Turnstile handling as login
+      if (!TURNSTILE_SITE_KEY) {
+        console.error(
+          "[turnstile] NEXT_PUBLIC_TURNSTILE_SITE_KEY is missing at build time"
+        );
+      }
+      const tsToken = await getManagedTurnstileToken("#ts-onboard");
+
+      if (process.env.NODE_ENV === "production" && !tsToken) {
+        console.error(
+          "[turnstile] no token minted. Check Allowed Domains (host w/o port) and CSP for challenges.cloudflare.com"
+        );
+        setError("Couldn’t verify you. Please refresh and try again.");
+        setSending(false);
+        return;
+      }
 
       // Start onboarding (creates registration token)
       const res = await fetch("/api/v1/agent/customers", {
@@ -93,7 +125,7 @@ export default function MobileSignup() {
         cache: "no-store",
         body: JSON.stringify({
           phoneNumber: e164,
-          ...(captchaToken ? { captchaToken } : {}),
+          ...(tsToken ? { "cf-turnstile-response": tsToken } : {}),
         }),
       });
 
@@ -103,9 +135,13 @@ export default function MobileSignup() {
         json = JSON.parse(text || "{}");
       } catch {}
 
-      if (!res.ok) {
-        const msg = json?.message || json?.error || `HTTP ${res.status}`;
-        throw new Error(msg);
+      if (!res.ok || json?.success === false) {
+        const msg =
+          json?.message?.message ||
+          json?.message ||
+          json?.error ||
+          `HTTP ${res.status}`;
+        throw new Error(String(msg));
       }
 
       const regToken =
@@ -120,6 +156,8 @@ export default function MobileSignup() {
       }
 
       sessionStorage.setItem("lw_reg_token", String(regToken));
+
+      // Keep your existing next step:
       router.push("./onboard-form/components/verification");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to start onboarding.");
