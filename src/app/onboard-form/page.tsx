@@ -5,7 +5,36 @@ import React, { useMemo, useState } from "react";
 import { ArrowLeft, Phone, Check } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import Script from "next/script";
 import LogoSpinner from "../../components/loaders/LogoSpinner";
+
+/* ---------- Turnstile ---------- */
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
+
+declare global {
+  interface Window {
+    turnstile?: {
+      getResponse: (el?: Element | string) => string | null;
+      execute: (el?: Element | string) => void;
+      reset: (el?: Element | string) => void;
+    };
+  }
+}
+
+/** Read token from visible managed widget */
+async function getManagedTurnstileToken(
+  widgetSelector = "#ts-onboard"
+): Promise<string | null> {
+  const el = document.querySelector(widgetSelector) as HTMLElement | null;
+  if (!el) return null;
+  try {
+    const t = window.turnstile?.getResponse?.(el) ?? null;
+    return t && typeof t === "string" ? t : null;
+  } catch {
+    return null;
+  }
+}
+/* ---------- /Turnstile ---------- */
 
 /* ---------- helpers ---------- */
 function toNgE164(localish: string) {
@@ -51,6 +80,9 @@ export default function MobileSignup() {
       const e164 = toNgE164(phoneNumber);
       const auth = getAuthToken();
 
+      // 🔐 Read token from visible Turnstile widget (checkbox)
+      const captchaToken = await getManagedTurnstileToken("#ts-onboard");
+
       // Start onboarding (creates registration token)
       const res = await fetch("/api/v1/agent/customers", {
         method: "POST",
@@ -59,7 +91,10 @@ export default function MobileSignup() {
           ...(auth ? { "x-lw-auth": auth } : {}),
         },
         cache: "no-store",
-        body: JSON.stringify({ phoneNumber: e164 }),
+        body: JSON.stringify({
+          phoneNumber: e164,
+          ...(captchaToken ? { captchaToken } : {}),
+        }),
       });
 
       const text = await res.text();
@@ -169,6 +204,20 @@ export default function MobileSignup() {
             )}
           </div>
 
+          {/* 🔒 Visible Cloudflare Turnstile widget (normal size) */}
+          <div className="mb-8">
+            <div
+              id="ts-onboard"
+              className="cf-turnstile"
+              data-sitekey={TURNSTILE_SITE_KEY}
+              data-appearance="always"
+              data-size="normal"
+              data-action="onboard_start"
+              data-retry="auto"
+              data-refresh-expired="auto"
+            />
+          </div>
+
           {/* Steps */}
           <div className="mb-15 mt-20">
             <h3 className="text-gray-900 font-semibold text-sm mb-4 underline">
@@ -232,6 +281,12 @@ export default function MobileSignup() {
           </div>
         </div>
       </div>
+
+      {/* Official Turnstile script */}
+      <Script
+        src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+        strategy="afterInteractive"
+      />
     </div>
   );
 }
