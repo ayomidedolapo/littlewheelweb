@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
+  Check, // <- use tick icon
 } from "lucide-react";
 import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 
@@ -64,6 +65,14 @@ function getAuthToken(): string {
   }
 }
 
+function fmtDate(d?: string | Date | null) {
+  if (!d) return "—";
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return "—";
+  const month = dt.toLocaleString(undefined, { month: "short" });
+  return `${dt.getDate()} ${month}, ${dt.getFullYear()}`;
+}
+
 /* ---------- types ---------- */
 type CustomerLite = {
   id: string;
@@ -86,8 +95,8 @@ type APIVault = {
   vaultId?: string;
   _id?: string;
   name?: string;
-  targetAmount?: number;
-  amount?: number;
+  targetAmount?: number | string;
+  amount?: number | string;
 };
 
 type VaultRow = {
@@ -98,7 +107,41 @@ type VaultRow = {
   daily: number;
 };
 
-/* ================= Inner component that uses useSearchParams ================= */
+type VaultDetail = {
+  id?: string;
+  vaultId?: string;
+  _id?: string;
+  name?: string;
+  targetAmount?: string | number;
+  amount?: string | number;
+  frequency?: string;
+  duration?: string;
+  startDate?: string;
+  createdAt?: string;
+  maturityDate?: string;
+  endDate?: string;
+  durationInDays?: number; // <- added
+  balance?: string | number;
+  currentAmount?: string | number;
+  currentBalance?: string | number;
+};
+
+/* ----- compute maturity (fallback when API doesn't return maturityDate) ----- */
+function computeMaturity(d?: VaultDetail | null): string | null {
+  if (!d) return null;
+  const m = d.maturityDate || d.endDate;
+  if (m) return m;
+  const start = d.startDate || d.createdAt;
+  const days = Number(d.durationInDays ?? 0);
+  if (!start || !days || Number.isNaN(days)) return null;
+  const startDt = new Date(start);
+  if (isNaN(startDt.getTime())) return null;
+  const out = new Date(startDt);
+  out.setDate(out.getDate() + days);
+  return out.toISOString();
+}
+
+/* ================= Inner component ================= */
 
 function PersonalVaultCustomerPageInner() {
   const router = useRouter();
@@ -122,6 +165,10 @@ function PersonalVaultCustomerPageInner() {
 
   const [txs, setTxs] = useState<Tx[]>([]);
   const [txLoading, setTxLoading] = useState(false);
+
+  /* ---- Header “Saving Plan” and “Withdrawal Date” ---- */
+  const [headerPlan, setHeaderPlan] = useState<string>("—");
+  const [headerWithdrawal, setHeaderWithdrawal] = useState<string>("—");
 
   /* ---- Deposit/Withdraw picker state ---- */
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -261,7 +308,104 @@ function PersonalVaultCustomerPageInner() {
     };
   }, [sp, token]);
 
-  /* recent contributions (unfiltered) */
+  /* ========= Header “Saving Plan” + “Withdrawal Date” (with maturity fallback) ========= */
+  useEffect(() => {
+    const customerId = getActiveCustomerId(sp);
+    if (!customerId) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const headers = token ? { "x-lw-auth": token } : undefined;
+        // 1) list ongoing
+        const listRes = await fetch(
+          `/api/v1/agent/customers/${customerId}/vaults?status=ONGOING`,
+          { headers, cache: "no-store" }
+        );
+        if (!listRes.ok) throw new Error(`Vaults HTTP ${listRes.status}`);
+        const listJ = await listRes.json().catch(() => ({}));
+        const apiVaults: APIVault[] = extractArray(listJ);
+
+        if (!apiVaults?.length) {
+          if (!cancelled) {
+            setHeaderPlan("—");
+            setHeaderWithdrawal("—");
+          }
+          return;
+        }
+
+        // 2) detail calls
+        const details: VaultDetail[] = await Promise.all(
+          apiVaults.map(async (v) => {
+            const vid = v.id || v.vaultId || v._id || "";
+            if (!vid) return null as any;
+            try {
+              const vr = await fetch(
+                `/api/v1/agent/customers/${customerId}/vaults/${vid}`,
+                { headers, cache: "no-store" }
+              );
+              if (!vr.ok) return null as any;
+              const vj = await vr.json().catch(() => ({}));
+              return (vj?.data ?? vj ?? null) as VaultDetail | null;
+            } catch {
+              return null as any;
+            }
+          })
+        );
+
+        const valid = (details || []).filter(Boolean);
+
+        // Plan text
+        const dailyVals = valid
+          .map((d) => Number(d?.amount ?? 0))
+          .filter((n) => Number.isFinite(n) && n > 0);
+
+        let planText = "—";
+        if (valid.length === 1 && dailyVals.length === 1) {
+          // strip trailing .00 for compactness
+          planText = `${NGN(dailyVals[0]).replace(/\.00$/, "")} daily`;
+        } else if (valid.length > 1) {
+          planText = "Multiple";
+        }
+
+        // Withdrawal date = earliest upcoming maturity
+        const maturityDates = valid
+          .map((d) => computeMaturity(d))
+          .filter(Boolean)
+          .map((s) => new Date(s as string))
+          .filter((dt) => !isNaN(dt.getTime()));
+
+        let wdText = "—";
+        if (maturityDates.length) {
+          const startOfToday = new Date();
+          startOfToday.setHours(0, 0, 0, 0);
+          const future = maturityDates
+            .filter((d) => d.getTime() >= startOfToday.getTime())
+            .sort((a, b) => a.getTime() - b.getTime());
+          const pick =
+            future[0] ||
+            maturityDates.sort((a, b) => a.getTime() - b.getTime())[0];
+          wdText = fmtDate(pick);
+        }
+
+        if (!cancelled) {
+          setHeaderPlan(planText);
+          setHeaderWithdrawal(wdText);
+        }
+      } catch {
+        if (!cancelled) {
+          setHeaderPlan("—");
+          setHeaderWithdrawal("—");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sp, token]);
+
+  /* recent contributions (limit to 5) */
   useEffect(() => {
     const customerId = getActiveCustomerId(sp);
     if (!customerId) return;
@@ -285,7 +429,6 @@ function PersonalVaultCustomerPageInner() {
         const rows = extractArray(j);
 
         const mapped: Tx[] = (rows || [])
-          .slice(0, 10)
           .map((r: any, idx: number) => {
             const id =
               r.id ||
@@ -312,11 +455,10 @@ function PersonalVaultCustomerPageInner() {
               at: new Date(created).toISOString(),
               isCredit,
             };
-          });
+          })
+          .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+          .slice(0, 5); // hard limit
 
-        mapped.sort(
-          (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()
-        );
         if (!cancelled) setTxs(mapped);
       } catch {
         if (!cancelled) setTxs([]);
@@ -330,7 +472,7 @@ function PersonalVaultCustomerPageInner() {
     };
   }, [sp, token]);
 
-  /* Load vaults when picker opens */
+  /* Load vaults when picker opens (unchanged except types) */
   useEffect(() => {
     if (!pickerOpen) return;
     const customerId = getActiveCustomerId(sp);
@@ -403,16 +545,13 @@ function PersonalVaultCustomerPageInner() {
 
   const fullName =
     `${customer?.firstName || ""} ${customer?.lastName || ""}`.trim() || "—";
-  const plan = "₦0 daily"; // requested copy
-  const withdrawalDateText = "—";
-  const regPhone = customer?.phoneNumber || customer?.phone || "—";
 
   const pct = (b: number, t: number) =>
     t ? Math.min(100, Math.round((b / t) * 100)) : 0;
 
   return (
     <>
-      {/* ✅ Global route spinner (same pattern as other pages) */}
+      {/* ✅ Global route spinner */}
       <LogoSpinner show={isRouting} />
 
       <div className="min-h-screen bg-white flex items-start justify-center">
@@ -459,12 +598,14 @@ function PersonalVaultCustomerPageInner() {
 
                 <div>
                   <p className="text-[11px] text-white/70">Saving Plan</p>
-                  <p className="text-[13px] font-semibold mt-0.5">{plan}</p>
+                  <p className="text-[13px] font-semibold mt-0.5">
+                    {headerPlan}
+                  </p>
                 </div>
                 <div className="text-right">
                   <p className="text-[11px] text-white/70">Withdrawal Date</p>
                   <p className="text-[13px] font-semibold mt-0.5">
-                    {withdrawalDateText}
+                    {headerWithdrawal}
                   </p>
                 </div>
 
@@ -485,7 +626,7 @@ function PersonalVaultCustomerPageInner() {
                         <LogoSpinner className="w-3.5 h-3.5" /> …
                       </span>
                     ) : (
-                      regPhone
+                      customer?.phoneNumber || customer?.phone || "—"
                     )}
                   </p>
                 </div>
@@ -595,7 +736,7 @@ function PersonalVaultCustomerPageInner() {
             </div>
           </div>
 
-          {/* Recent Transactions list */}
+          {/* Recent Transactions list (tick icon) */}
           <div className="px-4 mt-2">
             <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
               {txLoading ? (
@@ -617,24 +758,24 @@ function PersonalVaultCustomerPageInner() {
                   </p>
                 </div>
               ) : (
-                txs.slice(0, 5).map((t, i) => (
+                txs.map((t, i) => (
                   <div
                     key={t.id}
                     className={`flex items-center justify-between px-3 py-3 ${
-                      i !== Math.min(txs.length, 5) - 1
-                        ? "border-b border-gray-100"
-                        : ""
+                      i !== txs.length - 1 ? "border-b border-gray-100" : ""
                     }`}
                   >
                     <div className="flex items-center gap-3">
                       <div
-                        className={`h-8 w-8 rounded-full ${
+                        className={`h-8 w-8 rounded-full flex items-center justify-center ${
                           t.isCredit ? "bg-emerald-50" : "bg-rose-50"
-                        } flex items-center justify-center text-[11px] font-bold ${
-                          t.isCredit ? "text-emerald-700" : "text-rose-700"
                         }`}
                       >
-                        {t.isCredit ? "+" : "−"}
+                        <Check
+                          className={`w-4 h-4 ${
+                            t.isCredit ? "text-emerald-700" : "text-rose-700"
+                          }`}
+                        />
                       </div>
                       <div>
                         <p className="text-[13px] font-medium text-gray-900">
@@ -658,7 +799,7 @@ function PersonalVaultCustomerPageInner() {
             </div>
           </div>
 
-          {/* Bottom actions → open picker like customers page */}
+          {/* Bottom actions */}
           <div className="sticky bottom-0 mt-6 bg-white px-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <button
@@ -718,7 +859,9 @@ function PersonalVaultCustomerPageInner() {
               ) : (
                 <div className="space-y-3 max-h-[55vh] overflow-auto pr-1">
                   {vaults.map((v) => {
-                    const progress = pct(v.balance, v.target);
+                    const progress = v.target
+                      ? Math.min(100, Math.round((v.balance / v.target) * 100))
+                      : 0;
                     const isActive = selectedVaultId === v.id;
                     return (
                       <button
