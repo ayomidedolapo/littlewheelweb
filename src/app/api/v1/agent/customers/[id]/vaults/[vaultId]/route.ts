@@ -6,10 +6,10 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const BASE_V1 = (
-  process.env.BACKEND_API_URL || "https://dev-api.insider.littlewheel.app/v1"
+  process.env.BACKEND_API_URL || "https://api.littlewheel.app/v1"
 ).replace(/\/+$/, "");
 const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS ?? 45_000);
-const ROUTE_REV = "vaults-detail-R6";
+const ROUTE_REV = "vaults-detail-R7"; // bump so you can verify in prod
 
 async function getCookieStore() {
   const m = (cookiesFn as any)();
@@ -46,24 +46,21 @@ function pickNumber(...vals: any[]) {
   return 0;
 }
 
-/** Prefer x-lw-auth, then Authorization, then cookies. Return raw + "Bearer ..." */
+/** Use x-lw-auth (raw), then Authorization (raw), then cookies (raw). */
 async function getAuthPieces(req: NextRequest) {
   const jar = await getCookieStore();
   const hdrs = await getHeadersStore();
 
-  const xRaw = (
-    hdrs.get("x-lw-auth") ||
-    req.headers.get("x-lw-auth") ||
-    ""
-  ).trim();
+  const xRaw = (hdrs.get("x-lw-auth") || req.headers.get("x-lw-auth") || "")
+    .trim()
+    .replace(/^Bearer\s+/i, "");
   const authRaw = (
     hdrs.get("authorization") ||
     req.headers.get("authorization") ||
     ""
   )
     .trim()
-    .replace(/^Bearer\s+/i, "")
-    .trim();
+    .replace(/^Bearer\s+/i, "");
   const cookieTok =
     jar?.get?.("lw_auth")?.value ||
     jar?.get?.("lw_token")?.value ||
@@ -71,8 +68,7 @@ async function getAuthPieces(req: NextRequest) {
     jar?.get?.("token")?.value ||
     "";
 
-  const raw =
-    xRaw.replace(/^Bearer\s+/i, "").trim() || authRaw || cookieTok.trim();
+  const raw = (xRaw || authRaw || cookieTok).trim();
   return { raw, bearer: raw ? `Bearer ${raw}` : "" };
 }
 
@@ -109,7 +105,7 @@ export async function GET(
         401
       );
 
-    // Try optional balance endpoint for better currentAmount/currentBalance if your backend supports it
+    // Optional balance call
     let balanceData: any = null;
     try {
       const balUrl = `${BASE_V1}/agent/customers/${encodeURIComponent(
@@ -119,8 +115,8 @@ export async function GET(
         method: "GET",
         headers: {
           Accept: "application/json",
-          Authorization: bearer,
-          "x-lw-auth": bearer,
+          Authorization: bearer, // Bearer <raw>
+          "x-lw-auth": raw, // RAW token only (no "Bearer ")
         },
         cache: "no-store",
       });
@@ -128,11 +124,9 @@ export async function GET(
         const j = await balRes.json().catch(() => ({}));
         balanceData = j?.data ?? j ?? null;
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
 
-    // Always fetch the full upstream vault detail (this contains targetAmount, amount, frequency, etc.)
+    // Vault detail
     const url = `${BASE_V1}/agent/customers/${encodeURIComponent(
       id
     )}/vaults/${encodeURIComponent(vaultId)}`;
@@ -141,7 +135,7 @@ export async function GET(
       headers: {
         Accept: "application/json",
         Authorization: bearer,
-        "x-lw-auth": bearer,
+        "x-lw-auth": raw, // RAW token
       },
       cache: "no-store",
     });
@@ -150,7 +144,7 @@ export async function GET(
     const ct = upstream.headers.get("content-type") ?? "application/json";
 
     if (!upstream.ok) {
-      // Return upstream JSON error cleanly when possible
+      // Pipe upstream JSON message if possible (keep it readable in prod)
       if (ct.includes("application/json")) {
         try {
           const j = JSON.parse(text);
@@ -160,12 +154,15 @@ export async function GET(
               where: "upstream",
               message: j?.message || j?.error || `HTTP ${upstream.status}`,
               upstreamStatus: upstream.status,
+              debug: {
+                routeRev: ROUTE_REV,
+                // redact token but keep a small preview for triage
+                tokenPreview: raw ? `${raw.slice(0, 8)}…${raw.slice(-6)}` : "",
+              },
             },
             upstream.status
           );
-        } catch {
-          // fallthrough
-        }
+        } catch {}
       }
       const out = new NextResponse(text, {
         status: upstream.status,
@@ -181,7 +178,6 @@ export async function GET(
     } catch {}
     const upstreamData = vJson?.data ?? vJson ?? {};
 
-    // Build normalized balances but DO NOT drop upstream properties
     const currentAmount = pickNumber(
       balanceData?.currentAmount,
       balanceData?.currentBalance,
@@ -202,15 +198,18 @@ export async function GET(
       currentBalance
     );
 
-    // Merge everything so the page gets all fields it needs
-    const merged = {
-      ...upstreamData,
-      currentAmount,
-      currentBalance,
-      availableBalance,
-    };
-
-    return jsonOut({ success: true, data: merged }, 200);
+    return jsonOut(
+      {
+        success: true,
+        data: {
+          ...upstreamData,
+          currentAmount,
+          currentBalance,
+          availableBalance,
+        },
+      },
+      200
+    );
   } catch (e: any) {
     const aborted = e?.name === "AbortError" || e === "timeout";
     return jsonOut(
@@ -220,6 +219,7 @@ export async function GET(
         message: aborted
           ? `timeout ${TIMEOUT_MS}ms`
           : e?.message || "Network error",
+        debug: { routeRev: ROUTE_REV },
       },
       aborted ? 504 : 502
     );
