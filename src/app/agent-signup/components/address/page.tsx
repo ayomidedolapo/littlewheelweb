@@ -11,25 +11,20 @@ import {
   Building2,
   Globe2,
 } from "lucide-react";
-import LogoSpinner from "../../../../components/loaders/LogoSpinner"; // ← update path if needed
+import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 
 const FALLBACK_AFTER_ADDRESS = "/agent-login";
-
-/* ===== Consistent session key (same as earlier steps) ===== */
 const SKEY = { SESSION_ID: "lw_flow_sessionId" };
 
-/* ---------- Turnstile (invisible execute) ---------- */
+/* ===== Turnstile (hidden invisible widget) ===== */
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
 
-/** Load Turnstile script once (idempotent) */
 function ensureTurnstileScript(): Promise<void> {
   return new Promise((resolve) => {
     if (typeof window === "undefined") return resolve();
     const w = window as any;
-
-    if (w.turnstile && typeof w.turnstile.execute === "function") {
+    if (w.turnstile && typeof w.turnstile.render === "function")
       return resolve();
-    }
     const existing = document.querySelector<HTMLScriptElement>(
       'script[data-lw="turnstile"]'
     );
@@ -49,24 +44,58 @@ function ensureTurnstileScript(): Promise<void> {
   });
 }
 
-/** Execute Turnstile and return a short-lived, single-use token (or null) */
-async function getTurnstileToken(action: string): Promise<string | null> {
-  try {
-    if (!TURNSTILE_SITE_KEY) return null;
-    await ensureTurnstileScript();
-    const w = window as any;
-    if (!w.turnstile || typeof w.turnstile.execute !== "function") return null;
-    const token: string = await w.turnstile
-      .execute(TURNSTILE_SITE_KEY, { action })
-      .catch(() => null);
-    return token && typeof token === "string" ? token : null;
-  } catch {
-    return null;
-  }
+async function ensureTurnstileWidget(
+  div: HTMLDivElement | null
+): Promise<string | null> {
+  if (!div) return null;
+  await ensureTurnstileScript();
+  const w = window as any;
+  if (!w.turnstile?.render) return null;
+  const existing = div.getAttribute("data-widgetid");
+  if (existing) return existing;
+  const id = w.turnstile.render(div, {
+    sitekey: TURNSTILE_SITE_KEY,
+    size: "invisible",
+    retry: "auto",
+  });
+  div.setAttribute("data-widgetid", id);
+  return id;
 }
-/* ---------- /Turnstile ---------- */
 
-/* ===== Nigeria states (unchanged) ===== */
+async function getTurnstileTokenViaWidget(
+  div: HTMLDivElement | null,
+  action: string
+): Promise<string | null> {
+  const w = window as any;
+  const wid = await ensureTurnstileWidget(div);
+  if (!wid || !w.turnstile?.execute) return null;
+  return new Promise<string | null>((resolve) => {
+    let settled = false;
+    const t = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        resolve(null);
+      }
+    }, 6000);
+    try {
+      w.turnstile.execute(wid, {
+        action,
+        callback: (token: string) => {
+          if (!settled) {
+            settled = true;
+            clearTimeout(t);
+            resolve(typeof token === "string" && token ? token : null);
+          }
+        },
+      });
+    } catch {
+      clearTimeout(t);
+      resolve(null);
+    }
+  });
+}
+/* ===== /Turnstile ===== */
+
 const NG_STATES = [
   "Abia",
   "Adamawa",
@@ -107,7 +136,6 @@ const NG_STATES = [
   "FCT (Abuja)",
 ];
 
-/* ===== Example LGAs ===== */
 const LGA_BY_STATE: Record<string, string[]> = {
   Oyo: [
     "Ibadan North",
@@ -124,21 +152,21 @@ const LGA_BY_STATE: Record<string, string[]> = {
   ],
 };
 
-/* Small cookie reader (non-HttpOnly only) */
 function getCookie(name: string) {
   if (typeof document === "undefined") return "";
   const m = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
   return m ? decodeURIComponent(m[2]) : "";
 }
 
-/* ================= Inner component that uses useSearchParams ================= */
 function AddressPageInner() {
   const router = useRouter();
   const sp = useSearchParams();
-
   const NEXT_STEP_ROUTE = sp.get("next") || FALLBACK_AFTER_ADDRESS;
 
-  /* ===== session / token ===== */
+  // hidden Turnstile container
+  const tsContainerRef = useRef<HTMLDivElement | null>(null);
+
+  /* session / token */
   const [signupSessionId, setSignupSessionId] = useState<string>("");
   const [bearerToken, setBearerToken] = useState<string>("");
 
@@ -149,7 +177,6 @@ function AddressPageInner() {
       if (fromQs) sessionStorage.setItem(SKEY.SESSION_ID, fromQs);
       sid = sid || sessionStorage.getItem(SKEY.SESSION_ID) || "";
     } catch {}
-
     setSignupSessionId(sid);
 
     let tok = getCookie("lw_token") || "";
@@ -165,7 +192,6 @@ function AddressPageInner() {
   useEffect(() => {
     if (bearerToken || !signupSessionId || ensuringTokenRef.current) return;
     ensuringTokenRef.current = true;
-
     (async () => {
       try {
         const r = await fetch("/api/auth/get-v1-token", {
@@ -188,7 +214,7 @@ function AddressPageInner() {
     })();
   }, [bearerToken, signupSessionId]);
 
-  /* ===== form fields ===== */
+  /* form fields */
   const [address, setAddress] = useState("No. 15, University Road, Agbowo,");
   const [stateName, setStateName] = useState("Oyo");
   const [lga, setLga] = useState("Ibadan North");
@@ -260,8 +286,25 @@ function AddressPageInner() {
       return;
     }
 
-    /* 🔐 Get Turnstile token for address step (optional but recommended) */
-    const captchaToken = await getTurnstileToken("signup_address");
+    if (!TURNSTILE_SITE_KEY) {
+      setError(
+        "Human verification is required but no Turnstile site key is configured."
+      );
+      setSaving(false);
+      return;
+    }
+
+    const captchaToken = await getTurnstileTokenViaWidget(
+      tsContainerRef.current,
+      "signup_address"
+    );
+    if (!captchaToken) {
+      setError(
+        "Human verification failed. Disable any content blocker, refresh, and try again."
+      );
+      setSaving(false);
+      return;
+    }
 
     const payload = {
       country: country.trim(),
@@ -270,7 +313,7 @@ function AddressPageInner() {
       lga: lga.trim(),
       address: address.trim(),
       ...(signupSessionId ? { sessionId: signupSessionId } : {}),
-      ...(captchaToken ? { captchaToken } : {}), // ← Turnstile token
+      captchaToken,
     };
 
     const headers: Record<string, string> = {
@@ -294,13 +337,12 @@ function AddressPageInner() {
       });
 
       const raw = await res.text();
-      const json = (() => {
-        try {
-          return JSON.parse(raw);
-        } catch {
-          return { message: raw };
-        }
-      })();
+      let json: any;
+      try {
+        json = JSON.parse(raw);
+      } catch {
+        json = { message: raw };
+      }
 
       if (!res.ok || json?.success === false) {
         const msg =
@@ -331,9 +373,9 @@ function AddressPageInner() {
 
   const menuItem =
     "w-full text-left px-3 py-2 text-sm hover:bg-gray-50 focus:bg-gray-50 focus:outline-none";
-
   const stateMenuRef = useRef<HTMLDivElement | null>(null);
   const lgaMenuRef = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
       const n = e.target as Node;
@@ -341,12 +383,10 @@ function AddressPageInner() {
         openState &&
         stateMenuRef.current &&
         !stateMenuRef.current.contains(n)
-      ) {
+      )
         setOpenState(false);
-      }
-      if (openLga && lgaMenuRef.current && !lgaMenuRef.current.contains(n)) {
+      if (openLga && lgaMenuRef.current && !lgaMenuRef.current.contains(n))
         setOpenLga(false);
-      }
     }
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
@@ -358,6 +398,11 @@ function AddressPageInner() {
         className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-2xl md:shadow-xl overflow-hidden flex flex-col"
         aria-busy={saving}
       >
+        {/* Hidden Turnstile widget */}
+        <div aria-hidden className="hidden">
+          <div ref={tsContainerRef} />
+        </div>
+
         {/* Header */}
         <div className="flex items-center justify-between px-4 pt-6 pb-2">
           <button
@@ -555,7 +600,6 @@ function AddressPageInner() {
   );
 }
 
-/* ================= Wrapper with Suspense (fixes CSR bailout error) ================= */
 export default function AddressPage() {
   return (
     <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>

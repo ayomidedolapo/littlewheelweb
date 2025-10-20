@@ -17,25 +17,22 @@ import {
   X,
   RotateCcw,
 } from "lucide-react";
-import LogoSpinner from "../../../../components/loaders/LogoSpinner"; // ← adjust path if needed
+import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 
 const NEXT_STEP_ROUTE = "/agent-signup/components/address";
-
-// per-tab storage keys
 const SKEY = { SESSION_ID: "lw_flow_sessionId" };
 
-/* ---------- Turnstile (invisible execute) ---------- */
+/* ===== Turnstile ===== */
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
 
-/** Load Turnstile script once (idempotent) */
+/** Load script once */
 function ensureTurnstileScript(): Promise<void> {
   return new Promise((resolve) => {
     if (typeof window === "undefined") return resolve();
     const w = window as any;
-
-    if (w.turnstile && typeof w.turnstile.execute === "function") {
+    if (w.turnstile && typeof w.turnstile.render === "function")
       return resolve();
-    }
+
     const existing = document.querySelector<HTMLScriptElement>(
       'script[data-lw="turnstile"]'
     );
@@ -55,22 +52,68 @@ function ensureTurnstileScript(): Promise<void> {
   });
 }
 
-/** Execute Turnstile and return a short-lived, single-use token (or null) */
-async function getTurnstileToken(action: string): Promise<string | null> {
-  try {
-    if (!TURNSTILE_SITE_KEY) return null;
-    await ensureTurnstileScript();
-    const w = window as any;
-    if (!w.turnstile || typeof w.turnstile.execute !== "function") return null;
-    const token: string = await w.turnstile
-      .execute(TURNSTILE_SITE_KEY, { action /*, cData: "agent-app"*/ })
-      .catch(() => null);
-    return token && typeof token === "string" ? token : null;
-  } catch {
-    return null;
-  }
+/** Ensure a hidden widget exists and return its widgetId */
+async function ensureTurnstileWidget(
+  div: HTMLDivElement | null
+): Promise<string | null> {
+  if (!div) return null;
+  await ensureTurnstileScript();
+  const w = window as any;
+  if (!w.turnstile || typeof w.turnstile.render !== "function") return null;
+
+  // If already rendered, store/reuse data-widgetid on the div
+  const existingId = div.getAttribute("data-widgetid");
+  if (existingId) return existingId;
+
+  const id = w.turnstile.render(div, {
+    sitekey: TURNSTILE_SITE_KEY,
+    size: "invisible",
+    retry: "auto",
+    "error-callback": () => {},
+    "unsupported-callback": () => {},
+  });
+  div.setAttribute("data-widgetid", id);
+  return id;
 }
-/* ---------- /Turnstile ---------- */
+
+/** Execute the widget and return a one-time token */
+async function getTurnstileTokenViaWidget(
+  div: HTMLDivElement | null,
+  action: string
+): Promise<string | null> {
+  const w = window as any;
+  const wid = await ensureTurnstileWidget(div);
+  if (!wid || !w.turnstile?.execute) return null;
+
+  return new Promise<string | null>((resolve) => {
+    let settled = false;
+    // Safety timeout (6s)
+    const t = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        resolve(null);
+      }
+    }, 6000);
+
+    // We rely on the widget’s callback to deliver the token
+    try {
+      w.turnstile.execute(wid, {
+        action,
+        callback: (token: string) => {
+          if (!settled) {
+            settled = true;
+            clearTimeout(t);
+            resolve(typeof token === "string" && token ? token : null);
+          }
+        },
+      });
+    } catch {
+      clearTimeout(t);
+      resolve(null);
+    }
+  });
+}
+/* ===== /Turnstile ===== */
 
 function getCookie(name: string) {
   if (typeof document === "undefined") return "";
@@ -86,12 +129,12 @@ function todayISO() {
 const onlyDigits = (v: string) => v.replace(/\D/g, "");
 const isValidUsername = (v: string) => /^[a-zA-Z0-9._-]{3,32}$/.test(v.trim());
 
-/* ================== Inner component (uses useSearchParams) ================== */
+/* ================== Inner component ================== */
 function PersonalDetailsInner() {
   const router = useRouter();
   const sp = useSearchParams();
 
-  // ---- session/token detection ----
+  // session/token
   const [sessionId, setSessionId] = useState("");
   const [bearerToken, setBearerToken] = useState("");
   const [authBanner, setAuthBanner] = useState<string | null>(null);
@@ -107,7 +150,6 @@ function PersonalDetailsInner() {
     if (!sid && cookieSid) sid = cookieSid;
     setSessionId(sid);
 
-    // Prefer HttpOnly cookie token if the API set it; fallback to localStorage
     let tok = getCookie("lw_token") || "";
     if (!tok) {
       try {
@@ -123,7 +165,7 @@ function PersonalDetailsInner() {
     }
   }, [sp]);
 
-  // ---- form state ----
+  // form state
   const [firstName, setFirstName] = useState("");
   const [middleName, setMiddleName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -140,8 +182,12 @@ function PersonalDetailsInner() {
   const [processingPhoto, setProcessingPhoto] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
+  const [cameraBanner, setCameraBanner] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+
+  // Turnstile refs
+  const tsContainerRef = useRef<HTMLDivElement | null>(null); // hidden widget holder
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -149,12 +195,11 @@ function PersonalDetailsInner() {
   // validation
   const pinValid = useMemo(() => onlyDigits(pin).length === 5, [pin]);
   const firstValid = firstName.trim().length > 0;
-  const middleValid = middleName.trim().length > 0; // required per your UI
+  const middleValid = middleName.trim().length > 0;
   const lastValid = lastName.trim().length > 0;
   const dobValid = !!dob;
   const usernameValid = isValidUsername(username);
 
-  // avatar OPTIONAL → do NOT gate form validity on it
   const formValid =
     firstValid &&
     middleValid &&
@@ -167,30 +212,70 @@ function PersonalDetailsInner() {
   const onPinChange = (v: string) => setPin(onlyDigits(v).slice(0, 5));
   const goBack = () => router.back();
 
-  // camera helpers
+  /* ----- Camera helpers ----- */
+  useEffect(() => {
+    const onHide = () => {
+      if (document.hidden) stopCamera();
+    };
+    const onUnload = () => stopCamera();
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("beforeunload", onUnload);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("beforeunload", onUnload);
+      stopCamera();
+    };
+  }, []);
+
+  function explainGetUserMediaError(err: any): string {
+    const name = err?.name || "";
+    const msg = (err?.message || "").toLowerCase();
+    if (!isSecureContext)
+      return "Camera requires HTTPS. Use https:// or localhost.";
+    if (name === "NotAllowedError" || msg.includes("permission"))
+      return "Permission denied. Allow camera access and try again.";
+    if (name === "NotFoundError" || msg.includes("no camera"))
+      return "No camera device found.";
+    if (name === "OverconstrainedError" || msg.includes("constraints"))
+      return "Requested camera constraints aren’t supported.";
+    if (name === "NotReadableError") return "Camera is busy in another app.";
+    return "Couldn’t start camera. Check permissions and try again.";
+  }
+
   async function openCamera() {
     setError(null);
+    setCameraBanner(null);
     setVideoReady(false);
+
     if (!navigator.mediaDevices?.getUserMedia) {
       setError("Camera not available on this device/browser.");
       return;
     }
+    if (!isSecureContext && location.hostname !== "localhost") {
+      setCameraBanner("Camera needs HTTPS. Open this page over https://.");
+      return;
+    }
+
     const tries: MediaStreamConstraints[] = [
       { video: { facingMode: { exact: "user" } }, audio: false },
       { video: { facingMode: "user" }, audio: false },
       { video: true, audio: false },
     ];
     let stream: MediaStream | null = null;
+    let lastErr: any = null;
     for (const c of tries) {
       try {
         stream = await navigator.mediaDevices.getUserMedia(c);
         break;
-      } catch {}
+      } catch (e) {
+        lastErr = e;
+      }
     }
     if (!stream) {
-      setError("Couldn’t start camera. Check permissions and try again.");
+      setError(explainGetUserMediaError(lastErr));
       return;
     }
+
     streamRef.current = stream;
     setCameraOpen(true);
     requestAnimationFrame(() => {
@@ -283,19 +368,19 @@ function PersonalDetailsInner() {
     router.replace("/agent-signup/components/create");
   }
 
-  // submit
+  /* ----- Submit ----- */
   const saveAndContinue = async () => {
     if (!formValid || saving) return;
     setSaving(true);
     setError(null);
 
+    // 1) Ensure we have an auth token (cookie/localStorage or via bridge)
     let actualToken = bearerToken;
     try {
       const cookieToken = getCookie("lw_token");
       const localStorageToken = localStorage.getItem("lw_token") || "";
       actualToken = bearerToken || cookieToken || localStorageToken || "";
 
-      // Optional bridge via sessionId
       if (!actualToken && sessionId) {
         try {
           const tokenResp = await fetch("/api/auth/get-v1-token", {
@@ -303,52 +388,85 @@ function PersonalDetailsInner() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ sessionId }),
             credentials: "include",
+            cache: "no-store",
           });
-          const tokenData = await tokenResp.json().catch(() => ({}));
+          const tokenText = await tokenResp.text();
+          let tokenData: any = {};
+          try {
+            tokenData = tokenText ? JSON.parse(tokenText) : {};
+          } catch {
+            tokenData = { message: tokenText };
+          }
           if (tokenResp.ok && tokenData?.token) {
             actualToken = tokenData.token;
             setBearerToken(tokenData.token);
             try {
               localStorage.setItem("lw_token", tokenData.token);
             } catch {}
+          } else {
+            const msg =
+              tokenData?.message ||
+              tokenData?.lastError?.data?.message ||
+              "Could not obtain token from session.";
+            setError(String(msg));
           }
-        } catch {}
+        } catch (e: any) {
+          setError(e?.message || "Network error while getting token.");
+        }
       }
     } catch {}
 
     if (!actualToken) {
-      setError(
-        "No authentication token found. Please verify your phone again."
-      );
       setSaving(false);
+      if (!error)
+        setError(
+          "No authentication token found. Please verify your phone again."
+        );
       return;
     }
 
-    /* 🔐 Get Turnstile token for this details step (optional but recommended) */
-    const captchaToken = await getTurnstileToken("signup_details");
+    // 2) Get Turnstile token via hidden widget
+    if (!TURNSTILE_SITE_KEY) {
+      setSaving(false);
+      setError(
+        "Human verification is required but no Turnstile site key is configured."
+      );
+      return;
+    }
 
+    // Ensure the widget exists first (rendered invisibly)
+    const tokenTs = await getTurnstileTokenViaWidget(
+      tsContainerRef.current,
+      "signup_details"
+    );
+    if (!tokenTs) {
+      setSaving(false);
+      setError(
+        "Human verification failed. If you use a content blocker, please disable it, refresh, and try again."
+      );
+      return;
+    }
+
+    // 3) Build payload
     const payloadBase: Record<string, any> = {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       middleName: middleName.trim(),
       dob,
       referralCode: referralCode.trim() || undefined,
-      password: pin, // V1 expects password (you use 5-digit numeric PIN)
+      password: pin,
       gender,
       username: username.trim(),
       ...(sessionId ? { sessionId } : {}),
-      ...(captchaToken ? { captchaToken } : {}), // ← Turnstile token
+      captchaToken: tokenTs, // server reads this
+      ...(avatarDataUrl ? { avatarUrl: avatarDataUrl } : {}),
     };
-
-    if (avatarDataUrl) {
-      payloadBase.avatarUrl = avatarDataUrl; // optional
-    }
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       ...(sessionId ? { "x-session-id": sessionId } : {}),
       Authorization: `Bearer ${actualToken}`,
-      "x-lw-auth": actualToken, // your route reads either/both
+      "x-lw-auth": actualToken,
     };
 
     try {
@@ -390,7 +508,6 @@ function PersonalDetailsInner() {
         return;
       }
 
-      // Persist first name for welcome page
       try {
         const fn = firstName.trim();
         if (fn) {
@@ -409,6 +526,11 @@ function PersonalDetailsInner() {
   return (
     <div className="min-h-screen bg-white flex items-center justify-center p-0 md:p-4">
       <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-2xl md:shadow-xl overflow-hidden flex flex-col">
+        {/* Hidden Turnstile widget container (invisible) */}
+        <div aria-hidden className="hidden">
+          <div ref={tsContainerRef} />
+        </div>
+
         {/* Header */}
         <div className="flex items-center justify-between px-4 pt-6 pb-2">
           <button
@@ -484,9 +606,12 @@ function PersonalDetailsInner() {
                 </span>
               )}
             </button>
+            {cameraBanner && (
+              <p className="mt-2 text-[12px] text-amber-700">{cameraBanner}</p>
+            )}
           </div>
 
-          {/* First / Middle / Last */}
+          {/* Names */}
           <label className="block mt-5 text-[13px] font-semibold text-gray-800">
             First Name*
           </label>
@@ -719,31 +844,38 @@ function PersonalDetailsInner() {
               )}
             </div>
 
-            <div className="p-4 flex gap-3">
-              <button
-                onClick={capturePhoto}
-                disabled={!videoReady || processingPhoto}
-                className={`flex-1 h-11 rounded-xl text-white font-semibold inline-flex items-center justify-center gap-2 ${
-                  !videoReady || processingPhoto
-                    ? "bg-black/50 cursor-not-allowed"
-                    : "bg-black hover:bg-black/90"
-                }`}
-              >
-                {processingPhoto ? (
-                  <>
-                    <LogoSpinner show={true} />
-                    Processing…
-                  </>
-                ) : (
-                  "Capture"
-                )}
-              </button>
-              <button
-                onClick={closeCamera}
-                className="flex-1 h-11 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-900 font-semibold"
-              >
-                Cancel
-              </button>
+            <div className="p-4">
+              {cameraBanner && (
+                <p className="mb-2 text-[12px] text-amber-700">
+                  {cameraBanner}
+                </p>
+              )}
+              <div className="flex gap-3">
+                <button
+                  onClick={capturePhoto}
+                  disabled={!videoReady || processingPhoto}
+                  className={`flex-1 h-11 rounded-xl text-white font-semibold inline-flex items-center justify-center gap-2 ${
+                    !videoReady || processingPhoto
+                      ? "bg-black/50 cursor-not-allowed"
+                      : "bg-black hover:bg-black/90"
+                  }`}
+                >
+                  {processingPhoto ? (
+                    <>
+                      <LogoSpinner show={true} />
+                      Processing…
+                    </>
+                  ) : (
+                    "Capture"
+                  )}
+                </button>
+                <button
+                  onClick={closeCamera}
+                  className="flex-1 h-11 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-900 font-semibold"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -752,7 +884,7 @@ function PersonalDetailsInner() {
   );
 }
 
-/* ================== Wrapper with Suspense (fixes CSR bailout) ================== */
+/* ================== Wrapper ================== */
 export default function PersonalDetailsPage() {
   return (
     <Suspense fallback={<div className="min-h-screen bg-white" />}>

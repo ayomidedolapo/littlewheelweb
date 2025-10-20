@@ -1,8 +1,10 @@
 // app/api/auth/set-user-address/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
-const BASE_V1 =
-  process.env.BACKEND_API_URL || "https://dev-api.insider.littlewheel.app/v1";
+const BASE_V1 = (
+  process.env.BACKEND_API_URL || "https://dev-api.insider.littlewheel.app/v1"
+).replace(/\/+$/, "");
+const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS ?? 45000);
 
 /* ---------- Turnstile config ---------- */
 const TURNSTILE_SECRET = (process.env.TURNSTILE_SECRET_KEY || "").trim();
@@ -62,11 +64,26 @@ async function verifyTurnstile(token: string, ip?: string) {
 }
 /* ---------- /Turnstile config ---------- */
 
-export async function POST(req: NextRequest) {
-  // read body from client
-  const body = await req.json().catch(() => ({} as any));
+function jsonSafe(text: string) {
+  try {
+    return JSON.parse(text || "{}");
+  } catch {
+    return { message: text };
+  }
+}
 
-  /* 🔐 Enforce Turnstile (recommended for this step) */
+export async function POST(req: NextRequest) {
+  let body: any = {};
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json(
+      { success: false, message: "Invalid JSON body" },
+      { status: 400 }
+    );
+  }
+
+  /* 🔐 Enforce Turnstile */
   const tsToken = readTurnstileToken(body);
   if (!tsToken) {
     return NextResponse.json(
@@ -86,11 +103,11 @@ export async function POST(req: NextRequest) {
       { status: 403 }
     );
   }
-  // (Optional hardening) if client used action: "signup_address"
-  // const { action, hostname } = verdict.data || {};
-  // if (action !== "signup_address") return NextResponse.json({ success:false, message:"Bad action" }, { status: 403 });
+  // Optional: check action === "signup_address"
+  // const { action } = verdict.data || {};
+  // if (action !== "signup_address") return NextResponse.json({ success:false, message:"Bad captcha action" }, { status: 403 });
 
-  // keep only the fields swagger expects
+  // keep only expected fields
   const payload = {
     country: body?.country ?? "",
     state: body?.state ?? "",
@@ -99,46 +116,62 @@ export async function POST(req: NextRequest) {
     address: body?.address ?? "",
   };
 
-  // auth: prefer x-lw-auth header, fall back to lw_token cookie
-  const headerToken = req.headers.get("x-lw-auth");
-  const cookieToken = req.cookies.get("lw_token")?.value;
-  const token =
-    headerToken && headerToken !== "undefined" ? headerToken : cookieToken;
+  // auth precedence: Authorization > x-lw-auth > cookie
+  const authHeader = (req.headers.get("authorization") || "")
+    .replace(/^Bearer\s+/i, "")
+    .trim();
+  const altHeader = (req.headers.get("x-lw-auth") || "")
+    .replace(/^Bearer\s+/i, "")
+    .trim();
+  const cookieToken =
+    req.cookies.get("lw_token")?.value ||
+    req.cookies.get("lw_auth")?.value ||
+    "";
+  const token = authHeader || altHeader || cookieToken;
 
-  // forward session id if present (your client sends it)
+  if (!token) {
+    return NextResponse.json(
+      { success: false, message: "Unauthorized: missing token" },
+      { status: 401 }
+    );
+  }
+
   const sessionId = req.headers.get("x-session-id") || body?.sessionId || "";
 
-  const url = `${BASE_V1.replace(/\/$/, "")}/auth/set-user-address`;
+  const url = `${BASE_V1}/auth/set-user-address`;
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
 
   try {
     const r = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
         ...(sessionId ? { "x-session-id": sessionId } : {}),
       },
       body: JSON.stringify(payload),
       cache: "no-store",
+      signal: ac.signal,
     });
 
     const text = await r.text();
-    let data: any;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = { upstream: text };
-    }
-
+    const data = jsonSafe(text);
     return NextResponse.json(data, { status: r.status });
   } catch (e: any) {
+    const aborted = e?.name === "AbortError";
     return NextResponse.json(
       {
         success: false,
-        message: "Upstream error",
+        message: aborted
+          ? `Upstream timeout after ${TIMEOUT_MS}ms`
+          : "Upstream error",
         upstream: e?.message || String(e),
       },
-      { status: 502 }
+      { status: aborted ? 504 : 502 }
     );
+  } finally {
+    clearTimeout(timer);
   }
 }
