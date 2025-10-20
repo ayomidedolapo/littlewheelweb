@@ -16,7 +16,7 @@ import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 const FALLBACK_AFTER_ADDRESS = "/agent-login";
 const SKEY = { SESSION_ID: "lw_flow_sessionId" };
 
-/* ===== Turnstile (hidden invisible widget) ===== */
+/* ===== Turnstile (hidden invisible widget with retry) ===== */
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
 
 function ensureTurnstileScript(): Promise<void> {
@@ -25,6 +25,7 @@ function ensureTurnstileScript(): Promise<void> {
     const w = window as any;
     if (w.turnstile && typeof w.turnstile.render === "function")
       return resolve();
+
     const existing = document.querySelector<HTMLScriptElement>(
       'script[data-lw="turnstile"]'
     );
@@ -51,8 +52,10 @@ async function ensureTurnstileWidget(
   await ensureTurnstileScript();
   const w = window as any;
   if (!w.turnstile?.render) return null;
-  const existing = div.getAttribute("data-widgetid");
-  if (existing) return existing;
+
+  const existingId = div.getAttribute("data-widgetid");
+  if (existingId) return existingId;
+
   const id = w.turnstile.render(div, {
     sitekey: TURNSTILE_SITE_KEY,
     size: "invisible",
@@ -64,35 +67,43 @@ async function ensureTurnstileWidget(
 
 async function getTurnstileTokenViaWidget(
   div: HTMLDivElement | null,
-  action: string
+  action: string,
+  tries = 2
 ): Promise<string | null> {
   const w = window as any;
   const wid = await ensureTurnstileWidget(div);
   if (!wid || !w.turnstile?.execute) return null;
-  return new Promise<string | null>((resolve) => {
-    let settled = false;
-    const t = setTimeout(() => {
-      if (!settled) {
-        settled = true;
+
+  for (let i = 0; i < tries; i++) {
+    const token: string | null = await new Promise((resolve) => {
+      let settled = false;
+      const t = setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          resolve(null);
+        }
+      }, 7000);
+      try {
+        w.turnstile.execute(wid, {
+          action,
+          callback: (tok: string) => {
+            if (!settled) {
+              settled = true;
+              clearTimeout(t);
+              resolve(typeof tok === "string" && tok ? tok : null);
+            }
+          },
+        });
+      } catch {
+        clearTimeout(t);
         resolve(null);
       }
-    }, 6000);
-    try {
-      w.turnstile.execute(wid, {
-        action,
-        callback: (token: string) => {
-          if (!settled) {
-            settled = true;
-            clearTimeout(t);
-            resolve(typeof token === "string" && token ? token : null);
-          }
-        },
-      });
-    } catch {
-      clearTimeout(t);
-      resolve(null);
-    }
-  });
+    });
+    if (token) return token;
+    // brief pause before retry
+    await new Promise((r) => setTimeout(r, 350));
+  }
+  return null;
 }
 /* ===== /Turnstile ===== */
 
@@ -187,6 +198,11 @@ function AddressPageInner() {
     }
     setBearerToken(tok);
   }, [sp]);
+
+  // Pre-render the widget ASAP so first execute is instant on Safari/iOS
+  useEffect(() => {
+    ensureTurnstileWidget(tsContainerRef.current);
+  }, []);
 
   const ensuringTokenRef = useRef(false);
   useEffect(() => {
@@ -294,9 +310,11 @@ function AddressPageInner() {
       return;
     }
 
+    // 🔐 Same robust token flow as personal-details
     const captchaToken = await getTurnstileTokenViaWidget(
       tsContainerRef.current,
-      "signup_address"
+      "signup_address",
+      2
     );
     if (!captchaToken) {
       setError(
