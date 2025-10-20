@@ -7,7 +7,7 @@ export const revalidate = 0;
 
 const BASE = (process.env.BACKEND_API_URL || "").replace(/\/+$/, "");
 const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS ?? 90_000);
-const ROUTE_REV = "vaults-minimal-auth-normalize-R3";
+const ROUTE_REV = "vaults-minimal-auth-normalize-R4"; // ⬅ bump
 
 /* ---------- util: safe accessors ---------- */
 async function getCookieStore() {
@@ -33,7 +33,8 @@ function jsonOut(body: any, status = 200, extra?: Record<string, string>) {
   return r;
 }
 
-async function getBearer(req: NextRequest) {
+/** Return BOTH the raw token and Bearer form. Prefer Authorization header, then cookies. */
+async function getAuthPieces(req: NextRequest) {
   const jar = await getCookieStore();
   const hdrs = await getHeadersStore();
 
@@ -52,8 +53,9 @@ async function getBearer(req: NextRequest) {
     jar?.get?.("token")?.value ||
     "";
 
-  const raw = explicit || cookieTok;
-  return raw ? `Bearer ${raw}` : "";
+  const raw = (explicit || cookieTok).trim();
+  const bearer = raw ? `Bearer ${raw}` : "";
+  return { raw, bearer };
 }
 
 /* ---------- util: timeout + one-retry ---------- */
@@ -114,11 +116,9 @@ async function fetchWithTimeoutRetry(
   return { res, elapsed, aborted, retried };
 }
 
-/* ---------- util: payload normalization to match backend expectations ---------- */
+/* ---------- payload normalization (unchanged) ---------- */
 type FreqUpper = "ONCE" | "DAILY" | "WEEKLY" | "MONTHLY";
-
 function jsToIsoDay(d: number) {
-  // JS: Sun=0..Sat=6 → ISO: Mon=1..Sun=7
   return d === 0 ? 7 : d;
 }
 
@@ -130,7 +130,6 @@ function coerceMinimalPayload(raw: any): {
   const src = typeof raw === "object" && raw ? raw : {};
   const keep: Record<string, any> = {};
 
-  // only allow the fields proven to work
   const allowed = new Set([
     "name",
     "amount",
@@ -141,14 +140,10 @@ function coerceMinimalPayload(raw: any): {
     "dayOfWeek",
     "dayOfMonth",
   ]);
-
-  // copy allowed
-  for (const k of Object.keys(src)) {
+  for (const k of Object.keys(src))
     if (allowed.has(k)) keep[k] = src[k];
     else notes.push(`dropped:${k}`);
-  }
 
-  // coerce frequency
   let frequency: FreqUpper = String(
     keep.frequency || ""
   ).toUpperCase() as FreqUpper;
@@ -158,7 +153,6 @@ function coerceMinimalPayload(raw: any): {
   }
   keep.frequency = frequency;
 
-  // coerce amount/targetAmount to strings (Swagger style)
   const amountNum = Number(src.amount ?? 0);
   const targetNum = Number(src.targetAmount ?? (amountNum || 0));
   keep.amount = String(
@@ -168,13 +162,11 @@ function coerceMinimalPayload(raw: any): {
     Number.isFinite(targetNum) && targetNum > 0 ? targetNum : keep.amount
   );
 
-  // sanitize name
   if (typeof keep.name !== "string" || !keep.name.trim()) {
     keep.name = "Personal Vault – Once";
     notes.push("defaulted:name");
   }
 
-  // sanitize duration
   const duration = String(keep.duration || "ONE_MONTH").toUpperCase();
   const allowedDur = new Set([
     "ONE_MONTH",
@@ -186,12 +178,10 @@ function coerceMinimalPayload(raw: any): {
   keep.duration = allowedDur.has(duration) ? duration : "ONE_MONTH";
   if (keep.duration !== duration) notes.push("defaulted:duration=ONE_MONTH");
 
-  // startDate default = today (yyyy-mm-dd)
   const iso = (s: string) => (s || "").slice(0, 10);
   const today = new Date().toISOString().slice(0, 10);
   keep.startDate = iso(keep.startDate || today);
 
-  // anchors per frequency
   if (frequency === "WEEKLY") {
     let dow = Number(keep.dayOfWeek ?? NaN);
     if (!(dow >= 1 && dow <= 7)) {
@@ -211,7 +201,6 @@ function coerceMinimalPayload(raw: any): {
     }
     delete keep.dayOfWeek;
   } else {
-    // ONCE or DAILY: no anchors
     delete keep.dayOfWeek;
     delete keep.dayOfMonth;
   }
@@ -244,9 +233,8 @@ export async function GET(
     if (!id)
       return jsonOut({ success: false, message: "Missing customer id" }, 400);
 
-    const bearer = await getBearer(req);
-    if (!bearer)
-      return jsonOut({ success: false, message: "Unauthorized" }, 401);
+    const { raw, bearer } = await getAuthPieces(req);
+    if (!raw) return jsonOut({ success: false, message: "Unauthorized" }, 401);
 
     const url = new URL(
       joinUpstream(`/agent/customers/${encodeURIComponent(id)}/vaults`)
@@ -259,7 +247,8 @@ export async function GET(
         method: "GET",
         headers: {
           Accept: "application/json",
-          Authorization: bearer, // single source of auth
+          Authorization: bearer, // Bearer <raw>
+          "x-lw-auth": raw, // RAW token (no "Bearer ")
         },
         cache: "no-store",
       }
@@ -305,10 +294,9 @@ export async function POST(
   if (!id)
     return jsonOut({ success: false, message: "Missing customer id" }, 400);
 
-  const bearer = await getBearer(req);
-  if (!bearer) return jsonOut({ success: false, message: "Unauthorized" }, 401);
+  const { raw, bearer } = await getAuthPieces(req);
+  if (!raw) return jsonOut({ success: false, message: "Unauthorized" }, 401);
 
-  // Read & normalize the incoming body to the minimal shape that works with upstream
   let rawBody: any = {};
   try {
     const text = await req.text();
@@ -325,7 +313,8 @@ export async function POST(
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
-      Authorization: bearer, // single source of auth
+      Authorization: bearer, // Bearer <raw>
+      "x-lw-auth": raw, // RAW token
     },
     body,
     cache: "no-store",
@@ -334,7 +323,6 @@ export async function POST(
   const text = await res.text();
 
   if (!res.ok) {
-    // Try to surface upstream message
     let upstreamMsg = text;
     try {
       const j = JSON.parse(text || "{}");
@@ -351,7 +339,7 @@ export async function POST(
           url,
           payload: normalized,
           sanitizeNotes: notes,
-          sentHeaders: { Authorization: maskToken(bearer) },
+          sentHeaders: { Authorization: maskToken(bearer), "x-lw-auth": "***" },
         },
       },
       res.status,

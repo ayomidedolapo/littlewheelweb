@@ -8,6 +8,7 @@ import { cn } from "@littlewheel/lib/utils";
 import NextTopLoader from "nextjs-toploader";
 import ConditionalHeader from "../components/ConditionalHeader";
 import ConditionalFooter from "../components/ConditionalFooter";
+import Script from "next/script";
 
 // Fonts (unchanged)
 const inter18pt = localFont({
@@ -345,7 +346,34 @@ export default function RootLayout({
     >
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        {/* Removed Google reCAPTCHA + Google Analytics scripts */}
+
+        {/* PWA manifest + helpful meta */}
+        <link rel="manifest" href="/manifest.webmanifest?v=20251016" />
+        <meta name="application-name" content="Little Wheel" />
+        <meta name="theme-color" content="#000000" />
+
+        {/* iOS install appearance */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta
+          name="apple-mobile-web-app-status-bar-style"
+          content="black-translucent"
+        />
+        <link rel="apple-touch-icon" href="/icons/apple-icon-180.png" />
+
+        {/* (Optional) Standard favicons for browser tabs */}
+        <link
+          rel="icon"
+          type="image/png"
+          sizes="32x32"
+          href="/icons/favicon-32x32.png"
+        />
+        <link
+          rel="icon"
+          type="image/png"
+          sizes="16x16"
+          href="/icons/favicon-16x16.png"
+        />
+        <link rel="shortcut icon" href="/favicon.ico" />
       </head>
       <body
         className="antialiased bg-background text-foreground min-h-screen flex flex-col"
@@ -367,6 +395,26 @@ export default function RootLayout({
 
           <ConditionalFooter />
         </ThemeProvider>
+
+        {/* Register the service worker after hydration */}
+        <Script id="sw-register" strategy="afterInteractive">
+          {`
+            (function () {
+              if (!('serviceWorker' in navigator)) return;
+              var isLocalhost = ['localhost', '127.0.0.1'].includes(location.hostname);
+              var isSecure = location.protocol === 'https:' || isLocalhost;
+              if (!isSecure) return;
+
+              navigator.serviceWorker.register('/sw.js', { scope: '/' })
+                .then(function (reg) {
+                  // console.log('[SW] registered', reg);
+                })
+                .catch(function (err) {
+                  console.warn('[SW] registration failed', err);
+                });
+            })();
+          `}
+        </Script>
       </body>
     </html>
   );

@@ -74,15 +74,32 @@ function getAuthToken(): string {
   }
 }
 
+/* numbers + date helpers */
+const nnum = (v: any, fb = 0) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fb;
+};
+const addDays = (d: Date, days: number) => {
+  const x = new Date(d);
+  x.setDate(x.getDate() + days);
+  return x;
+};
+const addWeeks = (d: Date, weeks: number) => addDays(d, weeks * 7);
+const addMonths = (d: Date, months: number) => {
+  const x = new Date(d);
+  x.setMonth(x.getMonth() + months);
+  return x;
+};
+
 /* ---------- types ---------- */
 type VaultDetail = {
   id?: string;
   vaultId?: string;
   _id?: string;
   name?: string;
-  targetAmount?: number;
-  amount?: number; // daily plan amount
-  frequency?: string; // DAILY / WEEKLY / ...
+  targetAmount?: number | string;
+  amount?: number | string; // plan amount (daily/weekly/monthly)
+  frequency?: string; // DAILY / WEEKLY / MONTHLY / ...
   duration?: string; // ONE_MONTH / etc
   startDate?: string;
   start_at?: string;
@@ -90,9 +107,11 @@ type VaultDetail = {
   maturityDate?: string;
   endDate?: string;
 
-  currentAmount?: number;
-  currentBalance?: number;
-  balance?: number;
+  currentAmount?: number | string;
+  currentBalance?: number | string;
+  balance?: number | string;
+
+  isCompleted?: boolean;
 };
 
 type Tx = {
@@ -103,6 +122,28 @@ type Tx = {
   isCredit: boolean;
   vaultId?: string;
 };
+
+/* compute a theoretical maturity date if backend didn't provide one */
+function computeMaturity(detail?: VaultDetail): Date | null {
+  if (!detail) return null;
+  const freq = String(detail.frequency || "DAILY").toUpperCase();
+  const target = nnum(detail.targetAmount);
+  const per = nnum(detail.amount);
+  const startIso =
+    detail.startDate || (detail as any)?.start_at || detail.createdAt;
+  if (!startIso || !target || !per) return null;
+
+  const start = new Date(startIso);
+  if (Number.isNaN(start.getTime())) return null;
+
+  const steps = Math.max(1, Math.ceil(target / per));
+  // end occurs on the day of last contribution => steps - 1 offset
+  if (freq === "DAILY") return addDays(start, steps - 1);
+  if (freq === "WEEKLY") return addWeeks(start, steps - 1);
+  if (freq === "MONTHLY") return addMonths(start, steps - 1);
+  // default to DAILY math if unknown
+  return addDays(start, steps - 1);
+}
 
 export default function VaultDetailPage() {
   const router = useRouter();
@@ -141,6 +182,10 @@ export default function VaultDetailPage() {
   const resolvedVaultId =
     queryVaultId || detail?.id || detail?.vaultId || detail?._id || "";
 
+  const authHeaders = tokenRef.current
+    ? { "x-lw-auth": tokenRef.current }
+    : undefined;
+
   /* ---------------- load vault detail ---------------- */
   useEffect(() => {
     if (!customerId) {
@@ -166,16 +211,32 @@ export default function VaultDetailPage() {
           {
             cache: "no-store",
             signal: ac.signal,
-            headers: tokenRef.current
-              ? { "x-lw-auth": tokenRef.current }
-              : undefined,
+            headers: authHeaders,
+            credentials: "include",
           }
         );
         if (!res.ok) throw new Error(`Vault HTTP ${res.status}`);
 
         const j = await res.json().catch(() => ({}));
-        const d: VaultDetail = j?.data ?? j ?? {};
-        setDetail(d);
+        const raw: VaultDetail = j?.data ?? j ?? {};
+
+        // Normalize numerics that might be strings
+        const normalized: VaultDetail = {
+          ...raw,
+          targetAmount: nnum(raw.targetAmount),
+          amount: nnum(raw.amount),
+          currentAmount: nnum(
+            raw.currentAmount ?? raw.currentBalance ?? (raw as any)?.balance
+          ),
+          currentBalance: nnum(
+            raw.currentBalance ?? raw.currentAmount ?? (raw as any)?.balance
+          ),
+          balance: nnum(
+            (raw as any)?.balance ?? raw.currentBalance ?? raw.currentAmount
+          ),
+        };
+
+        setDetail(normalized);
       } catch (e: any) {
         if (e?.name === "AbortError") return;
         setError(e?.message || "Failed to load vault detail.");
@@ -198,21 +259,52 @@ export default function VaultDetailPage() {
       try {
         setTxLoading(true);
 
-        const res = await fetch(
-          `/api/v1/agent/customers/${customerId}/vaults/contributions`,
-          {
-            headers: tokenRef.current
-              ? { "x-lw-auth": tokenRef.current }
-              : undefined,
-            cache: "no-store",
-            signal: ac.signal,
+        // Try a vault-specific contributions endpoint first (if available)
+        let rows: any[] = [];
+        let ok = false;
+        if (resolvedVaultId) {
+          const r1 = await fetch(
+            `/api/v1/agent/customers/${customerId}/vaults/${resolvedVaultId}/contributions`,
+            {
+              cache: "no-store",
+              signal: ac.signal,
+              headers: authHeaders,
+              credentials: "include",
+            }
+          );
+          if (r1.ok) {
+            const j1 = await r1.json().catch(() => ({}));
+            rows = extractArray(j1);
+            ok = true;
           }
-        );
+        }
 
-        if (!res.ok) throw new Error(`Contributions HTTP ${res.status}`);
+        // fallback to all contributions and filter client-side
+        if (!ok) {
+          const res = await fetch(
+            `/api/v1/agent/customers/${customerId}/vaults/contributions`,
+            {
+              headers: authHeaders,
+              cache: "no-store",
+              signal: ac.signal,
+              credentials: "include",
+            }
+          );
 
-        const j = await res.json().catch(() => ({}));
-        const rows = extractArray(j);
+          if (!res.ok) throw new Error(`Contributions HTTP ${res.status}`);
+
+          const j = await res.json().catch(() => ({}));
+          const all = extractArray(j);
+          rows = resolvedVaultId
+            ? all.filter((r: any) => {
+                const vid = r?.vaultId || r?.vault_id || r?.vault?.id;
+                return (
+                  String(vid || "").toLowerCase() ===
+                  String(resolvedVaultId).toLowerCase()
+                );
+              })
+            : all;
+        }
 
         let mapped: Tx[] = (rows || []).map((r: any, idx: number) => {
           const rid =
@@ -222,20 +314,18 @@ export default function VaultDetailPage() {
             r.reference ||
             `contrib:${idx}:${r.createdAt || r.date || ""}`;
 
-          const amount =
-            Number(r.amount ?? r.value ?? r.contribution ?? 0) || 0;
-
+          const amount = nnum(r.amount ?? r.value ?? r.contribution, 0);
           const created =
             r.createdAt || r.date || r.at || new Date().toISOString();
-
           const type = String(
             r.type || r.direction || r.kind || "CREDIT"
           ).toUpperCase();
-
-          const isCredit = type.includes("CREDIT") || type.includes("DEPOSIT");
+          const isCredit =
+            type.includes("CREDIT") ||
+            type.includes("DEPOSIT") ||
+            type.includes("TOPUP");
           const note =
-            r.note || r.description || (isCredit ? "Saved" : "Withdrawal");
-
+            r.note || r.description || (isCredit ? "Deposit" : "Withdrawal");
           const vId = r.vaultId || r.vault_id || r.vault?.id;
 
           return {
@@ -247,16 +337,6 @@ export default function VaultDetailPage() {
             vaultId: vId,
           };
         });
-
-        // If any of the records have vaultId, filter by the currently viewed vault.
-        if (resolvedVaultId) {
-          const hasVaultIds = mapped.some((m) => !!m.vaultId);
-          if (hasVaultIds) {
-            mapped = mapped.filter(
-              (m) => String(m.vaultId) === String(resolvedVaultId)
-            );
-          }
-        }
 
         mapped.sort(
           (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()
@@ -277,13 +357,10 @@ export default function VaultDetailPage() {
 
   /* ---------------- derived fields ---------------- */
   const name = detail?.name || "Personal Savings";
-  const target = Number(detail?.targetAmount ?? (detail as any)?.target ?? 0);
-  const daily = Number(detail?.amount ?? 0);
-  const liveBalance = Number(
-    detail?.currentAmount ??
-      detail?.currentBalance ??
-      (detail as any)?.balance ??
-      0
+  const target = nnum(detail?.targetAmount);
+  const planAmount = nnum(detail?.amount);
+  const liveBalance = nnum(
+    detail?.currentAmount ?? detail?.currentBalance ?? (detail as any)?.balance
   );
   const progress = useMemo(
     () => clampPct(target ? (liveBalance / target) * 100 : 0),
@@ -296,7 +373,14 @@ export default function VaultDetailPage() {
     .replace(/_/g, " ");
   const startedAt =
     detail?.startDate || (detail as any)?.start_at || detail?.createdAt;
-  const maturity = detail?.maturityDate || detail?.endDate || null;
+
+  // Prefer backend maturity; otherwise compute theoretical maturity based on plan
+  const maturityRaw = detail?.maturityDate || detail?.endDate || null;
+  const maturityComputed = computeMaturity(detail);
+  const maturity = maturityRaw || maturityComputed;
+
+  const isCompleted =
+    Boolean(detail?.isCompleted) || (target > 0 && liveBalance >= target);
 
   /* ---------------- close vault action ---------------- */
   const doCloseVault = async () => {
@@ -308,9 +392,8 @@ export default function VaultDetailPage() {
         `/api/v1/agent/customers/${customerId}/vaults/${resolvedVaultId}/close`,
         {
           method: "DELETE",
-          headers: tokenRef.current
-            ? { "x-lw-auth": tokenRef.current }
-            : undefined,
+          headers: authHeaders,
+          credentials: "include",
         }
       );
       if (!res.ok) throw new Error(`Close HTTP ${res.status}`);
@@ -389,14 +472,13 @@ export default function VaultDetailPage() {
                       <p className="text-[13px] font-semibold text-gray-900 leading-tight truncate">
                         {new Date(startedAt || new Date()).toLocaleString(
                           undefined,
-                          {
-                            month: "long",
-                          }
+                          { month: "long" }
                         )}{" "}
                         {new Date(startedAt || new Date()).getDate()}
                       </p>
                       <p className="text-[11px] text-gray-600">
-                        Amount: <strong>{NGN(daily)}</strong>
+                        Amount: <strong>{NGN(planAmount)}</strong> (
+                        {frequency || "—"})
                       </p>
 
                       {/* progress bar */}
@@ -405,7 +487,7 @@ export default function VaultDetailPage() {
                           className="h-full rounded-full"
                           style={{
                             width: `${progress}%`,
-                            backgroundColor: "#94A3B8",
+                            backgroundColor: "#10B981",
                           }}
                         />
                       </div>
@@ -445,7 +527,7 @@ export default function VaultDetailPage() {
                         Amount
                       </p>
                       <p className="text-[14px] font-bold text-gray-900 mt-1">
-                        {NGN(daily)}
+                        {NGN(planAmount)}
                       </p>
                     </div>
                     <div>
@@ -480,6 +562,19 @@ export default function VaultDetailPage() {
                         {fmtDate(maturity)}
                       </p>
                     </div>
+                  </div>
+
+                  {/* Optional status badge */}
+                  <div className="mt-3 text-[12px]">
+                    <span
+                      className={`inline-flex items-center rounded-full px-2.5 py-1 ${
+                        isCompleted
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-gray-100 text-gray-700"
+                      }`}
+                    >
+                      {isCompleted ? "Completed" : "Active"}
+                    </span>
                   </div>
                 </div>
               </div>
