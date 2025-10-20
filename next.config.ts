@@ -1,25 +1,38 @@
+// next.config.ts
 import type { NextConfig } from "next";
 
 const isProd = process.env.NODE_ENV === "production";
 
-/**
- * Turnstile-only CSP
- */
+// Add your actual API hosts here
+const API_V1 = "https://api.littlewheel.app";
+const API_DEV = "https://dev-api.insider.littlewheel.app";
+
 const csp = [
   "default-src 'self'",
+  // Safer defaults
+  "base-uri 'self'",
+  "form-action 'self'",
+
   // Turnstile script
   "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
-  // Turnstile iframe
+
+  // Some older Safari versions look at child-src for iframes; mirror frame-src
+  "child-src https://challenges.cloudflare.com",
   "frame-src https://challenges.cloudflare.com",
-  // Turnstile verify/xhr
-  "connect-src 'self' https://challenges.cloudflare.com",
+
+  // XHR/fetch targets: self, Turnstile verify, and your API origins
+  `connect-src 'self' https://challenges.cloudflare.com ${API_V1} ${API_DEV}`,
+
   // Images + data/blob
   "img-src 'self' data: blob:",
-  // Inline styles (for Tailwind/Next hydration)
+
+  // Inline styles (Tailwind/Next hydration)
   "style-src 'self' 'unsafe-inline'",
+
   // Local/inline fonts
   "font-src 'self' data:",
-  // Media/workers if used
+
+  // Media/workers if you use them
   "media-src 'self' blob:",
   "worker-src 'self' blob:",
 ].join("; ");
@@ -52,6 +65,7 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
           { key: "X-XSS-Protection", value: "0" },
+          // Camera policy: camera usable on same-origin (not inside third-party iframes)
           {
             key: "Permissions-Policy",
             value:
