@@ -9,7 +9,6 @@ import {
   User,
   CalendarDays,
   KeyRound,
-  ChevronRight,
   Eye,
   EyeOff,
   AtSign,
@@ -22,15 +21,26 @@ import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 const NEXT_STEP_ROUTE = "/agent-signup/components/address";
 const SKEY = { SESSION_ID: "lw_flow_sessionId" };
 
-/* ===== Turnstile (hidden invisible widget) ===== */
+/* ===== Turnstile (invisible primary + visible fallback) ===== */
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
+
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (el: Element, opts: any) => string;
+      execute: (widgetIdOrEl?: string | Element, opts?: any) => void;
+      reset: (widgetIdOrEl?: string | Element) => void;
+      remove: (widgetIdOrEl?: string | Element) => void;
+      getResponse?: (widgetIdOrEl?: string | Element) => string | null;
+    };
+  }
+}
 
 function ensureTurnstileScript(): Promise<void> {
   return new Promise((resolve) => {
     if (typeof window === "undefined") return resolve();
     const w = window as any;
-    if (w.turnstile && typeof w.turnstile.render === "function")
-      return resolve();
+    if (w.turnstile && typeof w.turnstile.render === "function") return resolve();
 
     const existing = document.querySelector<HTMLScriptElement>(
       'script[data-lw="turnstile"]'
@@ -51,9 +61,7 @@ function ensureTurnstileScript(): Promise<void> {
   });
 }
 
-async function ensureTurnstileWidget(
-  div: HTMLDivElement | null
-): Promise<string | null> {
+async function renderInvisibleTurnstile(div: HTMLDivElement | null): Promise<string | null> {
   if (!div) return null;
   await ensureTurnstileScript();
   const w = window as any;
@@ -66,18 +74,17 @@ async function ensureTurnstileWidget(
     sitekey: TURNSTILE_SITE_KEY,
     size: "invisible",
     retry: "auto",
+    "error-callback": () => ((div as any).__tsError = true),
+    "timeout-callback": () => ((div as any).__tsTimeout = true),
+    "unsupported-callback": () => ((div as any).__tsUnsupported = true),
   });
   div.setAttribute("data-widgetid", id);
   return id;
 }
 
-async function getTurnstileTokenViaWidget(
-  div: HTMLDivElement | null,
-  action: string,
-  tries = 2
-): Promise<string | null> {
+async function executeInvisible(div: HTMLDivElement | null, action: string, tries = 2) {
   const w = window as any;
-  const wid = await ensureTurnstileWidget(div);
+  const wid = await renderInvisibleTurnstile(div);
   if (!wid || !w.turnstile?.execute) return null;
 
   for (let i = 0; i < tries; i++) {
@@ -88,7 +95,7 @@ async function getTurnstileTokenViaWidget(
           settled = true;
           resolve(null);
         }
-      }, 7000);
+      }, 8000);
       try {
         w.turnstile.execute(wid, {
           action,
@@ -99,6 +106,13 @@ async function getTurnstileTokenViaWidget(
               resolve(typeof tok === "string" && tok ? tok : null);
             }
           },
+          "error-callback": () => {
+            if (!settled) {
+              settled = true;
+              clearTimeout(t);
+              resolve(null);
+            }
+          },
         });
       } catch {
         clearTimeout(t);
@@ -106,10 +120,40 @@ async function getTurnstileTokenViaWidget(
       }
     });
     if (token) return token;
-    // brief pause before retry
-    await new Promise((r) => setTimeout(r, 350));
+    await new Promise((r) => setTimeout(r, 400));
   }
   return null;
+}
+
+async function renderVisibleTurnstile(
+  div: HTMLDivElement | null,
+  onToken: (tok: string) => void
+) {
+  if (!div) return;
+  await ensureTurnstileScript();
+  const w = window as any;
+  if (!w.turnstile?.render) return;
+
+  // remove any previous widget on this container
+  try {
+    const existingId = div.getAttribute("data-widgetid");
+    if (existingId && w.turnstile.remove) {
+      w.turnstile.remove(existingId);
+      div.removeAttribute("data-widgetid");
+    }
+  } catch {}
+
+  const id = w.turnstile.render(div, {
+    sitekey: TURNSTILE_SITE_KEY,
+    size: "normal",
+    appearance: "interaction-only", // renders a button the user can click
+    "error-callback": () => {},
+    "timeout-callback": () => {},
+    callback: (tok: string) => {
+      if (typeof tok === "string" && tok) onToken(tok);
+    },
+  });
+  div.setAttribute("data-widgetid", id);
 }
 /* ===== /Turnstile ===== */
 
@@ -131,10 +175,13 @@ function PersonalDetailsInner() {
   const router = useRouter();
   const sp = useSearchParams();
 
-  // hidden Turnstile widget container
-  const tsContainerRef = useRef<HTMLDivElement | null>(null);
+  // Turnstile containers
+  const tsInvisibleRef = useRef<HTMLDivElement | null>(null);
+  const tsVisibleRef = useRef<HTMLDivElement | null>(null);
+  const tsManualTokenRef = useRef<string | null>(null);
+  const [tsFallbackVisible, setTsFallbackVisible] = useState(false);
 
-  // ---- session/token detection ----
+  // ---- session/token detection (coming from Create step) ----
   const [sessionId, setSessionId] = useState("");
   const [bearerToken, setBearerToken] = useState("");
   const [authBanner, setAuthBanner] = useState<string | null>(null);
@@ -159,11 +206,14 @@ function PersonalDetailsInner() {
     setBearerToken(tok);
 
     if (!sid && !tok) {
-      setAuthBanner(
-        "Missing signup session/token. Please verify your phone again."
-      );
+      setAuthBanner("Missing signup session/token. Please verify your phone again.");
     }
   }, [sp]);
+
+  // Pre-render invisible Turnstile ASAP
+  useEffect(() => {
+    renderInvisibleTurnstile(tsInvisibleRef.current);
+  }, []);
 
   // ---- form state ----
   const [firstName, setFirstName] = useState("");
@@ -208,7 +258,7 @@ function PersonalDetailsInner() {
   const onPinChange = (v: string) => setPin(onlyDigits(v).slice(0, 5));
   const goBack = () => router.back();
 
-  // camera helpers (unchanged)
+  // camera helpers
   async function openCamera() {
     setError(null);
     setVideoReady(false);
@@ -330,14 +380,14 @@ function PersonalDetailsInner() {
     setSaving(true);
     setError(null);
 
+    // pull the latest bearer from cookie/localStorage
     let actualToken = bearerToken;
     try {
       const cookieToken = getCookie("lw_token");
       const localStorageToken = localStorage.getItem("lw_token") || "";
       actualToken = bearerToken || cookieToken || localStorageToken || "";
-
-      // Optional bridge via sessionId
       if (!actualToken && sessionId) {
+        // optional: bridge sessionId -> token
         try {
           const tokenResp = await fetch("/api/auth/get-v1-token", {
             method: "POST",
@@ -358,31 +408,35 @@ function PersonalDetailsInner() {
     } catch {}
 
     if (!actualToken) {
-      setError(
-        "No authentication token found. Please verify your phone again."
-      );
+      setError("No authentication token found. Please verify your phone again.");
       setSaving(false);
       return;
     }
 
     if (!TURNSTILE_SITE_KEY) {
-      setError(
-        "Human verification is required but no Turnstile site key is configured."
-      );
+      setError("Human verification is required but no Turnstile site key is configured.");
       setSaving(false);
       return;
     }
 
-    // 🔐 Get Turnstile token via hidden widget
-    const captchaToken = await getTurnstileTokenViaWidget(
-      tsContainerRef.current,
-      "signup_details",
-      2
-    );
+    // 1) Use any manual token (from fallback) if present
+    let captchaToken = tsManualTokenRef.current || null;
+
+    // 2) Otherwise, try invisible execute
     if (!captchaToken) {
-      setError(
-        "Human verification failed. If you use a content blocker, please disable it, refresh, and try again."
-      );
+      captchaToken = await executeInvisible(tsInvisibleRef.current, "signup_details", 2);
+    }
+
+    // 3) If still missing, show visible fallback
+    if (!captchaToken) {
+      setTsFallbackVisible(true);
+      try {
+        await renderVisibleTurnstile(tsVisibleRef.current, (tok) => {
+          tsManualTokenRef.current = tok;
+          setError(null);
+        });
+      } catch {}
+      setError("Please complete the human check below, then tap “Save and continue” again.");
       setSaving(false);
       return;
     }
@@ -397,7 +451,7 @@ function PersonalDetailsInner() {
       gender,
       username: username.trim(),
       ...(sessionId ? { sessionId } : {}),
-      captchaToken, // ← send to API route
+      captchaToken, // send to API route for server-side verification
     };
 
     if (avatarDataUrl) payloadBase.avatarUrl = avatarDataUrl;
@@ -438,9 +492,7 @@ function PersonalDetailsInner() {
             : "Failed to save details");
 
         if (res.status === 401) {
-          setAuthBanner(
-            "Authentication failed. Please verify your phone again."
-          );
+          setAuthBanner("Authentication failed. Please verify your phone again.");
         }
 
         setError(String(msg));
@@ -448,6 +500,7 @@ function PersonalDetailsInner() {
         return;
       }
 
+      // persist first name for next step UX
       try {
         const fn = firstName.trim();
         if (fn) {
@@ -466,17 +519,26 @@ function PersonalDetailsInner() {
   return (
     <div className="min-h-screen bg-white flex items-center justify-center p-0 md:p-4">
       <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-2xl md:shadow-xl overflow-hidden flex flex-col">
-        {/* Hidden Turnstile widget */}
-        <div aria-hidden className="hidden">
-          <div ref={tsContainerRef} />
+        {/* Invisible Turnstile holder — off-screen but NOT display:none */}
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            width: 0,
+            height: 0,
+            overflow: "hidden",
+            pointerEvents: "none",
+            opacity: 0,
+            left: "-9999px",
+            top: 0,
+          }}
+        >
+          <div ref={tsInvisibleRef} />
         </div>
 
         {/* Header */}
         <div className="flex items-center justify-between px-4 pt-6 pb-2">
-          <button
-            onClick={goBack}
-            className="flex items-center text-gray-700 hover:text-gray-900"
-          >
+          <button onClick={goBack} className="flex items-center text-gray-700 hover:text-gray-900">
             <ArrowLeft className="w-5 h-5 mr-2" />
             <span className="text-sm font-medium">Back</span>
           </button>
@@ -484,12 +546,8 @@ function PersonalDetailsInner() {
         </div>
 
         <div className="px-4">
-          <h1 className="text-[22px] font-extrabold text-gray-900">
-            You are almost done!
-          </h1>
-          <p className="text-[13px] text-gray-600 mt-1">
-            We need a few details to set things up just right for you.
-          </p>
+          <h1 className="text-[22px] font-extrabold text-gray-900">You are almost done!</h1>
+          <p className="text-[13px] text-gray-600 mt-1">We need a few details to set things up just right for you.</p>
 
           {authBanner && (
             <div className="mt-3 rounded-xl border border-yellow-200 bg-yellow-50 p-3 text-[12px] text-yellow-900">
@@ -505,10 +563,8 @@ function PersonalDetailsInner() {
             </div>
           )}
 
-          {/* Avatar (OPTIONAL) */}
-          <label className="block mt-5 text-[13px] font-semibold text-gray-800">
-            Profile Image
-          </label>
+          {/* OPTIONAL avatar */}
+          <label className="block mt-5 text-[13px] font-semibold text-gray-800">Profile Image</label>
           <div className="mt-2">
             <button
               type="button"
@@ -518,11 +574,7 @@ function PersonalDetailsInner() {
               <div className="w-12 h-12 rounded-full bg-white border border-gray-200 overflow-hidden flex items-center justify-center">
                 {avatarPreview ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={avatarPreview}
-                    alt="avatar preview"
-                    className="w-full h-full object-cover"
-                  />
+                  <img src={avatarPreview} alt="avatar preview" className="w-full h-full object-cover" />
                 ) : (
                   <CameraIcon className="w-5 h-5 text-gray-700" />
                 )}
@@ -530,15 +582,9 @@ function PersonalDetailsInner() {
               <div className="text-left">
                 <div className="text-sm text-gray-900 font-medium inline-flex items-center gap-2">
                   {processingPhoto && <LogoSpinner show={true} />}
-                  {processingPhoto
-                    ? "Processing…"
-                    : avatarPreview
-                    ? "Retake photo"
-                    : "Take a photo"}
+                  {processingPhoto ? "Processing…" : avatarPreview ? "Retake photo" : "Take a photo"}
                 </div>
-                <div className="text-[12px] text-gray-600">
-                  Front camera will open
-                </div>
+                <div className="text-[12px] text-gray-600">Front camera will open</div>
               </div>
               {avatarPreview && (
                 <span className="ml-auto text-gray-700">
@@ -549,9 +595,7 @@ function PersonalDetailsInner() {
           </div>
 
           {/* First / Middle / Last */}
-          <label className="block mt-5 text-[13px] font-semibold text-gray-800">
-            First Name*
-          </label>
+          <label className="block mt-5 text-[13px] font-semibold text-gray-800">First Name*</label>
           <div className="mt-2 flex items-center gap-2 rounded-xl bg-gray-100 px-3 py-3">
             <User className="w-4 h-4 text-gray-900" />
             <input
@@ -562,9 +606,7 @@ function PersonalDetailsInner() {
             />
           </div>
 
-          <label className="block mt-4 text-[13px] font-semibold text-gray-800">
-            Middle Name*
-          </label>
+          <label className="block mt-4 text-[13px] font-semibold text-gray-800">Middle Name*</label>
           <div className="mt-2 flex items-center gap-2 rounded-xl bg-gray-100 px-3 py-3">
             <User className="w-4 h-4 text-gray-900" />
             <input
@@ -575,9 +617,7 @@ function PersonalDetailsInner() {
             />
           </div>
 
-          <label className="block mt-4 text-[13px] font-semibold text-gray-800">
-            Last Name*
-          </label>
+          <label className="block mt-4 text-[13px] font-semibold text-gray-800">Last Name*</label>
           <div className="mt-2 flex items-center gap-2 rounded-xl bg-gray-100 px-3 py-3">
             <User className="w-4 h-4 text-gray-900" />
             <input
@@ -589,9 +629,7 @@ function PersonalDetailsInner() {
           </div>
 
           {/* DOB */}
-          <label className="block mt-4 text-[13px] font-semibold text-gray-800">
-            Date of Birth*
-          </label>
+          <label className="block mt-4 text-[13px] font-semibold text-gray-800">Date of Birth*</label>
           <div className="mt-2 flex items-center gap-2 rounded-xl bg-gray-100 px-3 py-3 ring-1 ring-transparent focus-within:ring-black">
             <CalendarDays className="w-4 h-4 text-gray-900" />
             <input
@@ -606,9 +644,7 @@ function PersonalDetailsInner() {
           </div>
 
           {/* Gender */}
-          <label className="block mt-4 text-[13px] font-semibold text-gray-800">
-            Gender*
-          </label>
+          <label className="block mt-4 text-[13px] font-semibold text-gray-800">Gender*</label>
           <div className="mt-2 relative rounded-xl bg-gray-100 px-3 py-3 ring-1 ring-transparent focus-within:ring-black">
             <select
               value={gender}
@@ -624,6 +660,7 @@ function PersonalDetailsInner() {
               height="18"
               viewBox="0 0 24 24"
               fill="none"
+              aria-hidden
             >
               <path
                 d="M6 9l6 6 6-6"
@@ -636,9 +673,7 @@ function PersonalDetailsInner() {
           </div>
 
           {/* Username */}
-          <label className="block mt-4 text-[13px] font-semibold text-gray-800">
-            Username*
-          </label>
+          <label className="block mt-4 text-[13px] font-semibold text-gray-800">Username*</label>
           <div className="mt-2 flex items-center gap-2 rounded-xl bg-gray-100 px-3 py-3 ring-1 ring-transparent focus-within:ring-black">
             <AtSign className="w-4 h-4 text-gray-900" />
             <input
@@ -649,31 +684,33 @@ function PersonalDetailsInner() {
             />
           </div>
           {!isValidUsername(username) && username.length > 0 && (
-            <p className="mt-1 text-[12px] text-rose-600">
-              3–32 chars; letters, numbers, dot, underscore, or hyphen.
-            </p>
+            <p className="mt-1 text-[12px] text-rose-600">3–32 chars; letters, numbers, dot, underscore, or hyphen.</p>
           )}
 
           {/* Referral (optional) */}
-          <label className="block mt-4 text-[13px] font-semibold text-gray-800">
-            Referral Code
-          </label>
+          <label className="block mt-4 text-[13px] font-semibold text-gray-800">Referral Code</label>
           <div className="mt-2 flex items-center gap-2 rounded-xl bg-gray-100 px-3 py-3">
-            <ChevronRight className="w-4 h-4 text-gray-900 rotate-180" />
+            {/* simple chevron-left icon (rotated) */}
+            <svg width="16" height="16" viewBox="0 0 24 24" className="text-gray-900 rotate-180" aria-hidden>
+              <path
+                d="M15 6l-6 6 6 6"
+                stroke="currentColor"
+                strokeWidth="2"
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
             <input
               value={referralCode}
-              onChange={(e) =>
-                setReferralCode(e.target.value.trim().toUpperCase())
-              }
+              onChange={(e) => setReferralCode(e.target.value.trim().toUpperCase())}
               placeholder="AD672S"
               className="flex-1 bg-transparent outline-none text-sm text-gray-900 placeholder-gray-400 tracking-wider"
             />
           </div>
 
-          {/* 5-digit PIN */}
-          <label className="block mt-4 text-[13px] font-semibold text-gray-800">
-            Password*
-          </label>
+          {/* 5-digit PIN (password) */}
+          <label className="block mt-4 text-[13px] font-semibold text-gray-800">Password*</label>
           <div className="mt-2 flex items-center gap-2 rounded-xl bg-gray-100 px-3 py-3 ring-1 ring-transparent focus-within:ring-black">
             <KeyRound className="w-4 h-4 text-gray-900" />
             <input
@@ -692,23 +729,26 @@ function PersonalDetailsInner() {
               className="text-gray-700 hover:text-gray-900"
               aria-label={showPin ? "Hide password" : "Show password"}
             >
-              {showPin ? (
-                <EyeOff className="w-5 h-5" />
-              ) : (
-                <Eye className="w-5 h-5" />
-              )}
+              {showPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
             </button>
           </div>
           <p className="text-[11px] text-gray-600 mt-1">
             Password must be <span className="font-semibold">five numbers</span>
           </p>
 
+          {/* Visible Turnstile fallback area */}
+          {tsFallbackVisible && (
+            <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+              <p className="text-[12px] text-emerald-900 mb-2">
+                Please verify you’re human below. If you use a content blocker, allow{" "}
+                <code className="px-1 rounded bg-white text-[11px]">challenges.cloudflare.com</code>.
+              </p>
+              <div ref={tsVisibleRef} />
+            </div>
+          )}
+
           {error && (
-            <p
-              className="text-[12px] text-rose-600 mt-3"
-              role="alert"
-              aria-live="assertive"
-            >
+            <p className="text-[12px] text-rose-600 mt-3" role="alert" aria-live="assertive">
               {error}
             </p>
           )}
@@ -722,10 +762,7 @@ function PersonalDetailsInner() {
               <span className="text-gray-600">4/5</span>
             </div>
             <div className="h-1.5 w-full rounded-full bg-gray-200 overflow-hidden">
-              <div
-                className="h-full bg-emerald-500 rounded-full"
-                style={{ width: "80%" }}
-              />
+              <div className="h-full bg-emerald-500 rounded-full" style={{ width: "80%" }} />
             </div>
           </div>
 
@@ -733,9 +770,7 @@ function PersonalDetailsInner() {
             onClick={saveAndContinue}
             disabled={!formValid || saving}
             className={`mb-5 w-full h-12 rounded-xl font-semibold text-white transition inline-flex items-center justify-center gap-2 ${
-              !formValid || saving
-                ? "bg-gray-300 text-gray-600 cursor-not-allowed"
-                : "bg-black hover:bg-black/90"
+              !formValid || saving ? "bg-gray-300 text-gray-600 cursor-not-allowed" : "bg-black hover:bg-black/90"
             }`}
           >
             {saving ? (
@@ -755,13 +790,8 @@ function PersonalDetailsInner() {
         <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center">
           <div className="bg-white rounded-2xl w-[92%] max-w-sm overflow-hidden shadow-2xl">
             <div className="flex items-center justify-between px-4 py-3 border-b">
-              <h3 className="text-sm font-semibold text-gray-900">
-                Take a photo
-              </h3>
-              <button
-                onClick={closeCamera}
-                className="text-gray-700 hover:text-gray-900"
-              >
+              <h3 className="text-sm font-semibold text-gray-900">Take a photo</h3>
+              <button onClick={closeCamera} className="text-gray-700 hover:text-gray-900">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -786,9 +816,7 @@ function PersonalDetailsInner() {
                 onClick={capturePhoto}
                 disabled={!videoReady || processingPhoto}
                 className={`flex-1 h-11 rounded-xl text-white font-semibold inline-flex items-center justify-center gap-2 ${
-                  !videoReady || processingPhoto
-                    ? "bg-black/50 cursor-not-allowed"
-                    : "bg-black hover:bg-black/90"
+                  !videoReady || processingPhoto ? "bg-black/50 cursor-not-allowed" : "bg-black hover:bg-black/90"
                 }`}
               >
                 {processingPhoto ? (
@@ -800,10 +828,7 @@ function PersonalDetailsInner() {
                   "Capture"
                 )}
               </button>
-              <button
-                onClick={closeCamera}
-                className="flex-1 h-11 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-900 font-semibold"
-              >
+              <button onClick={closeCamera} className="flex-1 h-11 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-900 font-semibold">
                 Cancel
               </button>
             </div>
