@@ -1,112 +1,142 @@
+// app/api/auth/confirm-otp/route.ts
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
-const ROOT = (process.env.NEXT_PUBLIC_SWAGGER_API_BASE_URL || "").replace(
-  /\/+$/,
-  ""
-);
+const ROOT = (process.env.NEXT_PUBLIC_SWAGGER_API_BASE_URL || "").replace(/\/+$/, "");
 const V1 = (process.env.BACKEND_API_URL_V1 || `${ROOT}/v1`).replace(/\/+$/, "");
+const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS ?? 45000);
 
-// Optional: set to true to log upstream debug to server console
+// Log upstream in non-prod only
 const DEBUG = process.env.NODE_ENV !== "production";
 
-export async function POST(req: Request) {
+function jsonSafe(text: string) {
   try {
-    // 1) Read incoming payload (otp + optional captcha token)
-    const body = await req.json().catch(() => ({} as any));
-    const otp: string | undefined = body?.otp;
-    const captchaToken: string | undefined =
-      body?.captchaToken ||
-      body?.recaptchaToken ||
-      body?.reCaptchaToken ||
-      body?.gRecaptchaToken;
+    return text ? JSON.parse(text) : null;
+  } catch {
+    return { message: text };
+  }
+}
 
-    if (!otp) {
-      return NextResponse.json(
-        { success: false, message: "otp required" },
-        { status: 400 }
-      );
-    }
+export async function POST(req: Request) {
+  // 1) Parse incoming
+  let body: any = {};
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json(
+      { success: false, message: "Invalid JSON body" },
+      { status: 400 }
+    );
+  }
 
-    // 2) Read Bearer token from cookies (set during /api/auth/signup-v1)
-    const store = cookies();
-    const token =
-      store.get("token")?.value || store.get("lw_token")?.value || undefined;
+  const otp = (body?.otp ?? "").toString().trim();
+  const captchaToken: string | undefined =
+    body?.captchaToken ||
+    body?.recaptchaToken ||
+    body?.reCaptchaToken ||
+    body?.gRecaptchaToken;
 
-    if (!token) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "token required (missing cookie). Please restart signup.",
-        },
-        { status: 401 }
-      );
-    }
+  if (!otp) {
+    return NextResponse.json(
+      { success: false, message: "otp required" },
+      { status: 400 }
+    );
+  }
 
-    // 3) Build headers & body for upstream
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      Authorization: `Bearer ${token}`,
-    };
-    if (captchaToken) headers["X-Recaptcha-Token"] = captchaToken;
+  // 2) Read Bearer token from cookies
+  const store = cookies();
+  const token =
+    store.get("token")?.value ||
+    store.get("lw_token")?.value ||
+    undefined;
 
-    const upstreamBody: any = { otp };
-    // send all common names so we match backend expectations
-    if (captchaToken) {
-      upstreamBody.captchaToken = captchaToken;
-      upstreamBody.recaptchaToken = captchaToken;
-      upstreamBody.reCaptchaToken = captchaToken;
-    }
+  if (!token) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "token required (missing cookie). Please restart signup.",
+      },
+      { status: 401 }
+    );
+  }
 
-    // 4) Call upstream
-    const r = await fetch(`${V1}/auth/confirm-otp`, {
+  // 3) Build upstream request
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+  if (captchaToken) headers["X-Recaptcha-Token"] = captchaToken;
+
+  const upstreamBody: any = { otp };
+  if (captchaToken) {
+    // keep aliases; harmless if backend ignores them
+    upstreamBody.captchaToken = captchaToken;
+    upstreamBody.recaptchaToken = captchaToken;
+    upstreamBody.reCaptchaToken = captchaToken;
+  }
+
+  const url = `${V1}/auth/confirm-otp`;
+
+  // 4) Timeout/hard-fail logic
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
+
+  try {
+    const r = await fetch(url, {
       method: "POST",
       headers,
       body: JSON.stringify(upstreamBody),
+      cache: "no-store",
+      signal: ac.signal,
     }).catch((err) => {
       if (DEBUG) console.error("confirm-otp upstream fetch failed:", err);
       throw new Error("Upstream fetch error");
     });
 
     const text = await r.text();
-    let data: any = null;
-    try {
-      data = text ? JSON.parse(text) : null;
-    } catch (e) {
-      // keep raw text in debug (some backends return plain text on errors)
-      if (DEBUG) console.warn("confirm-otp upstream non-JSON body:", text);
+    const data = jsonSafe(text);
+
+    if (DEBUG) {
+      console.log("confirm-otp upstream:", {
+        url,
+        status: r.status,
+        ok: r.ok,
+        bodyPreview: text?.slice(0, 500),
+      });
     }
 
     if (!r.ok) {
       const message =
-        data?.message ||
-        data?.error ||
+        (data && (data as any).message) ||
+        (data && (data as any).error) ||
         text ||
         `Upstream ${r.status} ${r.statusText}`;
 
-      // Propagate upstream status (so you see 401/403/422 instead of generic 500)
       return NextResponse.json(
         { success: false, message, upstream: data ?? text ?? null },
         { status: r.status }
       );
     }
 
-    // 5) If upstream returns a refreshed token, set it back in cookie
+    // 5) If upstream returns a refreshed token, set it back in cookie (HttpOnly)
     const newToken =
-      data?.token ?? data?.data?.token ?? data?.data?.accessToken ?? null;
+      (data as any)?.token ??
+      (data as any)?.data?.token ??
+      (data as any)?.data?.accessToken ??
+      null;
 
     const res = NextResponse.json({
       success: true,
       data,
-      token: newToken ?? token,
+      token: newToken ?? token, // keep for compatibility if client reads it
     });
 
     if (newToken) {
       const cookieOpts = {
         path: "/",
         sameSite: "lax" as const,
-        httpOnly: false,
+        httpOnly: true, // hardened
         secure: process.env.NODE_ENV === "production",
         maxAge: 60 * 60 * 24 * 7,
       };
@@ -116,10 +146,17 @@ export async function POST(req: Request) {
 
     return res;
   } catch (e: any) {
-    // Only hit when our proxy fails before getting upstream
+    const aborted = e?.name === "AbortError";
     return NextResponse.json(
-      { success: false, message: e?.message || "Proxy error" },
-      { status: 500 }
+      {
+        success: false,
+        message: aborted
+          ? `Upstream timeout after ${TIMEOUT_MS}ms`
+          : e?.message || "Proxy error",
+      },
+      { status: aborted ? 504 : 500 }
     );
+  } finally {
+    clearTimeout(timer);
   }
 }
