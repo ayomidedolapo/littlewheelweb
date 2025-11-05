@@ -10,6 +10,7 @@ import {
   ChevronDown,
   Building2,
   Globe2,
+  Info,
 } from "lucide-react";
 import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 
@@ -37,9 +38,7 @@ function ensureTurnstileScript(): Promise<void> {
     const w = window as any;
     if (w.turnstile && typeof w.turnstile.render === "function") return resolve();
 
-    const existing = document.querySelector<HTMLScriptElement>(
-      'script[data-lw="turnstile"]'
-    );
+    const existing = document.querySelector<HTMLScriptElement>('script[data-lw="turnstile"]');
     if (existing) {
       existing.addEventListener("load", () => resolve(), { once: true });
       existing.addEventListener("error", () => resolve(), { once: true });
@@ -153,43 +152,11 @@ async function renderVisibleTurnstile(
 /* ===== /Turnstile ===== */
 
 const NG_STATES = [
-  "Abia",
-  "Adamawa",
-  "Akwa Ibom",
-  "Anambra",
-  "Bauchi",
-  "Bayelsa",
-  "Benue",
-  "Borno",
-  "Cross River",
-  "Delta",
-  "Ebonyi",
-  "Edo",
-  "Ekiti",
-  "Enugu",
-  "Gombe",
-  "Imo",
-  "Jigawa",
-  "Kaduna",
-  "Kano",
-  "Katsina",
-  "Kebbi",
-  "Kogi",
-  "Kwara",
-  "Lagos",
-  "Nasarawa",
-  "Niger",
-  "Ogun",
-  "Ondo",
-  "Osun",
-  "Oyo",
-  "Plateau",
-  "Rivers",
-  "Sokoto",
-  "Taraba",
-  "Yobe",
-  "Zamfara",
-  "FCT (Abuja)",
+  "Abia", "Adamawa", "Akwa Ibom", "Anambra", "Bauchi", "Bayelsa", "Benue", "Borno",
+  "Cross River", "Delta", "Ebonyi", "Edo", "Ekiti", "Enugu", "Gombe", "Imo", "Jigawa",
+  "Kaduna", "Kano", "Katsina", "Kebbi", "Kogi", "Kwara", "Lagos", "Nasarawa", "Niger",
+  "Ogun", "Ondo", "Osun", "Oyo", "Plateau", "Rivers", "Sokoto", "Taraba", "Yobe",
+  "Zamfara", "FCT (Abuja)",
 ];
 
 const LGA_BY_STATE: Record<string, string[]> = {
@@ -247,11 +214,12 @@ function AddressPageInner() {
     setBearerToken(tok);
   }, [sp]);
 
-  // Pre-render invisible widget to warm it up (esp. for Safari/iOS)
+  // Pre-render invisible widget
   useEffect(() => {
     renderInvisibleTurnstile(tsInvisibleRef.current);
   }, []);
 
+  // Best-effort: if we only have sessionId, try to fetch token from cookie via API helper
   const ensuringTokenRef = useRef(false);
   useEffect(() => {
     if (bearerToken || !signupSessionId || ensuringTokenRef.current) return;
@@ -290,10 +258,7 @@ function AddressPageInner() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const lgaOptions = useMemo(
-    () => LGA_BY_STATE[stateName] ?? ["Other"],
-    [stateName]
-  );
+  const lgaOptions = useMemo(() => LGA_BY_STATE[stateName] ?? ["Other"], [stateName]);
 
   useEffect(() => {
     if (stateName === "Oyo") {
@@ -306,14 +271,7 @@ function AddressPageInner() {
   }, [stateName]);
 
   const valid = useMemo(
-    () =>
-      Boolean(
-        address.trim() &&
-          stateName.trim() &&
-          city.trim() &&
-          country.trim() &&
-          lga.trim()
-      ),
+    () => Boolean(address.trim() && stateName.trim() && city.trim() && country.trim() && lga.trim()),
     [address, stateName, city, country, lga]
   );
 
@@ -324,6 +282,7 @@ function AddressPageInner() {
     setSaving(true);
     setError(null);
 
+    // ensure we have a token
     let token = bearerToken;
     if (!token && signupSessionId) {
       try {
@@ -364,7 +323,7 @@ function AddressPageInner() {
       captchaToken = await executeInvisible(tsInvisibleRef.current, "signup_address", 2);
     }
 
-    // 3) If still missing, show visible widget and ask user to click
+    // 3) If still missing, show visible widget + neutral guidance
     if (!captchaToken) {
       setTsFallbackVisible(true);
       try {
@@ -373,7 +332,9 @@ function AddressPageInner() {
           setError(null);
         });
       } catch {}
-      setError("Please complete the human check below, then tap “Save and continue” again.");
+      setError(
+        "Hang tight — a verification widget will appear below. Please solve it to generate a token, then tap “Save and continue” again."
+      );
       setSaving(false);
       return;
     }
@@ -385,6 +346,8 @@ function AddressPageInner() {
       lga: lga.trim(),
       address: address.trim(),
       ...(signupSessionId ? { sessionId: signupSessionId } : {}),
+      // Send both keys — server accepts either
+      "cf-turnstile-response": captchaToken,
       captchaToken,
     };
 
@@ -465,7 +428,10 @@ function AddressPageInner() {
         aria-busy={saving}
       >
         {/* Invisible Turnstile holder — off-screen but NOT display:none */}
-        <div aria-hidden style={{ position: "absolute", width: 0, height: 0, overflow: "hidden", pointerEvents: "none", opacity: 0, left: "-9999px", top: 0 }}>
+        <div
+          aria-hidden
+          style={{ position: "absolute", width: 0, height: 0, overflow: "hidden", pointerEvents: "none", opacity: 0, left: "-9999px", top: 0 }}
+        >
           <div ref={tsInvisibleRef} />
         </div>
 
@@ -600,19 +566,22 @@ function AddressPageInner() {
             />
           </div>
 
-          {/* Visible Turnstile fallback area */}
+          {/* Neutral info banner for Turnstile fallback (replaces green box) */}
           {tsFallbackVisible && (
-            <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-              <p className="text-[12px] text-emerald-900 mb-2">
-                Please verify you’re human below. If you use a content blocker, allow{" "}
-                <code className="px-1 rounded bg-white text-[11px]">challenges.cloudflare.com</code>.
+            <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-3">
+              <p className="text-[12px] text-gray-800 flex gap-2 items-start">
+                <Info className="w-4 h-4 mt-0.5 shrink-0" />
+                <span>
+                  Hang tight — a verification widget will appear below. Please solve it to generate a token, then tap{" "}
+                  <span className="font-semibold">Save and continue</span> again.
+                </span>
               </p>
-              <div ref={tsVisibleRef} />
+              <div className="mt-2" ref={tsVisibleRef} />
             </div>
           )}
 
           {error && (
-            <p className="text-[12px] text-red-600 mt-3" role="alert" aria-live="assertive">
+            <p className="text-[12px] text-rose-600 mt-3" role="alert" aria-live="assertive">
               {error}
             </p>
           )}
@@ -629,7 +598,7 @@ function AddressPageInner() {
               <span className="text-gray-600">5/5</span>
             </div>
             <div className="h-1.5 w-full rounded-full bg-gray-200 overflow-hidden">
-              <div className="h-full bg-emerald-500 rounded-full" style={{ width: "100%" }} />
+              <div className="h-full bg-black rounded-full" style={{ width: "100%" }} />
             </div>
           </div>
 
@@ -637,9 +606,7 @@ function AddressPageInner() {
             onClick={saveAndContinue}
             disabled={!valid || saving}
             className={`mb-5 w-full h-12 rounded-xl font-semibold text-white transition inline-flex items-center justify-center gap-2 ${
-              !valid || saving
-                ? "bg-gray-300 text-gray-600 cursor-not-allowed"
-                : "bg-black hover:bg-black/90"
+              !valid || saving ? "bg-gray-300 text-gray-600 cursor-not-allowed" : "bg-black hover:bg-black/90"
             }`}
           >
             {saving ? <LogoSpinner show={true} /> : null}

@@ -15,6 +15,7 @@ import {
   Camera as CameraIcon,
   X,
   RotateCcw,
+  Info,
 } from "lucide-react";
 import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 
@@ -42,9 +43,7 @@ function ensureTurnstileScript(): Promise<void> {
     const w = window as any;
     if (w.turnstile && typeof w.turnstile.render === "function") return resolve();
 
-    const existing = document.querySelector<HTMLScriptElement>(
-      'script[data-lw="turnstile"]'
-    );
+    const existing = document.querySelector<HTMLScriptElement>('script[data-lw="turnstile"]');
     if (existing) {
       existing.addEventListener("load", () => resolve(), { once: true });
       existing.addEventListener("error", () => resolve(), { once: true });
@@ -61,68 +60,83 @@ function ensureTurnstileScript(): Promise<void> {
   });
 }
 
-async function renderInvisibleTurnstile(div: HTMLDivElement | null): Promise<string | null> {
-  if (!div) return null;
-  await ensureTurnstileScript();
-  const w = window as any;
-  if (!w.turnstile?.render) return null;
+function useStableInvisibleWidget() {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const widgetIdRef = useRef<string | null>(null);
 
-  const existingId = div.getAttribute("data-widgetid");
-  if (existingId) return existingId;
+  async function render() {
+    const div = containerRef.current;
+    if (!div) return null;
+    await ensureTurnstileScript();
+    const w = window as any;
+    if (!w.turnstile?.render) return null;
+    if (widgetIdRef.current) return widgetIdRef.current; // stable across renders
 
-  const id = w.turnstile.render(div, {
-    sitekey: TURNSTILE_SITE_KEY,
-    size: "invisible",
-    retry: "auto",
-    "error-callback": () => ((div as any).__tsError = true),
-    "timeout-callback": () => ((div as any).__tsTimeout = true),
-    "unsupported-callback": () => ((div as any).__tsUnsupported = true),
-  });
-  div.setAttribute("data-widgetid", id);
-  return id;
-}
+    const id = w.turnstile.render(div, {
+      sitekey: TURNSTILE_SITE_KEY,
+      size: "invisible",
+      retry: "auto",
+      "error-callback": () => ((div as any).__tsError = true),
+      "timeout-callback": () => ((div as any).__tsTimeout = true),
+      "unsupported-callback": () => ((div as any).__tsUnsupported = true),
+    });
+    widgetIdRef.current = id;
+    return id;
+  }
 
-async function executeInvisible(div: HTMLDivElement | null, action: string, tries = 2) {
-  const w = window as any;
-  const wid = await renderInvisibleTurnstile(div);
-  if (!wid || !w.turnstile?.execute) return null;
+  function reset() {
+    const w = window as any;
+    if (widgetIdRef.current && w.turnstile?.reset) {
+      w.turnstile.reset(widgetIdRef.current);
+    }
+  }
 
-  for (let i = 0; i < tries; i++) {
-    const token: string | null = await new Promise((resolve) => {
-      let settled = false;
-      const t = setTimeout(() => {
-        if (!settled) {
-          settled = true;
+  async function execute(action: string, tries = 2) {
+    const w = window as any;
+    const wid = await render();
+    if (!wid || !w.turnstile?.execute) return null;
+
+    for (let i = 0; i < tries; i++) {
+      const token: string | null = await new Promise((resolve) => {
+        let settled = false;
+        const t = setTimeout(() => {
+          if (!settled) {
+            settled = true;
+            resolve(null);
+          }
+        }, 8000);
+        try {
+          w.turnstile.execute(wid, {
+            action,
+            callback: (tok: string) => {
+              if (!settled) {
+                settled = true;
+                clearTimeout(t);
+                resolve(typeof tok === "string" && tok ? tok : null);
+              }
+            },
+            "error-callback": () => {
+              if (!settled) {
+                settled = true;
+                clearTimeout(t);
+                resolve(null);
+              }
+            },
+          });
+        } catch {
+          clearTimeout(t);
           resolve(null);
         }
-      }, 8000);
-      try {
-        w.turnstile.execute(wid, {
-          action,
-          callback: (tok: string) => {
-            if (!settled) {
-              settled = true;
-              clearTimeout(t);
-              resolve(typeof tok === "string" && tok ? tok : null);
-            }
-          },
-          "error-callback": () => {
-            if (!settled) {
-              settled = true;
-              clearTimeout(t);
-              resolve(null);
-            }
-          },
-        });
-      } catch {
-        clearTimeout(t);
-        resolve(null);
-      }
-    });
-    if (token) return token;
-    await new Promise((r) => setTimeout(r, 400));
+      });
+      if (token) return token;
+      // ensure a fresh run next attempt
+      reset();
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    return null;
   }
-  return null;
+
+  return { containerRef, execute, reset };
 }
 
 async function renderVisibleTurnstile(
@@ -134,7 +148,6 @@ async function renderVisibleTurnstile(
   const w = window as any;
   if (!w.turnstile?.render) return;
 
-  // remove any previous widget on this container
   try {
     const existingId = div.getAttribute("data-widgetid");
     if (existingId && w.turnstile.remove) {
@@ -146,12 +159,12 @@ async function renderVisibleTurnstile(
   const id = w.turnstile.render(div, {
     sitekey: TURNSTILE_SITE_KEY,
     size: "normal",
-    appearance: "interaction-only", // renders a button the user can click
-    "error-callback": () => {},
-    "timeout-callback": () => {},
+    appearance: "interaction-only",
     callback: (tok: string) => {
       if (typeof tok === "string" && tok) onToken(tok);
     },
+    "error-callback": () => {},
+    "timeout-callback": () => {},
   });
   div.setAttribute("data-widgetid", id);
 }
@@ -175,11 +188,15 @@ function PersonalDetailsInner() {
   const router = useRouter();
   const sp = useSearchParams();
 
-  // Turnstile containers
-  const tsInvisibleRef = useRef<HTMLDivElement | null>(null);
+  // Invisible Turnstile (stable)
+  const { containerRef: tsInvisibleRef, execute: execInvisible, reset: resetInvisible } =
+    useStableInvisibleWidget();
+
+  // Visible fallback
   const tsVisibleRef = useRef<HTMLDivElement | null>(null);
   const tsManualTokenRef = useRef<string | null>(null);
   const [tsFallbackVisible, setTsFallbackVisible] = useState(false);
+  const autoSubmittingRef = useRef(false);
 
   // ---- session/token detection (coming from Create step) ----
   const [sessionId, setSessionId] = useState("");
@@ -210,9 +227,11 @@ function PersonalDetailsInner() {
     }
   }, [sp]);
 
-  // Pre-render invisible Turnstile ASAP
+  // Pre-render invisible Turnstile ASAP (keep container mounted)
   useEffect(() => {
-    renderInvisibleTurnstile(tsInvisibleRef.current);
+    ensureTurnstileScript().then(() => {
+      // render happens lazily inside execInvisible; container must exist
+    });
   }, []);
 
   // ---- form state ----
@@ -422,21 +441,30 @@ function PersonalDetailsInner() {
     // 1) Use any manual token (from fallback) if present
     let captchaToken = tsManualTokenRef.current || null;
 
-    // 2) Otherwise, try invisible execute
+    // 2) Otherwise, try invisible execute (fresh token per attempt)
     if (!captchaToken) {
-      captchaToken = await executeInvisible(tsInvisibleRef.current, "signup_details", 2);
+      captchaToken = await execInvisible("signup_details", 2);
     }
 
-    // 3) If still missing, show visible fallback
+    // 3) If still missing, show visible fallback at bottom-right + neutral guidance
     if (!captchaToken) {
       setTsFallbackVisible(true);
       try {
         await renderVisibleTurnstile(tsVisibleRef.current, (tok) => {
           tsManualTokenRef.current = tok;
           setError(null);
+          // Auto-resubmit once when token arrives
+          if (!autoSubmittingRef.current) {
+            autoSubmittingRef.current = true;
+            setTimeout(() => {
+              saveAndContinue().finally(() => (autoSubmittingRef.current = false));
+            }, 0);
+          }
         });
       } catch {}
-      setError("Please complete the human check below, then tap “Save and continue” again.");
+      setError(
+        "Hang tight — a verification widget is now available. Please verify, then tap “Save and continue” to proceed."
+      );
       setSaving(false);
       return;
     }
@@ -451,7 +479,9 @@ function PersonalDetailsInner() {
       gender,
       username: username.trim(),
       ...(sessionId ? { sessionId } : {}),
-      captchaToken, // send to API route for server-side verification
+      // Both keys supported
+      "cf-turnstile-response": captchaToken,
+      captchaToken,
     };
 
     if (avatarDataUrl) payloadBase.avatarUrl = avatarDataUrl;
@@ -479,6 +509,10 @@ function PersonalDetailsInner() {
       } catch {
         json = { message: raw };
       }
+
+      // Single-use token: clear manual + reset invisible for next attempts
+      tsManualTokenRef.current = null;
+      resetInvisible();
 
       if (!res.ok || json?.success === false) {
         const msg =
@@ -511,6 +545,10 @@ function PersonalDetailsInner() {
 
       router.push(NEXT_STEP_ROUTE);
     } catch (e: any) {
+      // ensure next attempt gets a fresh token
+      tsManualTokenRef.current = null;
+      resetInvisible();
+
       setError(e?.message || "Network error. Please try again.");
       setSaving(false);
     }
@@ -690,7 +728,6 @@ function PersonalDetailsInner() {
           {/* Referral (optional) */}
           <label className="block mt-4 text-[13px] font-semibold text-gray-800">Referral Code</label>
           <div className="mt-2 flex items-center gap-2 rounded-xl bg-gray-100 px-3 py-3">
-            {/* simple chevron-left icon (rotated) */}
             <svg width="16" height="16" viewBox="0 0 24 24" className="text-gray-900 rotate-180" aria-hidden>
               <path
                 d="M15 6l-6 6 6 6"
@@ -736,14 +773,16 @@ function PersonalDetailsInner() {
             Password must be <span className="font-semibold">five numbers</span>
           </p>
 
-          {/* Visible Turnstile fallback area */}
+          {/* Neutral inline hint appears only when fallback is on (copy kept concise) */}
           {tsFallbackVisible && (
-            <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-              <p className="text-[12px] text-emerald-900 mb-2">
-                Please verify you’re human below. If you use a content blocker, allow{" "}
-                <code className="px-1 rounded bg-white text-[11px]">challenges.cloudflare.com</code>.
+            <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-3">
+              <p className="text-[12px] text-gray-800 flex gap-2 items-start">
+                <Info className="w-4 h-4 mt-0.5 shrink-0" />
+                <span>
+                  A quick verification is required — please solve the widget (bottom-right), then tap{" "}
+                  <span className="font-semibold">Save and continue</span>.
+                </span>
               </p>
-              <div ref={tsVisibleRef} />
             </div>
           )}
 
@@ -762,7 +801,7 @@ function PersonalDetailsInner() {
               <span className="text-gray-600">4/5</span>
             </div>
             <div className="h-1.5 w-full rounded-full bg-gray-200 overflow-hidden">
-              <div className="h-full bg-emerald-500 rounded-full" style={{ width: "80%" }} />
+              <div className="h-full bg-black rounded-full" style={{ width: "80%" }} />
             </div>
           </div>
 
@@ -784,6 +823,24 @@ function PersonalDetailsInner() {
           </button>
         </div>
       </div>
+
+      {/* Bottom-right visible Turnstile widget (appears only on fallback) */}
+      {tsFallbackVisible && (
+        <div
+          className="fixed right-3 bottom-3 z-[1000] w-[min(360px,92vw)] rounded-xl border border-gray-200 bg-white shadow-lg"
+          role="region"
+          aria-label="Human verification"
+        >
+          <div className="p-3">
+            <p className="text-[12px] text-gray-800">
+              Please verify you’re human below. A new token will be generated for this step.
+            </p>
+          </div>
+          <div className="px-3 pb-3">
+            <div ref={tsVisibleRef} />
+          </div>
+        </div>
+      )}
 
       {/* Camera Modal */}
       {cameraOpen && (
@@ -828,7 +885,10 @@ function PersonalDetailsInner() {
                   "Capture"
                 )}
               </button>
-              <button onClick={closeCamera} className="flex-1 h-11 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-900 font-semibold">
+              <button
+                onClick={closeCamera}
+                className="flex-1 h-11 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-900 font-semibold"
+              >
                 Cancel
               </button>
             </div>

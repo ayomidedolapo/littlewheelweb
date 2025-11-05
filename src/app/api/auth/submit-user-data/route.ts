@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
+/* -------------------- Config -------------------- */
 const clean = (s = "") => s.replace(/\/+$/, "");
 const V1 = clean(process.env.BACKEND_API_URL || "");
 const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS ?? 45000);
@@ -10,7 +11,9 @@ const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS ?? 45000);
 const TURNSTILE_SECRET = (process.env.TURNSTILE_SECRET_KEY || "").trim();
 const TURNSTILE_VERIFY_URL =
   "https://challenges.cloudflare.com/turnstile/v0/siteverify";
+/* ---------- /Turnstile config ---------- */
 
+/* -------------------- Helpers -------------------- */
 function readClientIp(req: NextRequest) {
   const cf = req.headers.get("CF-Connecting-IP");
   if (cf) return cf;
@@ -46,7 +49,8 @@ async function verifyTurnstile(token: string, ip?: string) {
         response: token,
         ...(ip ? { remoteip: ip } : {}),
         idempotency_key:
-          crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
+          (globalThis as any).crypto?.randomUUID?.() ??
+          `${Date.now()}-${Math.random()}`,
       }),
     });
     const json = await res.json().catch(() => ({}));
@@ -62,27 +66,14 @@ async function verifyTurnstile(token: string, ip?: string) {
     return { ok: false as const, reason: e?.message || "turnstile-error" };
   }
 }
-/* ---------- /Turnstile config ---------- */
 
 async function readCookie(name: string) {
   try {
-    const cookieStore = await cookies();
-    return cookieStore.get(name)?.value || "";
+    const store = await cookies();
+    return store.get(name)?.value || "";
   } catch {
     return "";
   }
-}
-
-async function readBearer(req: NextRequest) {
-  const header = (req.headers.get("authorization") || "")
-    .replace(/^Bearer\s+/i, "")
-    .trim();
-  const altHdr = (req.headers.get("x-lw-auth") || "")
-    .replace(/^Bearer\s+/i, "")
-    .trim();
-  const cookieTok =
-    (await readCookie("lw_token")) || (await readCookie("token"));
-  return header || altHdr || cookieTok || "";
 }
 
 function jsonSafe(text: string) {
@@ -91,6 +82,29 @@ function jsonSafe(text: string) {
   } catch {
     return { message: text };
   }
+}
+
+/**
+ * Consolidate all possible bearer locations to avoid 401 during flow.
+ * Priority: Authorization > x-lw-auth > body > query > cookies
+ */
+async function readBearer(req: NextRequest, body: any) {
+  const header = (req.headers.get("authorization") || "")
+    .replace(/^Bearer\s+/i, "")
+    .trim();
+
+  const altHdr = (req.headers.get("x-lw-auth") || "")
+    .replace(/^Bearer\s+/i, "")
+    .trim();
+
+  const url = new URL(req.url);
+  const queryTok = (url.searchParams.get("token") || "").trim();
+  const bodyTok = String(body?.accessToken || body?.token || "").trim();
+
+  const cookieTok =
+    (await readCookie("lw_token")) || (await readCookie("token"));
+
+  return header || altHdr || bodyTok || queryTok || cookieTok || "";
 }
 
 export async function POST(req: NextRequest) {
@@ -114,11 +128,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  /* 🔐 Enforce Turnstile for this step (recommended)
-     If you prefer OPTIONAL enforcement:
-       - Only verify when a token is present, otherwise skip.
-       - Replace the 'if (!token) return 400' with 'if (!token) { /* skip *\/ }'
-  */
+  /* ---- Turnstile enforcement ---- */
   const tokenTs = readTurnstileToken(body);
   if (!tokenTs) {
     return NextResponse.json(
@@ -126,6 +136,7 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
+
   const ip = readClientIp(req);
   const verdict = await verifyTurnstile(tokenTs, ip);
   if (!verdict.ok) {
@@ -138,12 +149,24 @@ export async function POST(req: NextRequest) {
       { status: 403 }
     );
   }
-  // (Optional hardening) If you set action="signup_details" on the client:
-  // const { action, hostname } = verdict.data || {};
-  // if (action !== "signup_details") return NextResponse.json({ success:false, message:"Bad action" }, { status: 403 });
-  // if (hostname !== "littlewheel.app") return NextResponse.json({ success:false, message:"Bad hostname" }, { status: 403 });
 
-  const bearer = await readBearer(req);
+  // Optional hardening if you set <Turnstile action="signup_details" />
+  // const { action, hostname } = verdict.data || {};
+  // if (action !== "signup_details") {
+  //   return NextResponse.json(
+  //     { success: false, message: "Unexpected Turnstile action" },
+  //     { status: 403 }
+  //   );
+  // }
+  // if (hostname && !hostname.endsWith("littlewheel.app")) {
+  //   return NextResponse.json(
+  //     { success: false, message: "Unexpected Turnstile hostname" },
+  //     { status: 403 }
+  //   );
+  // }
+
+  /* ---- Bearer/session handling ---- */
+  const bearer = await readBearer(req, body);
   const sessionId =
     body?.sessionId ||
     req.headers.get("x-session-id") ||
@@ -151,20 +174,15 @@ export async function POST(req: NextRequest) {
     "";
 
   console.log("Token sources check:", {
-    authHeader: req.headers.get("authorization")
-      ? `Bearer [${
-          req.headers.get("authorization")!.replace(/^Bearer\s+/i, "").length
-        } chars]`
-      : "MISSING",
-    xLwAuthHeader: req.headers.get("x-lw-auth")
-      ? `[${req.headers.get("x-lw-auth")!.length} chars]`
-      : "MISSING",
-    cookieToken: (await readCookie("lw_token"))
-      ? `[${(await readCookie("lw_token")).length} chars]`
-      : "MISSING",
-    finalBearer: bearer ? `[${bearer.length} chars]` : "MISSING",
-    sessionId: sessionId || "MISSING",
-    V1: V1,
+    hasAuthorizationHeader: !!req.headers.get("authorization"),
+    hasXLwAuthHeader: !!req.headers.get("x-lw-auth"),
+    hasCookie_lw_token: !!(await readCookie("lw_token")),
+    hasCookie_token: !!(await readCookie("token")),
+    hasBodyToken: !!(body?.accessToken || body?.token),
+    hasQueryToken: new URL(req.url).searchParams.has("token"),
+    finalBearerChars: bearer ? bearer.length : 0,
+    sessionId: sessionId ? "[present]" : "MISSING",
+    V1,
   });
 
   if (!bearer) {
@@ -176,7 +194,10 @@ export async function POST(req: NextRequest) {
         debug: {
           authHeader: !!req.headers.get("authorization"),
           xLwAuth: !!req.headers.get("x-lw-auth"),
-          cookieToken: !!(await readCookie("lw_token")),
+          cookie_lw_token: !!(await readCookie("lw_token")),
+          cookie_token: !!(await readCookie("token")),
+          bodyToken: !!(body?.accessToken || body?.token),
+          queryToken: new URL(req.url).searchParams.has("token"),
           sessionId: !!sessionId,
         },
       },
@@ -184,10 +205,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Use the exact V1 endpoint from your Swagger: /v1/auth/submit-user-data
+  /* ---- Upstream request ---- */
   const url = `${V1}/auth/submit-user-data`;
 
-  // Prepare payload exactly matching your V1 Swagger schema
   const payload = {
     firstName: body.firstName,
     lastName: body.lastName,
@@ -195,15 +215,15 @@ export async function POST(req: NextRequest) {
     dob: body.dob,
     ...(body.avatarUrl ? { avatarUrl: body.avatarUrl } : {}),
     ...(body.referralCode ? { referralCode: body.referralCode } : {}),
-    password: body.password || body.pin,
+    password: body.password || body.pin, // align with your Swagger
     gender: body.gender,
     username: body.username,
   };
 
   console.log("=== TOKEN DEBUG ===");
-  console.log("Bearer token first 50 chars:", bearer.substring(0, 50) + "...");
+  console.log("Bearer token (first 50):", bearer.substring(0, 50) + "...");
   console.log(
-    "Bearer token last 20 chars:",
+    "Bearer token (last 20):",
     "..." + bearer.substring(Math.max(0, bearer.length - 20))
   );
   console.log("Token length:", bearer.length);
@@ -227,10 +247,7 @@ export async function POST(req: NextRequest) {
         ])
       ),
     },
-    payload: {
-      ...payload,
-      password: "[REDACTED]",
-    },
+    payload: { ...payload, password: "[REDACTED]" },
   });
 
   const ac = new AbortController();
@@ -261,7 +278,7 @@ export async function POST(req: NextRequest) {
       console.error("V1 request failed details:", {
         status: r.status,
         headers: Object.fromEntries(r.headers.entries()),
-        data: data,
+        data,
       });
     }
 

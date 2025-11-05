@@ -32,6 +32,18 @@ function setSessionCookie(res: NextResponse, sessionId: string) {
   });
 }
 
+function setTokenCookie(res: NextResponse, token: string) {
+  if (!token) return;
+  const secure = process.env.NODE_ENV === "production";
+  res.cookies.set("lw_token", token, {
+    path: "/",
+    sameSite: "lax",
+    httpOnly: true,
+    secure,
+    maxAge: 60 * 60 * 24,
+  });
+}
+
 /** Always normalize to +234XXXXXXXXXX */
 const toE164Plus234 = (raw?: string) => {
   const d = String(raw || "").replace(/\D/g, "");
@@ -56,7 +68,6 @@ const ALLOW_TURNSTILELESS_DEV =
 
 /** Read token from body or headers */
 function readTurnstileToken(req: Request, body: any) {
-  // common header Cloudflare uses on forms is "cf-turnstile-response"
   const hdr =
     req.headers.get("cf-turnstile-response") ||
     req.headers.get("x-turnstile-token") ||
@@ -105,7 +116,6 @@ async function verifyTurnstile(token: string, ip?: string) {
 
 /* ========== handler ========== */
 export async function POST(req: Request) {
-  /* --- DEBUG: env banner --- */
   console.log("=== /api/auth/signup-v2 DEBUG BEGIN ===");
   console.log("env:", {
     NODE_ENV: process.env.NODE_ENV,
@@ -253,9 +263,7 @@ export async function POST(req: Request) {
       break;
     }
     case 3: {
-      const em = String(body?.email || "")
-        .trim()
-        .toLowerCase();
+      const em = String(body?.email || "").trim().toLowerCase();
       if (!em) {
         console.log("[signup] step 3 missing email");
         console.log("=== /api/auth/signup-v2 DEBUG END ===");
@@ -282,9 +290,7 @@ export async function POST(req: Request) {
     }
     case 5: {
       const pn = toE164Plus234(body?.phoneNumber);
-      const em = String(body?.email || "")
-        .trim()
-        .toLowerCase();
+      const em = String(body?.email || "").trim().toLowerCase();
       if (!pn || !em) {
         console.log("[signup] step 5 missing phone/email");
         console.log("=== /api/auth/signup-v2 DEBUG END ===");
@@ -315,6 +321,7 @@ export async function POST(req: Request) {
       step,
       hasSession: !!incomingSession,
     });
+
     const upstream = await fetch(url, {
       method: "POST",
       headers,
@@ -331,31 +338,44 @@ export async function POST(req: Request) {
       data = { message: raw || upstream.statusText };
     }
 
+    // Try to find sessionId and token from upstream
     const headerSession = readHeaderSessionId(upstream.headers);
     const bodySession = data?.sessionId || data?.data?.sessionId || null;
     const finalSession = bodySession || headerSession || incomingSession || "";
 
-    console.log(
-      "[signup] upstream status:",
-      upstream.status,
-      upstream.statusText,
-      {
-        headerSession_len: (headerSession || "").length || 0,
-        bodySession_len: (bodySession || "").length || 0,
-        finalSession_len: finalSession.length || 0,
-      }
-    );
+    // Look for token in common places (body or nested)
+    const bodyToken =
+      data?.token ||
+      data?.accessToken ||
+      data?.data?.token ||
+      data?.data?.accessToken ||
+      data?.result?.token ||
+      data?.result?.accessToken ||
+      "";
 
+    console.log("[signup] upstream status:", upstream.status, upstream.statusText, {
+      headerSession_len: (headerSession || "").length || 0,
+      bodySession_len: (bodySession || "").length || 0,
+      finalSession_len: finalSession.length || 0,
+      hasBodyToken: !!bodyToken,
+    });
+
+    // Build response mirroring upstream but include normalized sessionId and (optionally) token
     const resp = NextResponse.json(
-      { ...data, sessionId: finalSession || undefined },
+      {
+        ...data,
+        sessionId: finalSession || undefined,
+        // Expose token for clients that prefer localStorage; harmless if empty
+        token: bodyToken || undefined,
+      },
       { status: upstream.status }
     );
 
-    // forward any set-cookie headers
+    // Forward any upstream Set-Cookie headers (if backend already sets auth cookies)
     const anyHeaders = upstream.headers as any;
     const setCookies =
       anyHeaders.getSetCookie?.() ||
-      anyHeaders.raw?.()["set-cookie"] ||
+      anyHeaders.raw?.()?.["set-cookie"] ||
       (upstream.headers.get("set-cookie")
         ? [upstream.headers.get("set-cookie")]
         : []);
@@ -363,7 +383,11 @@ export async function POST(req: Request) {
       .filter(Boolean)
       .forEach((c: string) => resp.headers.append("set-cookie", c));
 
+    // Always persist the session cookie for the flow
     if (finalSession) setSessionCookie(resp, finalSession);
+
+    // If backend returned a token in JSON, persist as HttpOnly cookie for later steps
+    if (bodyToken) setTokenCookie(resp, bodyToken);
 
     console.log("=== /api/auth/signup-v2 DEBUG END ===");
     return resp;
