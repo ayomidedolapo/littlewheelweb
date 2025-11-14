@@ -7,66 +7,7 @@ const clean = (s = "") => s.replace(/\/+$/, "");
 const V1 = clean(process.env.BACKEND_API_URL || "");
 const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS ?? 45000);
 
-/* ---------- Turnstile config ---------- */
-const TURNSTILE_SECRET = (process.env.TURNSTILE_SECRET_KEY || "").trim();
-const TURNSTILE_VERIFY_URL =
-  "https://challenges.cloudflare.com/turnstile/v0/siteverify";
-/* ---------- /Turnstile config ---------- */
-
 /* -------------------- Helpers -------------------- */
-function readClientIp(req: NextRequest) {
-  const cf = req.headers.get("CF-Connecting-IP");
-  if (cf) return cf;
-  const xff =
-    req.headers.get("X-Forwarded-For") || req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0].trim();
-  const xr = req.headers.get("x-real-ip");
-  if (xr) return xr;
-  return "";
-}
-
-function readTurnstileToken(body: any) {
-  return (
-    String(
-      body?.captchaToken ||
-        body?.turnstileToken ||
-        body?.["cf-turnstile-response"] ||
-        ""
-    ).trim() || ""
-  );
-}
-
-async function verifyTurnstile(token: string, ip?: string) {
-  if (!TURNSTILE_SECRET) {
-    return { ok: false, reason: "Missing TURNSTILE_SECRET_KEY env" as const };
-  }
-  try {
-    const res = await fetch(TURNSTILE_VERIFY_URL, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        secret: TURNSTILE_SECRET,
-        response: token,
-        ...(ip ? { remoteip: ip } : {}),
-        idempotency_key:
-          (globalThis as any).crypto?.randomUUID?.() ??
-          `${Date.now()}-${Math.random()}`,
-      }),
-    });
-    const json = await res.json().catch(() => ({}));
-    if (json?.success) return { ok: true as const, data: json };
-    return {
-      ok: false as const,
-      data: json,
-      reason: Array.isArray(json?.["error-codes"])
-        ? json["error-codes"].join(",")
-        : "turnstile-failed",
-    };
-  } catch (e: any) {
-    return { ok: false as const, reason: e?.message || "turnstile-error" };
-  }
-}
-
 async function readCookie(name: string) {
   try {
     const store = await cookies();
@@ -107,6 +48,18 @@ async function readBearer(req: NextRequest, body: any) {
   return header || altHdr || bodyTok || queryTok || cookieTok || "";
 }
 
+/** Extract Turnstile token from any of the common fields */
+function readTurnstileToken(body: any) {
+  return (
+    String(
+      body?.captchaToken ||
+        body?.turnstileToken ||
+        body?.["cf-turnstile-response"] ||
+        ""
+    ).trim() || ""
+  );
+}
+
 export async function POST(req: NextRequest) {
   console.log("=== SUBMIT USER DATA ROUTE DEBUG ===");
 
@@ -128,7 +81,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  /* ---- Turnstile enforcement ---- */
+  /* ---- Turnstile: presence check ONLY, V1 will verify ---- */
   const tokenTs = readTurnstileToken(body);
   if (!tokenTs) {
     return NextResponse.json(
@@ -136,34 +89,6 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
-
-  const ip = readClientIp(req);
-  const verdict = await verifyTurnstile(tokenTs, ip);
-  if (!verdict.ok) {
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Turnstile verification failed",
-        details: verdict.data ?? verdict.reason ?? "unknown",
-      },
-      { status: 403 }
-    );
-  }
-
-  // Optional hardening if you set <Turnstile action="signup_details" />
-  // const { action, hostname } = verdict.data || {};
-  // if (action !== "signup_details") {
-  //   return NextResponse.json(
-  //     { success: false, message: "Unexpected Turnstile action" },
-  //     { status: 403 }
-  //   );
-  // }
-  // if (hostname && !hostname.endsWith("littlewheel.app")) {
-  //   return NextResponse.json(
-  //     { success: false, message: "Unexpected Turnstile hostname" },
-  //     { status: 403 }
-  //   );
-  // }
 
   /* ---- Bearer/session handling ---- */
   const bearer = await readBearer(req, body);
@@ -218,6 +143,11 @@ export async function POST(req: NextRequest) {
     password: body.password || body.pin, // align with your Swagger
     gender: body.gender,
     username: body.username,
+
+    // 🔑 Forward the Turnstile token so V1 can verify it
+    "cf-turnstile-response": tokenTs,
+    captchaToken: tokenTs,
+    turnstileToken: tokenTs,
   };
 
   console.log("=== TOKEN DEBUG ===");

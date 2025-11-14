@@ -11,7 +11,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "ui": "shadcn add"
+    "ui": "shadcn add",
+"dev:trace": "node --trace-warnings ./node_modules/.bin/next dev"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.0.1",
