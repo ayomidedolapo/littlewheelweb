@@ -6,24 +6,25 @@ const isProd = process.env.NODE_ENV === "production";
 const API_V1 = "https://api.littlewheel.app";
 const API_DEV = "https://dev-api.insider.littlewheel.app";
 
+// CSP without Cloudflare Turnstile, now allowing Google reCAPTCHA + YouTube
 const csp = [
   "default-src 'self'",
   "base-uri 'self'",
   "form-action 'self'",
 
-  // Scripts (Turnstile + YouTube player bits)
-  "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com https://www.gstatic.com",
+  // Scripts (Google reCAPTCHA + YouTube player bits)
+  "script-src 'self' 'unsafe-inline' https://www.google.com https://www.gstatic.com https://www.youtube.com https://www.youtube-nocookie.com",
 
-  // Iframes
-  "frame-src https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com",
+  // Iframes (reCAPTCHA & YouTube)
+  "frame-src https://www.google.com https://www.gstatic.com https://www.youtube.com https://www.youtube-nocookie.com",
   // Some Safari versions still use child-src for iframes
-  "child-src https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com",
+  "child-src https://www.google.com https://www.gstatic.com https://www.youtube.com https://www.youtube-nocookie.com",
 
   // XHR/fetch from your app
-  `connect-src 'self' https://challenges.cloudflare.com ${API_V1} ${API_DEV} https://www.youtube.com https://www.youtube-nocookie.com https://www.gstatic.com`,
+  `connect-src 'self' ${API_V1} ${API_DEV} https://www.youtube.com https://www.youtube-nocookie.com https://www.gstatic.com https://www.google.com`,
 
-  // Images (add YouTube thumbs)
-  "img-src 'self' data: blob: https://i.ytimg.com https://img.youtube.com",
+  // Images (YouTube thumbs + possible Google assets)
+  "img-src 'self' data: blob: https://i.ytimg.com https://img.youtube.com https://www.gstatic.com",
 
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:",
@@ -52,9 +53,12 @@ const nextConfig: NextConfig = {
           ...(isProd ? [{ key: "Content-Security-Policy", value: csp }] : []),
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "X-Frame-Options", value: "SAMEORIGIN" }, // fine; this is for others embedding *your* site
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
           { key: "X-XSS-Protection", value: "0" },
-          { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=(), interest-cohort=()" },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(self), microphone=(), geolocation=(), interest-cohort=()",
+          },
         ],
       },
     ];

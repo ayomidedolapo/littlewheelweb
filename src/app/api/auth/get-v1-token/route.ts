@@ -2,12 +2,13 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
-export async function POST(req: Request) {
+export async function POST() {
   console.log("=== GET V1 TOKEN (cookie-only) ===");
 
   // 0) Return HttpOnly token if we already have it
   try {
-    const jar = cookies();
+    const jar = await cookies(); // ⬅️ FIX: await cookies()
+
     const cookieToken =
       jar.get("lw_token")?.value ||
       jar.get("lw_auth")?.value ||

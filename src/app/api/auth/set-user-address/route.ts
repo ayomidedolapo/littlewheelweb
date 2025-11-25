@@ -1,23 +1,19 @@
 // app/api/auth/set-user-address/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 
-const BASE_V1 = (process.env.BACKEND_API_URL || "https://dev-api.insider.littlewheel.app/v1").replace(/\/+$/, "");
+const clean = (s = "") => s.replace(/\/+$/, "");
+const V1 = clean(process.env.BACKEND_API_URL || ""); // e.g. https://dev-api.insider.littlewheel.app/v1
 const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS ?? 45000);
 
-/** Read Turnstile token from headers or body (presence check only) */
-function readTurnstileToken(req: NextRequest, body: any) {
-  const hdr =
-    req.headers.get("cf-turnstile-response") ||
-    req.headers.get("x-turnstile-token") ||
-    "";
-  const inBody =
-    String(
-      body?.captchaToken ||
-        body?.turnstileToken ||
-        body?.["cf-turnstile-response"] ||
-        ""
-    ).trim() || "";
-  return (hdr || "").trim() || inBody;
+/* ---- helpers ---- */
+async function readCookie(name: string) {
+  try {
+    const jar = await cookies();
+    return jar.get(name)?.value || "";
+  } catch {
+    return "";
+  }
 }
 
 function jsonSafe(text: string) {
@@ -28,75 +24,87 @@ function jsonSafe(text: string) {
   }
 }
 
+/* ---- ONLY signup token is allowed ---- */
+async function readBearer(req: NextRequest, body: any) {
+  const header = (req.headers.get("authorization") || "")
+    .replace(/^Bearer\s+/i, "")
+    .trim();
+
+  const alt = (req.headers.get("x-lw-auth") || "")
+    .replace(/^Bearer\s+/i, "")
+    .trim();
+
+  const bodyTok = String(body?.accessToken || body?.token || "").trim();
+  const queryTok = new URL(req.url).searchParams.get("token") || "";
+
+  // signup token from our create page
+  const signupCookie = await readCookie("lw_signup_token");
+  const regularCookie = await readCookie("lw_token");
+
+  return header || alt || bodyTok || queryTok || signupCookie || regularCookie || "";
+}
+
 export async function POST(req: NextRequest) {
+  if (!V1) {
+    return NextResponse.json(
+      { success: false, message: "Missing BACKEND_API_URL" },
+      { status: 500 }
+    );
+  }
+
   let body: any = {};
   try {
     body = await req.json();
   } catch {
     return NextResponse.json(
-      { success: false, message: "Invalid JSON body" },
+      { success: false, message: "Invalid JSON" },
       { status: 400 }
     );
   }
 
-  // ✅ Only check that a Turnstile token is present; V1 will verify it
-  const tsToken = readTurnstileToken(req, body);
-  if (!tsToken) {
+  const bearer = await readBearer(req, body);
+  if (!bearer) {
     return NextResponse.json(
-      { success: false, message: "Missing Turnstile token" },
-      { status: 400 }
-    );
-  }
-
-  // Keep only expected fields + forward captcha token for V1
-  const payload = {
-    country: body?.country ?? "",
-    state: body?.state ?? "",
-    city: body?.city ?? "",
-    lga: body?.lga ?? body?.localGovernment ?? "",
-    address: body?.address ?? "",
-
-    // 🔑 forward Turnstile token so V1 can verify it
-    "cf-turnstile-response": tsToken,
-    captchaToken: tsToken,
-    turnstileToken: tsToken,
-  };
-
-  // Auth: Authorization > x-lw-auth > cookies
-  const authHeader = (req.headers.get("authorization") || "")
-    .replace(/^Bearer\s+/i, "")
-    .trim();
-  const altHeader = (req.headers.get("x-lw-auth") || "")
-    .replace(/^Bearer\s+/i, "")
-    .trim();
-  const cookieToken =
-    req.cookies.get("lw_token")?.value ||
-    req.cookies.get("lw_auth")?.value ||
-    "";
-  const token = authHeader || altHeader || cookieToken;
-
-  if (!token) {
-    return NextResponse.json(
-      { success: false, message: "Unauthorized: missing token" },
+      { success: false, message: "Missing signup Bearer token" },
       { status: 401 }
     );
   }
 
-  const sessionId = req.headers.get("x-session-id") || body?.sessionId || "";
+  const sessionId =
+    body?.sessionId ||
+    req.headers.get("x-session-id") ||
+    (await readCookie("lw_signup_session")) ||
+    "";
 
-  const url = `${BASE_V1}/auth/set-user-address`;
+  const deviceToken =
+    body?.deviceToken || (await readCookie("lw_device_token")) || "";
+
+  // 🔥 Mirror Swagger payload exactly + session/device
+  const payload = {
+    country: body.country,
+    state: body.state,
+    city: body.city,
+    lga: body.lga,
+    address: body.address,
+    ...(sessionId ? { sessionId } : {}),
+    ...(deviceToken ? { deviceToken } : {}),
+  };
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${bearer}`,
+    ...(sessionId ? { "x-session-id": sessionId } : {}),
+    ...(deviceToken ? { "x-device-token": deviceToken } : {}),
+  };
+
+  const url = `${V1}/auth/set-user-address`;
   const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort("timeout"), TIMEOUT_MS);
+  const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
 
   try {
     const r = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: `Bearer ${token}`,
-        ...(sessionId ? { "x-session-id": sessionId } : {}),
-      },
+      headers,
       body: JSON.stringify(payload),
       cache: "no-store",
       signal: ac.signal,
@@ -105,19 +113,12 @@ export async function POST(req: NextRequest) {
     const text = await r.text();
     const data = jsonSafe(text);
 
-    // Bubble up upstream status verbatim so client can branch on 401/403/etc.
+    // 👇 IMPORTANT: forward upstream status instead of forcing 502
     return NextResponse.json(data, { status: r.status });
   } catch (e: any) {
-    const aborted = e?.name === "AbortError" || e === "timeout";
     return NextResponse.json(
-      {
-        success: false,
-        message: aborted
-          ? `Upstream timeout after ${TIMEOUT_MS}ms`
-          : "Upstream error",
-        upstream: e?.message || String(e),
-      },
-      { status: aborted ? 504 : 502 }
+      { success: false, message: e?.message || "Upstream error" },
+      { status: 502 }
     );
   } finally {
     clearTimeout(timer);

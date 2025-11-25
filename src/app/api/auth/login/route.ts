@@ -3,16 +3,22 @@ import { NextRequest, NextResponse } from "next/server";
 
 /** ===== Upstream API Base ===== */
 const BASE_V1 =
-  (process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_V1 || "https://dev-api.insider.littlewheel.app/v1")
-    .replace(/\/+$/, ""); // strip trailing slash
+  (process.env.BACKEND_API_URL ||
+    process.env.NEXT_PUBLIC_API_V1 ||
+    "https://dev-api.insider.littlewheel.app/v1"
+  ).replace(/\/+$/, ""); // strip trailing slash
 
-/** ===== Turnstile config ===== */
-const TURNSTILE_SECRET = (process.env.TURNSTILE_SECRET_KEY || "").trim();
-const TURNSTILE_VERIFY_URL =
-  "https://challenges.cloudflare.com/turnstile/v0/siteverify";
+/** ===== reCAPTCHA config ===== */
+const RECAPTCHA_SECRET = (process.env.RECAPTCHA_SECRET_KEY || "").trim();
+const RECAPTCHA_VERIFY_URL =
+  "https://www.google.com/recaptcha/api/siteverify";
 
-/** Allow missing Turnstile token in dev if true */
-const ALLOW_DEV_WITHOUT_TURNSTILE =
+/**
+ * Allow missing captcha token in dev if true.
+ * Reuse same env flag name you already use:
+ *   ALLOW_TURNSTILELESS_DEV=true
+ */
+const ALLOW_DEV_WITHOUT_CAPTCHA =
   (process.env.ALLOW_TURNSTILELESS_DEV || "").toLowerCase() === "true";
 
 /* ---------- utility helpers ---------- */
@@ -37,45 +43,49 @@ function readClientIp(req: NextRequest) {
   if (xr) return xr;
   return "";
 }
-function readTurnstileToken(body: any) {
+
+/** Read captcha token from body (support multiple possible field names) */
+function readCaptchaToken(body: any) {
   return (
     String(
-      body?.captchaToken ||
-        body?.turnstileToken ||
-        body?.["cf-turnstile-response"] ||
+      body?.recaptchaToken || // what our login page sends
+        body?.captchaToken ||
+        body?.token ||
         ""
     ).trim() || ""
   );
 }
 
-async function verifyTurnstile(token: string, ip?: string) {
-  if (!TURNSTILE_SECRET) {
-    return { ok: false as const, reason: "Missing TURNSTILE_SECRET_KEY env" };
+async function verifyRecaptcha(token: string, ip?: string) {
+  if (!RECAPTCHA_SECRET) {
+    return { ok: false as const, reason: "Missing RECAPTCHA_SECRET_KEY env" };
   }
+
   try {
-    const body = new URLSearchParams({
-      secret: TURNSTILE_SECRET,
+    const params = new URLSearchParams({
+      secret: RECAPTCHA_SECRET,
       response: token,
       ...(ip ? { remoteip: ip } : {}),
     });
 
-    const res = await fetch(TURNSTILE_VERIFY_URL, {
+    const res = await fetch(RECAPTCHA_VERIFY_URL, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
-      body,
+      body: params,
     });
 
     const json = await res.json().catch(() => ({}));
     if (json?.success) return { ok: true as const, data: json };
+
     return {
       ok: false as const,
       data: json,
       reason: Array.isArray(json?.["error-codes"])
         ? json["error-codes"].join(",")
-        : "turnstile-failed",
+        : "recaptcha-failed",
     };
   } catch (e: any) {
-    return { ok: false as const, reason: e?.message || "turnstile-error" };
+    return { ok: false as const, reason: e?.message || "recaptcha-error" };
   }
 }
 
@@ -85,41 +95,42 @@ export async function POST(req: NextRequest) {
   console.log("=== /api/auth/login DEBUG BEGIN ===");
   console.log("env:", {
     NODE_ENV: process.env.NODE_ENV,
-    ALLOW_TURNSTILELESS_DEV: ALLOW_DEV_WITHOUT_TURNSTILE,
-    TURNSTILE_SECRET_present: !!TURNSTILE_SECRET,
+    ALLOW_DEV_WITHOUT_CAPTCHA: ALLOW_DEV_WITHOUT_CAPTCHA,
+    RECAPTCHA_SECRET_present: !!RECAPTCHA_SECRET,
     BASE_V1,
   });
 
   try {
     const body = await req.json().catch(() => ({} as any));
     const { phoneNumber, password, deviceToken } = body || {};
-    const tsToken = readTurnstileToken(body);
+    const captchaToken = readCaptchaToken(body);
     const ip = readClientIp(req);
 
     console.log("incoming:", {
       phoneNumber_masked: maskPhone(phoneNumber),
       password_len: password ? String(password).length : 0,
       deviceToken_len: deviceToken ? String(deviceToken).length : 0,
-      hasTurnstileToken: !!tsToken,
+      hasCaptchaToken: !!captchaToken,
+      captchaToken_len: safeStrLen(captchaToken),
       clientIp: ip || "(none)",
     });
 
-    /** Turnstile verification */
-    if (!tsToken) {
-      if (isProd || !ALLOW_DEV_WITHOUT_TURNSTILE) {
-        console.warn("[login] Missing Turnstile token → rejecting");
+    /** reCAPTCHA verification */
+    if (!captchaToken) {
+      if (isProd || !ALLOW_DEV_WITHOUT_CAPTCHA) {
+        console.warn("[login] Missing reCAPTCHA token → rejecting");
         console.log("=== /api/auth/login DEBUG END ===");
         return NextResponse.json(
-          { success: false, message: "Missing Turnstile token" },
+          { success: false, message: "Missing reCAPTCHA token" },
           { status: 400 }
         );
       } else {
-        console.warn("[login] Skipping Turnstile in dev mode");
+        console.warn("[login] Skipping reCAPTCHA in dev mode");
       }
     } else {
-      const verdict = await verifyTurnstile(tsToken, ip);
+      const verdict = await verifyRecaptcha(captchaToken, ip);
       if (!verdict.ok) {
-        console.warn("[login] Turnstile verify FAILED:", {
+        console.warn("[login] reCAPTCHA verify FAILED:", {
           reason: verdict.reason,
           data: verdict.data,
         });
@@ -127,7 +138,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            message: "Turnstile verification failed",
+            message: "reCAPTCHA verification failed",
             details: verdict.data ?? verdict.reason ?? "unknown",
           },
           { status: 403 }

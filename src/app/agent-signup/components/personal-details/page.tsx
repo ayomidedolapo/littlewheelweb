@@ -15,172 +15,25 @@ import {
   Camera as CameraIcon,
   X,
   RotateCcw,
-  Info,
 } from "lucide-react";
 import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 
 const NEXT_STEP_ROUTE = "/agent-signup/components/address";
 const SKEY = { SESSION_ID: "lw_flow_sessionId" };
 
-/* ===== Turnstile (invisible primary + visible fallback) ===== */
-const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
-
-declare global {
-  interface Window {
-    turnstile?: {
-      render: (el: Element, opts: any) => string;
-      execute: (widgetIdOrEl?: string | Element, opts?: any) => void;
-      reset: (widgetIdOrEl?: string | Element) => void;
-      remove: (widgetIdOrEl?: string | Element) => void;
-      getResponse?: (widgetIdOrEl?: string | Element) => string | null;
-    };
-  }
-}
-
-function ensureTurnstileScript(): Promise<void> {
-  return new Promise((resolve) => {
-    if (typeof window === "undefined") return resolve();
-    const w = window as any;
-    if (w.turnstile && typeof w.turnstile.render === "function") return resolve();
-
-    const existing = document.querySelector<HTMLScriptElement>('script[data-lw="turnstile"]');
-    if (existing) {
-      existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener("error", () => resolve(), { once: true });
-      return;
-    }
-    const s = document.createElement("script");
-    s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
-    s.async = true;
-    s.defer = true;
-    s.setAttribute("data-lw", "turnstile");
-    s.onload = () => resolve();
-    s.onerror = () => resolve();
-    document.head.appendChild(s);
-  });
-}
-
-function useStableInvisibleWidget() {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const widgetIdRef = useRef<string | null>(null);
-
-  async function render() {
-    const div = containerRef.current;
-    if (!div) return null;
-    await ensureTurnstileScript();
-    const w = window as any;
-    if (!w.turnstile?.render) return null;
-    if (widgetIdRef.current) return widgetIdRef.current; // stable across renders
-
-    const id = w.turnstile.render(div, {
-      sitekey: TURNSTILE_SITE_KEY,
-      size: "invisible",
-      retry: "auto",
-      "error-callback": () => ((div as any).__tsError = true),
-      "timeout-callback": () => ((div as any).__tsTimeout = true),
-      "unsupported-callback": () => ((div as any).__tsUnsupported = true),
-    });
-    widgetIdRef.current = id;
-    return id;
-  }
-
-  function reset() {
-    const w = window as any;
-    if (widgetIdRef.current && w.turnstile?.reset) {
-      w.turnstile.reset(widgetIdRef.current);
-    }
-  }
-
-  async function execute(action: string, tries = 2) {
-    const w = window as any;
-    const wid = await render();
-    if (!wid || !w.turnstile?.execute) return null;
-
-    for (let i = 0; i < tries; i++) {
-      const token: string | null = await new Promise((resolve) => {
-        let settled = false;
-        const t = setTimeout(() => {
-          if (!settled) {
-            settled = true;
-            resolve(null);
-          }
-        }, 8000);
-        try {
-          w.turnstile.execute(wid, {
-            action,
-            callback: (tok: string) => {
-              if (!settled) {
-                settled = true;
-                clearTimeout(t);
-                resolve(typeof tok === "string" && tok ? tok : null);
-              }
-            },
-            "error-callback": () => {
-              if (!settled) {
-                settled = true;
-                clearTimeout(t);
-                resolve(null);
-              }
-            },
-          });
-        } catch {
-          clearTimeout(t);
-          resolve(null);
-        }
-      });
-      if (token) return token;
-      // ensure a fresh run next attempt
-      reset();
-      await new Promise((r) => setTimeout(r, 300));
-    }
-    return null;
-  }
-
-  return { containerRef, execute, reset };
-}
-
-async function renderVisibleTurnstile(
-  div: HTMLDivElement | null,
-  onToken: (tok: string) => void
-) {
-  if (!div) return;
-  await ensureTurnstileScript();
-  const w = window as any;
-  if (!w.turnstile?.render) return;
-
-  try {
-    const existingId = div.getAttribute("data-widgetid");
-    if (existingId && w.turnstile.remove) {
-      w.turnstile.remove(existingId);
-      div.removeAttribute("data-widgetid");
-    }
-  } catch {}
-
-  const id = w.turnstile.render(div, {
-    sitekey: TURNSTILE_SITE_KEY,
-    size: "normal",
-    appearance: "interaction-only",
-    callback: (tok: string) => {
-      if (typeof tok === "string" && tok) onToken(tok);
-    },
-    "error-callback": () => {},
-    "timeout-callback": () => {},
-  });
-  div.setAttribute("data-widgetid", id);
-}
-/* ===== /Turnstile ===== */
-
 function getCookie(name: string) {
   if (typeof document === "undefined") return "";
   const m = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
   return m ? decodeURIComponent(m[2]) : "";
 }
+
 function todayISO() {
   const d = new Date();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${d.getFullYear()}-${m}-${day}`;
 }
+
 const onlyDigits = (v: string) => v.replace(/\D/g, "");
 const isValidUsername = (v: string) => /^[a-zA-Z0-9._-]{3,32}$/.test(v.trim());
 
@@ -188,19 +41,10 @@ function PersonalDetailsInner() {
   const router = useRouter();
   const sp = useSearchParams();
 
-  // Invisible Turnstile (stable)
-  const { containerRef: tsInvisibleRef, execute: execInvisible, reset: resetInvisible } =
-    useStableInvisibleWidget();
-
-  // Visible fallback
-  const tsVisibleRef = useRef<HTMLDivElement | null>(null);
-  const tsManualTokenRef = useRef<string | null>(null);
-  const [tsFallbackVisible, setTsFallbackVisible] = useState(false);
-  const autoSubmittingRef = useRef(false);
-
-  // ---- session/token detection (coming from Create step) ----
+  // ---- session/token/device detection (coming from Create step) ----
   const [sessionId, setSessionId] = useState("");
   const [bearerToken, setBearerToken] = useState("");
+  const [deviceToken, setDeviceToken] = useState("");
   const [authBanner, setAuthBanner] = useState<string | null>(null);
 
   useEffect(() => {
@@ -214,6 +58,7 @@ function PersonalDetailsInner() {
     if (!sid && cookieSid) sid = cookieSid;
     setSessionId(sid);
 
+    // token minted from /v2/auth/signup
     let tok = getCookie("lw_token") || "";
     if (!tok) {
       try {
@@ -222,17 +67,21 @@ function PersonalDetailsInner() {
     }
     setBearerToken(tok);
 
+    // deviceToken from create step (try cookie, localStorage, sessionStorage)
+    let dt = getCookie("lw_device_token") || "";
+    try {
+      dt =
+        dt ||
+        localStorage.getItem("lw_device_token") ||
+        sessionStorage.getItem("lw_device_token") ||
+        "";
+    } catch {}
+    setDeviceToken(dt);
+
     if (!sid && !tok) {
       setAuthBanner("Missing signup session/token. Please verify your phone again.");
     }
   }, [sp]);
-
-  // Pre-render invisible Turnstile ASAP (keep container mounted)
-  useEffect(() => {
-    ensureTurnstileScript().then(() => {
-      // render happens lazily inside execInvisible; container must exist
-    });
-  }, []);
 
   // ---- form state ----
   const [firstName, setFirstName] = useState("");
@@ -406,7 +255,7 @@ function PersonalDetailsInner() {
       const localStorageToken = localStorage.getItem("lw_token") || "";
       actualToken = bearerToken || cookieToken || localStorageToken || "";
       if (!actualToken && sessionId) {
-        // optional: bridge sessionId -> token
+        // optional helper: but only returns cookie token if already set
         try {
           const tokenResp = await fetch("/api/auth/get-v1-token", {
             method: "POST",
@@ -432,56 +281,17 @@ function PersonalDetailsInner() {
       return;
     }
 
-    if (!TURNSTILE_SITE_KEY) {
-      setError("Human verification is required but no Turnstile site key is configured.");
-      setSaving(false);
-      return;
-    }
-
-    // 1) Use any manual token (from fallback) if present
-    let captchaToken = tsManualTokenRef.current || null;
-
-    // 2) Otherwise, try invisible execute (fresh token per attempt)
-    if (!captchaToken) {
-      captchaToken = await execInvisible("signup_details", 2);
-    }
-
-    // 3) If still missing, show visible fallback at bottom-right + neutral guidance
-    if (!captchaToken) {
-      setTsFallbackVisible(true);
-      try {
-        await renderVisibleTurnstile(tsVisibleRef.current, (tok) => {
-          tsManualTokenRef.current = tok;
-          setError(null);
-          // Auto-resubmit once when token arrives
-          if (!autoSubmittingRef.current) {
-            autoSubmittingRef.current = true;
-            setTimeout(() => {
-              saveAndContinue().finally(() => (autoSubmittingRef.current = false));
-            }, 0);
-          }
-        });
-      } catch {}
-      setError(
-        "Hang tight — a verification widget is now available. Please verify, then tap “Save and continue” to proceed."
-      );
-      setSaving(false);
-      return;
-    }
-
     const payloadBase: Record<string, any> = {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       middleName: middleName.trim(),
       dob,
       referralCode: referralCode.trim() || undefined,
-      password: pin, // V1 expects 'password'
+      password: pin, // backend expects 'password'
       gender,
       username: username.trim(),
       ...(sessionId ? { sessionId } : {}),
-      // Both keys supported
-      "cf-turnstile-response": captchaToken,
-      captchaToken,
+      ...(deviceToken ? { deviceToken } : {}),
     };
 
     if (avatarDataUrl) payloadBase.avatarUrl = avatarDataUrl;
@@ -491,6 +301,7 @@ function PersonalDetailsInner() {
       ...(sessionId ? { "x-session-id": sessionId } : {}),
       Authorization: `Bearer ${actualToken}`,
       "x-lw-auth": actualToken,
+      ...(deviceToken ? { "x-device-token": deviceToken } : {}),
     };
 
     try {
@@ -510,10 +321,6 @@ function PersonalDetailsInner() {
         json = { message: raw };
       }
 
-      // Single-use token: clear manual + reset invisible for next attempts
-      tsManualTokenRef.current = null;
-      resetInvisible();
-
       if (!res.ok || json?.success === false) {
         const msg =
           json?.message ||
@@ -521,8 +328,6 @@ function PersonalDetailsInner() {
           json?.error ||
           (res.status === 401
             ? "Unauthorized - token may be invalid or expired"
-            : res.status === 403
-            ? "Verification failed. Please try again."
             : "Failed to save details");
 
         if (res.status === 401) {
@@ -545,10 +350,6 @@ function PersonalDetailsInner() {
 
       router.push(NEXT_STEP_ROUTE);
     } catch (e: any) {
-      // ensure next attempt gets a fresh token
-      tsManualTokenRef.current = null;
-      resetInvisible();
-
       setError(e?.message || "Network error. Please try again.");
       setSaving(false);
     }
@@ -557,23 +358,6 @@ function PersonalDetailsInner() {
   return (
     <div className="min-h-screen bg-white flex items-center justify-center p-0 md:p-4">
       <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-2xl md:shadow-xl overflow-hidden flex flex-col">
-        {/* Invisible Turnstile holder — off-screen but NOT display:none */}
-        <div
-          aria-hidden
-          style={{
-            position: "absolute",
-            width: 0,
-            height: 0,
-            overflow: "hidden",
-            pointerEvents: "none",
-            opacity: 0,
-            left: "-9999px",
-            top: 0,
-          }}
-        >
-          <div ref={tsInvisibleRef} />
-        </div>
-
         {/* Header */}
         <div className="flex items-center justify-between px-4 pt-6 pb-2">
           <button onClick={goBack} className="flex items-center text-gray-700 hover:text-gray-900">
@@ -585,7 +369,9 @@ function PersonalDetailsInner() {
 
         <div className="px-4">
           <h1 className="text-[22px] font-extrabold text-gray-900">You are almost done!</h1>
-          <p className="text-[13px] text-gray-600 mt-1">We need a few details to set things up just right for you.</p>
+          <p className="text-[13px] text-gray-600 mt-1">
+            We need a few details to set things up just right for you.
+          </p>
 
           {authBanner && (
             <div className="mt-3 rounded-xl border border-yellow-200 bg-yellow-50 p-3 text-[12px] text-yellow-900">
@@ -722,7 +508,9 @@ function PersonalDetailsInner() {
             />
           </div>
           {!isValidUsername(username) && username.length > 0 && (
-            <p className="mt-1 text-[12px] text-rose-600">3–32 chars; letters, numbers, dot, underscore, or hyphen.</p>
+            <p className="mt-1 text-[12px] text-rose-600">
+              3–32 chars; letters, numbers, dot, underscore, or hyphen.
+            </p>
           )}
 
           {/* Referral (optional) */}
@@ -773,19 +561,6 @@ function PersonalDetailsInner() {
             Password must be <span className="font-semibold">five numbers</span>
           </p>
 
-          {/* Neutral inline hint appears only when fallback is on (copy kept concise) */}
-          {tsFallbackVisible && (
-            <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-3">
-              <p className="text-[12px] text-gray-800 flex gap-2 items-start">
-                <Info className="w-4 h-4 mt-0.5 shrink-0" />
-                <span>
-                  A quick verification is required — please solve the widget (bottom-right), then tap{" "}
-                  <span className="font-semibold">Save and continue</span>.
-                </span>
-              </p>
-            </div>
-          )}
-
           {error && (
             <p className="text-[12px] text-rose-600 mt-3" role="alert" aria-live="assertive">
               {error}
@@ -801,7 +576,7 @@ function PersonalDetailsInner() {
               <span className="text-gray-600">4/5</span>
             </div>
             <div className="h-1.5 w-full rounded-full bg-gray-200 overflow-hidden">
-              <div className="h-full bg-black rounded-full" style={{ width: "80%" }} />
+              <div className="h-full bg-green-600 rounded-full" style={{ width: "70%" }} />
             </div>
           </div>
 
@@ -823,24 +598,6 @@ function PersonalDetailsInner() {
           </button>
         </div>
       </div>
-
-      {/* Bottom-right visible Turnstile widget (appears only on fallback) */}
-      {tsFallbackVisible && (
-        <div
-          className="fixed right-3 bottom-3 z-[1000] w-[min(360px,92vw)] rounded-xl border border-gray-200 bg-white shadow-lg"
-          role="region"
-          aria-label="Human verification"
-        >
-          <div className="p-3">
-            <p className="text-[12px] text-gray-800">
-              Please verify you’re human below. A new token will be generated for this step.
-            </p>
-          </div>
-          <div className="px-3 pb-3">
-            <div ref={tsVisibleRef} />
-          </div>
-        </div>
-      )}
 
       {/* Camera Modal */}
       {cameraOpen && (

@@ -10,45 +10,12 @@ import {
   Mail as MailIcon,
   CheckCircle2,
 } from "lucide-react";
-import Script from "next/script";
 import LogoSpinner from "../../../../components/loaders/LogoSpinner";
+import { ReCaptcha } from "../../../../../components/ReCaptcha"; // new import
 
 /** Routes */
 const LOGIN_ROUTE = "/agent-login";
 const NEXT_STEP_ROUTE = "/agent-signup/components/personal-details";
-
-/** ---------- Turnstile (managed visible widget) ---------- */
-const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
-
-declare global {
-  interface Window {
-    turnstile?: {
-      getResponse: (el?: Element | string) => string | null;
-      execute: (el?: Element | string) => void;
-      reset: (el?: Element | string) => void;
-    };
-  }
-}
-
-/** Grab token from the visible managed widget.
- * If the user hasn't solved it yet, this will return null.
- */
-async function getManagedTurnstileToken(
-  widgetSelector = "#ts-signup"
-): Promise<string | null> {
-  const el = document.querySelector(widgetSelector) as HTMLElement | null;
-  if (!el) {
-    console.error("[turnstile] widget element not found:", widgetSelector);
-    return null;
-  }
-  try {
-    const t = window.turnstile?.getResponse?.(el) ?? null;
-    return t && typeof t === "string" ? t : null;
-  } catch {
-    return null;
-  }
-}
-/** ---------- /Turnstile ---------- */
 
 /** Helpers */
 const digitsOnly = (s: string) => s.replace(/\D/g, "");
@@ -115,14 +82,24 @@ function getToken(data: any): string | null {
 function persistToken(tok: string | null | undefined) {
   if (!tok) return;
   try {
+    // Local storage (for client-side reads)
     localStorage.setItem("lw_token", tok);
+
+    // Non-HttpOnly cookies that the browser can see
     document.cookie = `lw_token=${encodeURIComponent(
+      tok
+    )}; Path=/; SameSite=Lax`;
+    document.cookie = `lw_auth=${encodeURIComponent(
+      tok
+    )}; Path=/; SameSite=Lax`;
+    // 🔑 Signup-specific cookie so /api/auth/submit-user-data can read it
+    document.cookie = `lw_signup_token=${encodeURIComponent(
       tok
     )}; Path=/; SameSite=Lax`;
   } catch {}
 }
 
-/** optional bridge */
+/** optional bridge (unchanged) */
 async function bridgeV1Token(e164: string, otp: string) {
   try {
     const r = await fetch("/api/auth/bridge-v1-token", {
@@ -202,6 +179,9 @@ export default function CreateExactDualOTP() {
       return "";
     }
   });
+
+  /** reCAPTCHA token */
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
   /** states */
   const [pageError, setPageError] = useState<string | null>(null);
@@ -297,8 +277,13 @@ export default function CreateExactDualOTP() {
 
     setSending(true);
 
-    // ✅ Read token from visible Turnstile widget
-    const captchaToken = await getManagedTurnstileToken("#ts-signup");
+    // 🔒 Require reCAPTCHA in production before sending phone OTP
+    if (process.env.NODE_ENV === "production" && !captchaToken) {
+      setSending(false);
+      setPState("error");
+      setPageError("Please confirm you’re not a robot.");
+      return;
+    }
 
     const payload: any = {
       step: 1,
@@ -308,8 +293,8 @@ export default function CreateExactDualOTP() {
       role: "AGENT",
       mode: "SELF_CREATED",
       deviceToken,
-      ...(captchaToken ? { captchaToken } : {}),
       ...(sessionId ? { sessionId } : {}),
+      ...(captchaToken ? { recaptchaToken: captchaToken } : {}),
     };
 
     setPState("sending");
@@ -340,14 +325,10 @@ export default function CreateExactDualOTP() {
 
     setSending(true);
 
-    // ✅ Reuse the visible Turnstile token (or freshly solve if expired)
-    const captchaToken = await getManagedTurnstileToken("#ts-signup");
-
     const payload: any = {
       step: 2,
       phoneOtp: code,
       ...(sessionId ? { sessionId } : {}),
-      ...(captchaToken ? { captchaToken } : {}),
     };
 
     setPState("verifying");
@@ -366,9 +347,7 @@ export default function CreateExactDualOTP() {
       return;
     }
 
-    const token = getToken(data);
-    if (token) persistToken(token);
-
+    // NOTE: backend does NOT return token on step 2; we don't expect it here
     const e164 = toE164(phone);
     persistInputs(e164, (email || "").trim().toLowerCase());
     saveSessionId(
@@ -406,15 +385,19 @@ export default function CreateExactDualOTP() {
 
     setSending(true);
 
-    // ✅ Read token from visible Turnstile widget
-    const captchaToken = await getManagedTurnstileToken("#ts-signup");
+    if (process.env.NODE_ENV === "production" && !captchaToken) {
+      setSending(false);
+      setEState("error");
+      setPageError("Please confirm you’re not a robot.");
+      return;
+    }
 
     setEState("sending");
     const payload = {
       step: 3,
       email: cleanEmail,
       ...(sessionId ? { sessionId } : {}),
-      ...(captchaToken ? { captchaToken } : {}),
+      ...(captchaToken ? { recaptchaToken: captchaToken } : {}),
     };
 
     const { r, data } = await callSignupV2(payload);
@@ -442,14 +425,10 @@ export default function CreateExactDualOTP() {
 
     setSending(true);
 
-    // ✅ Read token from visible Turnstile widget
-    const captchaToken = await getManagedTurnstileToken("#ts-signup");
-
     const payload = {
       step: 4,
       emailOtp: code,
       ...(sessionId ? { sessionId } : {}),
-      ...(captchaToken ? { captchaToken } : {}),
     };
 
     setEState("verifying");
@@ -468,9 +447,7 @@ export default function CreateExactDualOTP() {
       return;
     }
 
-    const token = getToken(data);
-    if (token) persistToken(token);
-
+    // NOTE: backend does NOT return token on step 4; token comes only in step 5
     saveSessionId(
       data?.sessionId || data?.data?.sessionId || data?.data?.data?.sessionId
     );
@@ -569,34 +546,86 @@ export default function CreateExactDualOTP() {
     router.back();
   };
 
-  /** Continue -> next step (either channel verified) */
-  const goNext = async () => {
+  /**
+   * 🔥 Step 5 happens HERE (on create page), BEFORE going to personal-details
+   * This will mint the signup token (same as you did in Swagger).
+   */
+  const finalizeStep5AndContinue = async () => {
     if (!canContinue || sending) return;
-    setSending(true);
-    try {
-      const cleanEmail = (email || "").trim().toLowerCase();
-      sessionStorage.setItem(SKEY.EMAIL, cleanEmail);
-      localStorage.setItem(LKEY.SIGNUP_SESSION, sessionId);
-
-      if (phoneIsValid) {
-        const e164 = toE164(phone);
-        sessionStorage.setItem(SKEY.PHONE, e164);
-        localStorage.setItem(LKEY.SIGNUP_PHONE, e164);
-      }
-      if (cleanEmail) {
-        localStorage.setItem(LKEY.SIGNUP_EMAIL, cleanEmail);
-      }
-    } finally {
-      router.push(
-        `${NEXT_STEP_ROUTE}?sessionId=${encodeURIComponent(sessionId)}`
-      );
+    if (!sessionId) {
+      setPageError("Missing signup session. Please verify again.");
+      return;
     }
+
+    setSending(true);
+    setPageError(null);
+
+    const e164 = phoneIsValid ? toE164(phone) : "";
+    const cleanEmail = (email || "").trim().toLowerCase();
+
+    const payload: any = {
+      step: 5,
+      sessionId,
+      role: "AGENT",
+      mode: "SELF_CREATED",
+      ...(e164 ? { phoneNumber: e164 } : {}),
+      ...(cleanEmail ? { email: cleanEmail } : {}),
+      ...(deviceToken ? { deviceToken } : {}),
+    };
+
+    const { r, data } = await callSignupV2(payload);
+
+    if (!r.ok || data?.success === false) {
+      const msg =
+        data?.message ||
+        data?.data?.message ||
+        "Couldn’t complete signup. Please try again.";
+      setPageError(String(msg));
+      setSending(false);
+      return;
+    }
+
+    // 🔑 Get token from step 5 response — this is the ONLY place backend gives it
+    const tok = getToken(data);
+    if (tok) {
+      persistToken(tok);
+    } else {
+      console.warn("[create] Step 5 succeeded but no token in response:", data);
+    }
+
+    // Persist normalized session + inputs for next screen
+    const finalSession =
+      data?.sessionId || data?.data?.sessionId || sessionId || "";
+    if (finalSession) {
+      saveSessionId(finalSession);
+    }
+
+    try {
+      if (phoneIsValid) {
+        const e164Phone = toE164(phone);
+        persistInputs(e164Phone, cleanEmail);
+      } else {
+        persistInputs("", cleanEmail);
+      }
+    } catch {}
+
+    // ✅ Now that token + session are set, move to personal-details
+    router.push(
+      `${NEXT_STEP_ROUTE}?sessionId=${encodeURIComponent(
+        finalSession || sessionId
+      )}`
+    );
+  };
+
+  /** Continue -> calls step 5 then navigates */
+  const goNext = async () => {
+    await finalizeStep5AndContinue();
   };
 
   /** UI */
   return (
     <div className="min-h-screen bg-white flex items-center justify-center p-0 md:p-4">
-      {/* ✅ Centered overlay spinner like login, shown for ALL click actions */}
+      {/* Centered overlay spinner */}
       <LogoSpinner show={sending} />
 
       <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-2xl md:shadow-xl overflow-hidden flex flex-col">
@@ -701,7 +730,7 @@ export default function CreateExactDualOTP() {
               </div>
             </div>
 
-            {/* Phone OTP */}
+            {/* Phone OTP – shows when code has been sent */}
             {(pState === "code_sent" ||
               pState === "verifying" ||
               pState === "error") && (
@@ -880,19 +909,9 @@ export default function CreateExactDualOTP() {
             )}
           </div>
 
-          {/* 🔒 Visible Cloudflare Turnstile widget (normal size) */}
+          {/* 🔒 Google reCAPTCHA widget */}
           <div className="mt-4">
-            <div
-              id="ts-signup"
-              className="cf-turnstile"
-              data-sitekey={TURNSTILE_SITE_KEY}
-              data-action="signup"
-              data-appearance="always"
-              data-size="normal"
-              data-theme="light"
-              data-retry="auto"
-              data-refresh-expired="auto"
-            />
+            <ReCaptcha onChange={setCaptchaToken} />
           </div>
 
           {/* page error */}
@@ -943,12 +962,6 @@ export default function CreateExactDualOTP() {
           </button>
         </div>
       </div>
-
-      {/* Official Turnstile script (managed mode) */}
-      <Script
-        src="https://challenges.cloudflare.com/turnstile/v0/api.js"
-        strategy="afterInteractive"
-      />
     </div>
   );
 }

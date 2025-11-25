@@ -10,153 +10,50 @@ import {
   ChevronDown,
   Building2,
   Globe2,
-  Info,
 } from "lucide-react";
 import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 
-const FALLBACK_AFTER_ADDRESS = "/agent-login";
+const FALLBACK_AFTER_ADDRESS = "/agent-signup/components/welcome";
 const SKEY = { SESSION_ID: "lw_flow_sessionId" };
 
-/* ===== Turnstile (invisible primary + visible fallback) ===== */
-const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
-
-declare global {
-  interface Window {
-    turnstile?: {
-      render: (el: Element, opts: any) => string;
-      execute: (widgetIdOrEl?: string | Element, opts?: any) => void;
-      reset: (widgetIdOrEl?: string | Element) => void;
-      remove: (widgetIdOrEl?: string | Element) => void;
-      getResponse?: (widgetIdOrEl?: string | Element) => string | null;
-    };
-  }
-}
-
-function ensureTurnstileScript(): Promise<void> {
-  return new Promise((resolve) => {
-    if (typeof window === "undefined") return resolve();
-    const w = window as any;
-    if (w.turnstile && typeof w.turnstile.render === "function") return resolve();
-
-    const existing = document.querySelector<HTMLScriptElement>('script[data-lw="turnstile"]');
-    if (existing) {
-      existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener("error", () => resolve(), { once: true });
-      return;
-    }
-    const s = document.createElement("script");
-    s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
-    s.async = true;
-    s.defer = true;
-    s.setAttribute("data-lw", "turnstile");
-    s.onload = () => resolve();
-    s.onerror = () => resolve();
-    document.head.appendChild(s);
-  });
-}
-
-async function renderInvisibleTurnstile(div: HTMLDivElement | null): Promise<string | null> {
-  if (!div) return null;
-  await ensureTurnstileScript();
-  const w = window as any;
-  if (!w.turnstile?.render) return null;
-
-  const existingId = div.getAttribute("data-widgetid");
-  if (existingId) return existingId;
-
-  const id = w.turnstile.render(div, {
-    sitekey: TURNSTILE_SITE_KEY,
-    size: "invisible",
-    retry: "auto",
-    "error-callback": () => ((div as any).__tsError = true),
-    "timeout-callback": () => ((div as any).__tsTimeout = true),
-    "unsupported-callback": () => ((div as any).__tsUnsupported = true),
-  });
-  div.setAttribute("data-widgetid", id);
-  return id;
-}
-
-async function executeInvisible(div: HTMLDivElement | null, action: string, tries = 2) {
-  const w = window as any;
-  const wid = await renderInvisibleTurnstile(div);
-  if (!wid || !w.turnstile?.execute) return null;
-
-  for (let i = 0; i < tries; i++) {
-    const token: string | null = await new Promise((resolve) => {
-      let settled = false;
-      const t = setTimeout(() => {
-        if (!settled) {
-          settled = true;
-          resolve(null);
-        }
-      }, 8000);
-      try {
-        w.turnstile.execute(wid, {
-          action,
-          callback: (tok: string) => {
-            if (!settled) {
-              settled = true;
-              clearTimeout(t);
-              resolve(typeof tok === "string" && tok ? tok : null);
-            }
-          },
-          "error-callback": () => {
-            if (!settled) {
-              settled = true;
-              clearTimeout(t);
-              resolve(null);
-            }
-          },
-        });
-      } catch {
-        clearTimeout(t);
-        resolve(null);
-      }
-    });
-    if (token) return token;
-    await new Promise((r) => setTimeout(r, 400));
-  }
-  return null;
-}
-
-async function renderVisibleTurnstile(
-  div: HTMLDivElement | null,
-  onToken: (tok: string) => void
-) {
-  if (!div) return;
-  await ensureTurnstileScript();
-  const w = window as any;
-  if (!w.turnstile?.render) return;
-
-  // remove any previous widget on this container
-  try {
-    const existingId = div.getAttribute("data-widgetid");
-    if (existingId && w.turnstile.remove) {
-      w.turnstile.remove(existingId);
-      div.removeAttribute("data-widgetid");
-    }
-  } catch {}
-
-  const id = w.turnstile.render(div, {
-    sitekey: TURNSTILE_SITE_KEY,
-    size: "normal",
-    appearance: "interaction-only",
-    "error-callback": () => {},
-    "timeout-callback": () => {},
-    callback: (tok: string) => {
-      if (typeof tok === "string" && tok) onToken(tok);
-    },
-  });
-  div.setAttribute("data-widgetid", id);
-}
-/* ===== /Turnstile ===== */
-
 const NG_STATES = [
-  "Abia", "Adamawa", "Akwa Ibom", "Anambra", "Bauchi", "Bayelsa", "Benue", "Borno",
-  "Cross River", "Delta", "Ebonyi", "Edo", "Ekiti", "Enugu", "Gombe", "Imo", "Jigawa",
-  "Kaduna", "Kano", "Katsina", "Kebbi", "Kogi", "Kwara", "Lagos", "Nasarawa", "Niger",
-  "Ogun", "Ondo", "Osun", "Oyo", "Plateau", "Rivers", "Sokoto", "Taraba", "Yobe",
-  "Zamfara", "FCT (Abuja)",
+  "Abia",
+  "Adamawa",
+  "Akwa Ibom",
+  "Anambra",
+  "Bauchi",
+  "Bayelsa",
+  "Benue",
+  "Borno",
+  "Cross River",
+  "Delta",
+  "Ebonyi",
+  "Edo",
+  "Ekiti",
+  "Enugu",
+  "Gombe",
+  "Imo",
+  "Jigawa",
+  "Kaduna",
+  "Kano",
+  "Katsina",
+  "Kebbi",
+  "Kogi",
+  "Kwara",
+  "Lagos",
+  "Nasarawa",
+  "Niger",
+  "Ogun",
+  "Ondo",
+  "Osun",
+  "Oyo",
+  "Plateau",
+  "Rivers",
+  "Sokoto",
+  "Taraba",
+  "Yobe",
+  "Zamfara",
+  "FCT (Abuja)",
 ];
 
 const LGA_BY_STATE: Record<string, string[]> = {
@@ -186,12 +83,6 @@ function AddressPageInner() {
   const sp = useSearchParams();
   const NEXT_STEP_ROUTE = sp.get("next") || FALLBACK_AFTER_ADDRESS;
 
-  // Turnstile refs
-  const tsInvisibleRef = useRef<HTMLDivElement | null>(null);
-  const tsVisibleRef = useRef<HTMLDivElement | null>(null);
-  const tsManualTokenRef = useRef<string | null>(null);
-  const [tsFallbackVisible, setTsFallbackVisible] = useState(false);
-
   /* session / token */
   const [signupSessionId, setSignupSessionId] = useState<string>("");
   const [bearerToken, setBearerToken] = useState<string>("");
@@ -213,11 +104,6 @@ function AddressPageInner() {
     }
     setBearerToken(tok);
   }, [sp]);
-
-  // Pre-render invisible widget
-  useEffect(() => {
-    renderInvisibleTurnstile(tsInvisibleRef.current);
-  }, []);
 
   // Best-effort: if we only have sessionId, try to fetch token from cookie via API helper
   const ensuringTokenRef = useRef(false);
@@ -258,7 +144,10 @@ function AddressPageInner() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const lgaOptions = useMemo(() => LGA_BY_STATE[stateName] ?? ["Other"], [stateName]);
+  const lgaOptions = useMemo(
+    () => LGA_BY_STATE[stateName] ?? ["Other"],
+    [stateName]
+  );
 
   useEffect(() => {
     if (stateName === "Oyo") {
@@ -271,7 +160,14 @@ function AddressPageInner() {
   }, [stateName]);
 
   const valid = useMemo(
-    () => Boolean(address.trim() && stateName.trim() && city.trim() && country.trim() && lga.trim()),
+    () =>
+      Boolean(
+        address.trim() &&
+          stateName.trim() &&
+          city.trim() &&
+          country.trim() &&
+          lga.trim()
+      ),
     [address, stateName, city, country, lga]
   );
 
@@ -309,36 +205,6 @@ function AddressPageInner() {
       return;
     }
 
-    if (!TURNSTILE_SITE_KEY) {
-      setError("Human verification is required but no Turnstile site key is configured.");
-      setSaving(false);
-      return;
-    }
-
-    // 1) Use manual token from visible fallback if already solved
-    let captchaToken = tsManualTokenRef.current || null;
-
-    // 2) Otherwise, try invisible execute
-    if (!captchaToken) {
-      captchaToken = await executeInvisible(tsInvisibleRef.current, "signup_address", 2);
-    }
-
-    // 3) If still missing, show visible widget + neutral guidance
-    if (!captchaToken) {
-      setTsFallbackVisible(true);
-      try {
-        await renderVisibleTurnstile(tsVisibleRef.current, (tok) => {
-          tsManualTokenRef.current = tok;
-          setError(null);
-        });
-      } catch {}
-      setError(
-        "Hang tight — a verification widget will appear below. Please solve it to generate a token, then tap “Save and continue” again."
-      );
-      setSaving(false);
-      return;
-    }
-
     const payload = {
       country: country.trim(),
       state: stateName.trim(),
@@ -346,9 +212,6 @@ function AddressPageInner() {
       lga: lga.trim(),
       address: address.trim(),
       ...(signupSessionId ? { sessionId: signupSessionId } : {}),
-      // Send both keys — server accepts either
-      "cf-turnstile-response": captchaToken,
-      captchaToken,
     };
 
     const headers: Record<string, string> = {
@@ -385,8 +248,6 @@ function AddressPageInner() {
           json?.upstream?.message ||
           (res.status === 401
             ? "Session expired or invalid. Please verify your phone again."
-            : res.status === 403
-            ? "Verification failed. Please try again."
             : `Couldn’t save address (HTTP ${res.status}).`);
         setError(String(msg));
         setSaving(false);
@@ -414,8 +275,10 @@ function AddressPageInner() {
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
       const n = e.target as Node;
-      if (openState && stateMenuRef.current && !stateMenuRef.current.contains(n)) setOpenState(false);
-      if (openLga && lgaMenuRef.current && !lgaMenuRef.current.contains(n)) setOpenLga(false);
+      if (openState && stateMenuRef.current && !stateMenuRef.current.contains(n))
+        setOpenState(false);
+      if (openLga && lgaMenuRef.current && !lgaMenuRef.current.contains(n))
+        setOpenLga(false);
     }
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
@@ -427,14 +290,6 @@ function AddressPageInner() {
         className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-2xl md:shadow-xl overflow-hidden flex flex-col"
         aria-busy={saving}
       >
-        {/* Invisible Turnstile holder — off-screen but NOT display:none */}
-        <div
-          aria-hidden
-          style={{ position: "absolute", width: 0, height: 0, overflow: "hidden", pointerEvents: "none", opacity: 0, left: "-9999px", top: 0 }}
-        >
-          <div ref={tsInvisibleRef} />
-        </div>
-
         {/* Header */}
         <div className="flex items-center justify-between px-4 pt-6 pb-2">
           <button
@@ -450,13 +305,17 @@ function AddressPageInner() {
 
         {/* Body */}
         <div className="px-4">
-          <h1 className="text-[22px] font-extrabold text-gray-900">You are almost done!</h1>
+          <h1 className="text-[22px] font-extrabold text-gray-900">
+            You are almost done!
+          </h1>
           <p className="text-[13px] text-gray-600 mt-1">
             Your address helps us ensure you’re always connected to our services.
           </p>
 
           {/* Address */}
-          <label className="block mt-5 text-[13px] font-semibold text-gray-800">Address*</label>
+          <label className="block mt-5 text-[13px] font-semibold text-gray-800">
+            Address*
+          </label>
           <div className="mt-2 flex items-center gap-2 rounded-xl bg-gray-100 px-3 py-3">
             <MapPin className="w-4 h-4 text-gray-900" />
             <input
@@ -468,7 +327,9 @@ function AddressPageInner() {
           </div>
 
           {/* State */}
-          <label className="block mt-4 text-[13px] font-semibold text-gray-800">State*</label>
+          <label className="block mt-4 text-[13px] font-semibold text-gray-800">
+            State*
+          </label>
           <div className="mt-2 relative" ref={stateMenuRef}>
             <button
               type="button"
@@ -478,7 +339,9 @@ function AddressPageInner() {
               }}
               className="w-full flex items-center justify-between rounded-xl bg-gray-100 px-3 py-3 text-left text-sm text-gray-900"
             >
-              <span className="truncate">{stateName || "Select state"}</span>
+              <span className="truncate">
+                {stateName || "Select state"}
+              </span>
               <ChevronDown className="w-4 h-4 text-gray-900" />
             </button>
             {openState && (
@@ -491,7 +354,9 @@ function AddressPageInner() {
                       setStateName(s);
                       setOpenState(false);
                     }}
-                    className={`${menuItem} ${s === stateName ? "font-semibold" : ""}`}
+                    className={`${menuItem} ${
+                      s === stateName ? "font-semibold" : ""
+                    }`}
                   >
                     {s}
                   </button>
@@ -501,7 +366,9 @@ function AddressPageInner() {
           </div>
 
           {/* LGA */}
-          <label className="block mt-4 text-[13px] font-semibold text-gray-800">Local Government*</label>
+          <label className="block mt-4 text-[13px] font-semibold text-gray-800">
+            Local Government*
+          </label>
           <div className="mt-2 relative" ref={lgaMenuRef}>
             <button
               type="button"
@@ -511,7 +378,9 @@ function AddressPageInner() {
               }}
               className="w-full flex items-center justify-between rounded-xl bg-gray-100 px-3 py-3 text-left text-sm text-gray-900"
             >
-              <span className="truncate">{lga || "Select local government"}</span>
+              <span className="truncate">
+                {lga || "Select local government"}
+              </span>
               <ChevronDown className="w-4 h-4 text-gray-900" />
             </button>
             {openLga && (
@@ -524,7 +393,9 @@ function AddressPageInner() {
                       setLga(opt === "Other" ? "" : opt);
                       setOpenLga(false);
                     }}
-                    className={`${menuItem} ${opt === lga ? "font-semibold" : ""}`}
+                    className={`${menuItem} ${
+                      opt === lga ? "font-semibold" : ""
+                    }`}
                   >
                     {opt}
                   </button>
@@ -543,7 +414,9 @@ function AddressPageInner() {
           )}
 
           {/* City */}
-          <label className="block mt-4 text-[13px] font-semibold text-gray-800">City*</label>
+          <label className="block mt-4 text-[13px] font-semibold text-gray-800">
+            City*
+          </label>
           <div className="mt-2 flex items-center gap-2 rounded-xl bg-gray-100 px-3 py-3">
             <Building2 className="w-4 h-4 text-gray-900" />
             <input
@@ -555,7 +428,9 @@ function AddressPageInner() {
           </div>
 
           {/* Country */}
-          <label className="block mt-4 text-[13px] font-semibold text-gray-800">Country*</label>
+          <label className="block mt-4 text-[13px] font-semibold text-gray-800">
+            Country*
+          </label>
           <div className="mt-2 flex items-center gap-2 rounded-xl bg-gray-100 px-3 py-3">
             <Globe2 className="w-4 h-4 text-gray-900" />
             <input
@@ -566,22 +441,12 @@ function AddressPageInner() {
             />
           </div>
 
-          {/* Neutral info banner for Turnstile fallback (replaces green box) */}
-          {tsFallbackVisible && (
-            <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-3">
-              <p className="text-[12px] text-gray-800 flex gap-2 items-start">
-                <Info className="w-4 h-4 mt-0.5 shrink-0" />
-                <span>
-                  Hang tight — a verification widget will appear below. Please solve it to generate a token, then tap{" "}
-                  <span className="font-semibold">Save and continue</span> again.
-                </span>
-              </p>
-              <div className="mt-2" ref={tsVisibleRef} />
-            </div>
-          )}
-
           {error && (
-            <p className="text-[12px] text-rose-600 mt-3" role="alert" aria-live="assertive">
+            <p
+              className="text-[12px] text-rose-600 mt-3"
+              role="alert"
+              aria-live="assertive"
+            >
               {error}
             </p>
           )}
@@ -598,7 +463,10 @@ function AddressPageInner() {
               <span className="text-gray-600">5/5</span>
             </div>
             <div className="h-1.5 w-full rounded-full bg-gray-200 overflow-hidden">
-              <div className="h-full bg-black rounded-full" style={{ width: "100%" }} />
+              <div
+                className="h-full bg-black rounded-full"
+                style={{ width: "100%" }}
+              />
             </div>
           </div>
 
@@ -606,7 +474,9 @@ function AddressPageInner() {
             onClick={saveAndContinue}
             disabled={!valid || saving}
             className={`mb-5 w-full h-12 rounded-xl font-semibold text-white transition inline-flex items-center justify-center gap-2 ${
-              !valid || saving ? "bg-gray-300 text-gray-600 cursor-not-allowed" : "bg-black hover:bg-black/90"
+              !valid || saving
+                ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                : "bg-black hover:bg-black/90"
             }`}
           >
             {saving ? <LogoSpinner show={true} /> : null}

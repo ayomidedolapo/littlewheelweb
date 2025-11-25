@@ -5,20 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import Script from "next/script";
 import LogoSpinner from "../../components/loaders/LogoSpinner";
-
-const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
-
-declare global {
-  interface Window {
-    turnstile?: {
-      getResponse: (el?: Element | string) => string | null;
-      execute: (el?: Element | string) => void;
-      reset: (el?: Element | string) => void;
-    };
-  }
-}
+import { ReCaptcha } from "../../../components/ReCaptcha"; //  our new component
 
 function toNgE164(localish: string) {
   const d = localish.replace(/\D/g, "");
@@ -39,37 +27,6 @@ function normalizeImgSrc(u?: string) {
   return u;
 }
 
-/** Read token from managed widget; if missing and invisible, execute + poll. */
-async function getManagedTurnstileToken(
-  widgetSelector = "#ts-managed"
-): Promise<string | null> {
-  const el = document.querySelector(widgetSelector) as HTMLElement | null;
-  if (!el) {
-    console.error("[turnstile] widget element not found:", widgetSelector);
-    return null;
-  }
-
-  let token: string | null = null;
-  try {
-    token = window.turnstile?.getResponse?.(el) ?? null;
-  } catch {}
-  if (token) return token;
-
-  try {
-    window.turnstile?.execute?.(el);
-  } catch {}
-
-  const start = Date.now();
-  while (Date.now() - start < 4000) {
-    try {
-      token = window.turnstile?.getResponse?.(el) ?? null;
-    } catch {}
-    if (token) return token;
-    await new Promise((r) => setTimeout(r, 120));
-  }
-  return null;
-}
-
 export default function MobileLogin() {
   const router = useRouter();
 
@@ -82,14 +39,8 @@ export default function MobileLogin() {
   const [lastAvatar, setLastAvatar] = useState<string>("");
   const [lastName, setLastName] = useState<string>("");
 
-  // Optional toggle (?tsvisible=1); widget stays visible "normal" below.
-  const [tsVisible, setTsVisible] = useState(false);
-  useEffect(() => {
-    try {
-      const q = new URLSearchParams(location.search);
-      setTsVisible(q.has("tsvisible") || q.get("tsvisible") === "1");
-    } catch {}
-  }, []);
+  // reCAPTCHA token
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -151,20 +102,9 @@ export default function MobileLogin() {
     const e164 = toNgE164(phone);
 
     try {
-      if (!TURNSTILE_SITE_KEY) {
-        console.error(
-          "[turnstile] NEXT_PUBLIC_TURNSTILE_SITE_KEY is missing at build time"
-        );
-      }
-      let tsToken: string | null = await getManagedTurnstileToken(
-        "#ts-managed"
-      );
-
-      if (process.env.NODE_ENV === "production" && !tsToken) {
-        console.error(
-          "[turnstile] no token minted. Check Allowed Domains (must include host w/o port) and CSP frame/src/connect for challenges.cloudflare.com"
-        );
-        setErr("Couldn’t verify you. Please refresh and try again.");
+      // 🔴 Enforce captcha in production, optional in dev if you want
+      if (process.env.NODE_ENV === "production" && !captchaToken) {
+        setErr("Please confirm you’re not a robot.");
         setSending(false);
         return;
       }
@@ -174,7 +114,11 @@ export default function MobileLogin() {
         password,
         deviceToken,
       };
-      if (tsToken) body["cf-turnstile-response"] = tsToken;
+
+      if (captchaToken) {
+        // name it how the backend/login route will expect it
+        body.recaptchaToken = captchaToken;
+      }
 
       const res = await fetch("/api/auth/login", {
         method: "POST",
@@ -279,10 +223,6 @@ export default function MobileLogin() {
     setSending(true);
     router.push("/forgot-pin");
   };
-
-  // Widget back to original size & always visible
-  const widgetSize = "normal";
-  const appearance = "always";
 
   return (
     <div
@@ -424,19 +364,9 @@ export default function MobileLogin() {
             </div>
           </div>
 
-          {/* Turnstile visible widget (normal size) */}
+          {/* reCAPTCHA widget */}
           <div className="mb-2">
-            <div
-              id="ts-managed"
-              className="cf-turnstile"
-              data-sitekey={TURNSTILE_SITE_KEY}
-              data-action="login"
-              data-appearance={appearance} /* always */
-              data-size={widgetSize} /* normal */
-              data-theme="light"
-              data-retry="auto"
-              data-refresh-expired="auto"
-            />
+            <ReCaptcha onChange={setCaptchaToken} />
           </div>
 
           {/* Forgot Login Pin right under the widget, right-aligned */}
@@ -468,12 +398,6 @@ export default function MobileLogin() {
           </div>
         </div>
       </div>
-
-      {/* Cloudflare Turnstile script */}
-      <Script
-        src="https://challenges.cloudflare.com/turnstile/v0/api.js"
-        strategy="afterInteractive"
-      />
     </div>
   );
 }
