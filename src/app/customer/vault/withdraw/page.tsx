@@ -1,3 +1,4 @@
+/* src/app/customer/vault/withdraw/page.tsx */
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -6,9 +7,69 @@ import { ArrowLeft, HelpCircle, X, AlertCircle } from "lucide-react";
 import Image from "next/image";
 import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 
-/* ---------------- keep your existing helpers & types below ---------------- */
-// NGN, getActiveCustomerId, bankLogoUrl, toTitle, maskAcct, getAuthToken,
-// types SavedBank, VaultDetail, chips, etc… (unchanged)
+/* ---------- Types & helpers ---------- */
+
+type SavedBank = {
+  id?: string;
+  withdrawalMethodId?: string;
+  bank: {
+    name: string;
+    code?: string;
+    logo?: string;
+  };
+  accountNumber: string;
+  accountName: string;
+};
+
+type VaultDetail = {
+  id: string;
+  name?: string;
+  currentAmount?: number;
+  currentBalance?: number;
+  availableBalance?: number;
+};
+
+/** quick amount chips */
+const chips = [1000, 2000, 5000, 10000, "All"] as const;
+
+/** simple bank logo resolver */
+function bankLogoUrl(bankName: string, fallback?: string): string {
+  if (fallback) return fallback;
+  // you can plug your own CDN / mapping here
+  return `/bank-logos/${bankName.replace(/\s+/g, "-").toLowerCase()}.png`;
+}
+
+/** Title-case helper */
+function toTitle(s: string): string {
+  return (s || "")
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w[0]?.toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+/** Mask account number, show last 4 digits */
+function maskAcct(acct: string): string {
+  const clean = String(acct || "").replace(/\D/g, "");
+  if (!clean) return "••••••••••";
+  const last4 = clean.slice(-4);
+  return `••••••${last4}`;
+}
+
+/** Read auth token from storage (client-side only) */
+function getAuthToken(): string | null {
+  try {
+    if (typeof window === "undefined") return null;
+    return (
+      localStorage.getItem("lw_token") ||
+      sessionStorage.getItem("lw_token") ||
+      null
+    );
+  } catch {
+    return null;
+  }
+}
 
 /* ===== 1) Shell with Suspense (no hooks here) ===== */
 export default function WithdrawPageShell() {
@@ -28,12 +89,10 @@ export default function WithdrawPageShell() {
   );
 }
 
-/* ===== 2) Move your old component into this “Inner” one ===== */
+/* ===== 2) Inner component with hooks ===== */
 function WithdrawFromVaultPageInner() {
   const router = useRouter();
   const sp = useSearchParams();
-
-  // -------- everything below is exactly your old component body --------
 
   const NGN = (v: number) =>
     `₦${(v || 0).toLocaleString("en-NG", {
@@ -54,8 +113,6 @@ function WithdrawFromVaultPageInner() {
       return null;
     }
   }
-
-  // … keep all your helpers from the original file …
 
   /* ---------- state ---------- */
   const [loading, setLoading] = useState(true);
@@ -85,7 +142,7 @@ function WithdrawFromVaultPageInner() {
   const customerId = getActiveCustomerId(sp);
   const vaultId = sp.get("vaultId") || "";
 
-  // load vault + saved bank (UNCHANGED logic)
+  // load vault + saved bank
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -227,25 +284,9 @@ function WithdrawFromVaultPageInner() {
       const ac = new AbortController();
       const timer = setTimeout(() => ac.abort(), 45_000);
 
-      const payload: Record<string, any> = {
+      // 🔑 Backend (via proxy route) only needs { amount }
+      const payload = {
         amount: amt,
-        method: "BANK_TRANSFER",
-        narration: `Vault withdrawal ${
-          vault?.name ? `(${vault.name})` : ""
-        }`.trim(),
-        ...(savedBank?.withdrawalMethodId
-          ? { withdrawalMethodId: savedBank.withdrawalMethodId }
-          : savedBank?.id
-          ? { withdrawalMethodId: savedBank.id }
-          : {}),
-        ...(savedBank
-          ? {
-              bankName: savedBank.bank.name,
-              bankCode: String(savedBank.bank.code || ""),
-              accountNumber: savedBank.accountNumber,
-              accountName: savedBank.accountName,
-            }
-          : {}),
       };
 
       const res = await fetch(
@@ -270,7 +311,8 @@ function WithdrawFromVaultPageInner() {
 
       if (!res.ok) {
         let msg =
-          (typeof data === "object" && (data?.message || data?.error)) ||
+          (typeof data === "object" && (data as any)?.message) ||
+          (typeof data === "object" && (data as any)?.error) ||
           (typeof data === "string" && data) ||
           `Initialize failed (HTTP ${res.status}).`;
         throw new Error(msg);
@@ -278,10 +320,10 @@ function WithdrawFromVaultPageInner() {
 
       const ref =
         (typeof data === "object" &&
-          (data?.data?.id ||
-            data?.data?.reference ||
-            data?.reference ||
-            data?.transactionReference)) ||
+          ((data as any)?.data?.id ||
+            (data as any)?.data?.reference ||
+            (data as any)?.reference ||
+            (data as any)?.transactionReference)) ||
         "";
 
       setSheetOpen(false);
@@ -307,7 +349,7 @@ function WithdrawFromVaultPageInner() {
     }
   }
 
-  /* ---------- UI (unchanged) ---------- */
+  /* ---------- UI ---------- */
   return (
     <div className="min-h-screen bg-white flex items-start justify-center p-0 md:p-4">
       <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-3xl md:shadow-xl overflow-hidden">

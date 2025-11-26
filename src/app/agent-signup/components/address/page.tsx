@@ -13,99 +13,8 @@ import {
 } from "lucide-react";
 import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 
-const FALLBACK_AFTER_ADDRESS = "/agent-login";
+const FALLBACK_AFTER_ADDRESS = "/agent-signup/components/welcome";
 const SKEY = { SESSION_ID: "lw_flow_sessionId" };
-
-/* ===== Turnstile (hidden invisible widget with retry) ===== */
-const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
-
-function ensureTurnstileScript(): Promise<void> {
-  return new Promise((resolve) => {
-    if (typeof window === "undefined") return resolve();
-    const w = window as any;
-    if (w.turnstile && typeof w.turnstile.render === "function")
-      return resolve();
-
-    const existing = document.querySelector<HTMLScriptElement>(
-      'script[data-lw="turnstile"]'
-    );
-    if (existing) {
-      existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener("error", () => resolve(), { once: true });
-      return;
-    }
-    const s = document.createElement("script");
-    s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
-    s.async = true;
-    s.defer = true;
-    s.setAttribute("data-lw", "turnstile");
-    s.onload = () => resolve();
-    s.onerror = () => resolve();
-    document.head.appendChild(s);
-  });
-}
-
-async function ensureTurnstileWidget(
-  div: HTMLDivElement | null
-): Promise<string | null> {
-  if (!div) return null;
-  await ensureTurnstileScript();
-  const w = window as any;
-  if (!w.turnstile?.render) return null;
-
-  const existingId = div.getAttribute("data-widgetid");
-  if (existingId) return existingId;
-
-  const id = w.turnstile.render(div, {
-    sitekey: TURNSTILE_SITE_KEY,
-    size: "invisible",
-    retry: "auto",
-  });
-  div.setAttribute("data-widgetid", id);
-  return id;
-}
-
-async function getTurnstileTokenViaWidget(
-  div: HTMLDivElement | null,
-  action: string,
-  tries = 2
-): Promise<string | null> {
-  const w = window as any;
-  const wid = await ensureTurnstileWidget(div);
-  if (!wid || !w.turnstile?.execute) return null;
-
-  for (let i = 0; i < tries; i++) {
-    const token: string | null = await new Promise((resolve) => {
-      let settled = false;
-      const t = setTimeout(() => {
-        if (!settled) {
-          settled = true;
-          resolve(null);
-        }
-      }, 7000);
-      try {
-        w.turnstile.execute(wid, {
-          action,
-          callback: (tok: string) => {
-            if (!settled) {
-              settled = true;
-              clearTimeout(t);
-              resolve(typeof tok === "string" && tok ? tok : null);
-            }
-          },
-        });
-      } catch {
-        clearTimeout(t);
-        resolve(null);
-      }
-    });
-    if (token) return token;
-    // brief pause before retry
-    await new Promise((r) => setTimeout(r, 350));
-  }
-  return null;
-}
-/* ===== /Turnstile ===== */
 
 const NG_STATES = [
   "Abia",
@@ -174,9 +83,6 @@ function AddressPageInner() {
   const sp = useSearchParams();
   const NEXT_STEP_ROUTE = sp.get("next") || FALLBACK_AFTER_ADDRESS;
 
-  // hidden Turnstile container
-  const tsContainerRef = useRef<HTMLDivElement | null>(null);
-
   /* session / token */
   const [signupSessionId, setSignupSessionId] = useState<string>("");
   const [bearerToken, setBearerToken] = useState<string>("");
@@ -199,11 +105,7 @@ function AddressPageInner() {
     setBearerToken(tok);
   }, [sp]);
 
-  // Pre-render the widget ASAP so first execute is instant on Safari/iOS
-  useEffect(() => {
-    ensureTurnstileWidget(tsContainerRef.current);
-  }, []);
-
+  // Best-effort: if we only have sessionId, try to fetch token from cookie via API helper
   const ensuringTokenRef = useRef(false);
   useEffect(() => {
     if (bearerToken || !signupSessionId || ensuringTokenRef.current) return;
@@ -276,6 +178,7 @@ function AddressPageInner() {
     setSaving(true);
     setError(null);
 
+    // ensure we have a token
     let token = bearerToken;
     if (!token && signupSessionId) {
       try {
@@ -302,28 +205,6 @@ function AddressPageInner() {
       return;
     }
 
-    if (!TURNSTILE_SITE_KEY) {
-      setError(
-        "Human verification is required but no Turnstile site key is configured."
-      );
-      setSaving(false);
-      return;
-    }
-
-    // 🔐 Same robust token flow as personal-details
-    const captchaToken = await getTurnstileTokenViaWidget(
-      tsContainerRef.current,
-      "signup_address",
-      2
-    );
-    if (!captchaToken) {
-      setError(
-        "Human verification failed. Disable any content blocker, refresh, and try again."
-      );
-      setSaving(false);
-      return;
-    }
-
     const payload = {
       country: country.trim(),
       state: stateName.trim(),
@@ -331,7 +212,6 @@ function AddressPageInner() {
       lga: lga.trim(),
       address: address.trim(),
       ...(signupSessionId ? { sessionId: signupSessionId } : {}),
-      captchaToken,
     };
 
     const headers: Record<string, string> = {
@@ -368,8 +248,6 @@ function AddressPageInner() {
           json?.upstream?.message ||
           (res.status === 401
             ? "Session expired or invalid. Please verify your phone again."
-            : res.status === 403
-            ? "Verification failed. Please try again."
             : `Couldn’t save address (HTTP ${res.status}).`);
         setError(String(msg));
         setSaving(false);
@@ -397,11 +275,7 @@ function AddressPageInner() {
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
       const n = e.target as Node;
-      if (
-        openState &&
-        stateMenuRef.current &&
-        !stateMenuRef.current.contains(n)
-      )
+      if (openState && stateMenuRef.current && !stateMenuRef.current.contains(n))
         setOpenState(false);
       if (openLga && lgaMenuRef.current && !lgaMenuRef.current.contains(n))
         setOpenLga(false);
@@ -416,11 +290,6 @@ function AddressPageInner() {
         className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-2xl md:shadow-xl overflow-hidden flex flex-col"
         aria-busy={saving}
       >
-        {/* Hidden Turnstile widget */}
-        <div aria-hidden className="hidden">
-          <div ref={tsContainerRef} />
-        </div>
-
         {/* Header */}
         <div className="flex items-center justify-between px-4 pt-6 pb-2">
           <button
@@ -440,8 +309,7 @@ function AddressPageInner() {
             You are almost done!
           </h1>
           <p className="text-[13px] text-gray-600 mt-1">
-            Your address helps us ensure you’re always connected to our
-            services.
+            Your address helps us ensure you’re always connected to our services.
           </p>
 
           {/* Address */}
@@ -471,7 +339,9 @@ function AddressPageInner() {
               }}
               className="w-full flex items-center justify-between rounded-xl bg-gray-100 px-3 py-3 text-left text-sm text-gray-900"
             >
-              <span className="truncate">{stateName || "Select state"}</span>
+              <span className="truncate">
+                {stateName || "Select state"}
+              </span>
               <ChevronDown className="w-4 h-4 text-gray-900" />
             </button>
             {openState && (
@@ -573,7 +443,7 @@ function AddressPageInner() {
 
           {error && (
             <p
-              className="text-[12px] text-red-600 mt-3"
+              className="text-[12px] text-rose-600 mt-3"
               role="alert"
               aria-live="assertive"
             >
@@ -594,7 +464,7 @@ function AddressPageInner() {
             </div>
             <div className="h-1.5 w-full rounded-full bg-gray-200 overflow-hidden">
               <div
-                className="h-full bg-emerald-500 rounded-full"
+                className="h-full bg-black rounded-full"
                 style={{ width: "100%" }}
               />
             </div>

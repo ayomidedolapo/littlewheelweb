@@ -5,53 +5,7 @@ import React, { useMemo, useState } from "react";
 import { ArrowLeft, Phone, Check } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import Script from "next/script";
 import LogoSpinner from "../../components/loaders/LogoSpinner";
-
-/* ---------- Turnstile ---------- */
-const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
-
-declare global {
-  interface Window {
-    turnstile?: {
-      getResponse: (el?: Element | string) => string | null;
-      execute: (el?: Element | string) => void;
-      reset: (el?: Element | string) => void;
-    };
-  }
-}
-
-/** Read token from managed widget; if missing, execute + poll (like login) */
-async function getManagedTurnstileToken(
-  widgetSelector = "#ts-onboard"
-): Promise<string | null> {
-  const el = document.querySelector(widgetSelector) as HTMLElement | null;
-  if (!el) {
-    console.error("[turnstile] widget element not found:", widgetSelector);
-    return null;
-  }
-
-  let token: string | null = null;
-  try {
-    token = window.turnstile?.getResponse?.(el) ?? null;
-  } catch {}
-  if (token) return token;
-
-  try {
-    window.turnstile?.execute?.(el);
-  } catch {}
-
-  const start = Date.now();
-  while (Date.now() - start < 4000) {
-    try {
-      token = window.turnstile?.getResponse?.(el) ?? null;
-    } catch {}
-    if (token) return token;
-    await new Promise((r) => setTimeout(r, 120));
-  }
-  return null;
-}
-/* ---------- /Turnstile ---------- */
 
 /* ---------- helpers ---------- */
 function toNgE164(localish: string) {
@@ -98,23 +52,6 @@ export default function MobileSignup() {
       const e164 = toNgE164(phoneNumber);
       const auth = getAuthToken();
 
-      // 🔐 Same robust Turnstile handling as login
-      if (!TURNSTILE_SITE_KEY) {
-        console.error(
-          "[turnstile] NEXT_PUBLIC_TURNSTILE_SITE_KEY is missing at build time"
-        );
-      }
-      const tsToken = await getManagedTurnstileToken("#ts-onboard");
-
-      if (process.env.NODE_ENV === "production" && !tsToken) {
-        console.error(
-          "[turnstile] no token minted. Check Allowed Domains (host w/o port) and CSP for challenges.cloudflare.com"
-        );
-        setError("Couldn’t verify you. Please refresh and try again.");
-        setSending(false);
-        return;
-      }
-
       // Start onboarding (creates registration token)
       const res = await fetch("/api/v1/agent/customers", {
         method: "POST",
@@ -125,7 +62,6 @@ export default function MobileSignup() {
         cache: "no-store",
         body: JSON.stringify({
           phoneNumber: e164,
-          ...(tsToken ? { "cf-turnstile-response": tsToken } : {}),
         }),
       });
 
@@ -157,7 +93,7 @@ export default function MobileSignup() {
 
       sessionStorage.setItem("lw_reg_token", String(regToken));
 
-      // Keep your existing next step:
+      // Proceed to next step
       router.push("./onboard-form/components/verification");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to start onboarding.");
@@ -171,7 +107,7 @@ export default function MobileSignup() {
       className="min-h-screen bg-gray-50 flex items-center justify-center p-0 md:p-4"
       aria-busy={sending}
     >
-      {/* ✅ Same centered spinner usage as your login page */}
+      {/* Centered spinner while sending */}
       <LogoSpinner show={sending} />
 
       <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-2xl md:shadow-xl overflow-hidden">
@@ -242,20 +178,6 @@ export default function MobileSignup() {
             )}
           </div>
 
-          {/* 🔒 Visible Cloudflare Turnstile widget (normal size) */}
-          <div className="mb-8">
-            <div
-              id="ts-onboard"
-              className="cf-turnstile"
-              data-sitekey={TURNSTILE_SITE_KEY}
-              data-appearance="always"
-              data-size="normal"
-              data-action="onboard_start"
-              data-retry="auto"
-              data-refresh-expired="auto"
-            />
-          </div>
-
           {/* Steps */}
           <div className="mb-15 mt-20">
             <h3 className="text-gray-900 font-semibold text-sm mb-4 underline">
@@ -319,12 +241,6 @@ export default function MobileSignup() {
           </div>
         </div>
       </div>
-
-      {/* Official Turnstile script */}
-      <Script
-        src="https://challenges.cloudflare.com/turnstile/v0/api.js"
-        strategy="afterInteractive"
-      />
     </div>
   );
 }

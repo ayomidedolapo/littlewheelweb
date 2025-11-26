@@ -11,7 +11,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "ui": "shadcn add"
+    "ui": "shadcn add",
+    "dev:trace": "node --trace-warnings ./node_modules/.bin/next dev"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.0.1",
@@ -37,9 +38,12 @@
     "clsx": "^2.1.1",
     "country-state-city": "^3.2.1",
     "date-fns": "^3.6.0",
+    "dom-to-image-more": "^3.7.2",
     "gray-matter": "^4.0.3",
+    "html2canvas": "^1.4.1",
     "input-otp": "^1.4.2",
     "it": "^1.1.1",
+    "jspdf": "^3.0.3",
     "lucide-react": "^0.487.0",
     "markdown": "^0.5.0",
     "marked": "^15.0.7",
@@ -56,6 +60,7 @@
     "react-day-picker": "8.10.1",
     "react-dom": "^18.3.1",
     "react-flag-kit": "^1.1.1",
+    "react-google-recaptcha": "^3.1.0",
     "react-hook-form": "^7.55.0",
     "react-icons": "^5.5.0",
     "react-intersection-observer": "^9.13.1",
@@ -76,6 +81,7 @@
     "@types/nodemailer": "^7.0.1",
     "@types/react": "^18.3.10",
     "@types/react-dom": "^18.3.0",
+    "@types/react-google-recaptcha": "^2.1.9",
     "eslint": "^9",
     "eslint-config-next": "15.2.4",
     "shadcn": "^2.0.8",

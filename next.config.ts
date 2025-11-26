@@ -3,36 +3,31 @@ import type { NextConfig } from "next";
 
 const isProd = process.env.NODE_ENV === "production";
 
-// Add your actual API hosts here
 const API_V1 = "https://api.littlewheel.app";
 const API_DEV = "https://dev-api.insider.littlewheel.app";
 
+// CSP without Cloudflare Turnstile, now allowing Google reCAPTCHA + YouTube
 const csp = [
   "default-src 'self'",
-  // Safer defaults
   "base-uri 'self'",
   "form-action 'self'",
 
-  // Turnstile script
-  "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
+  // Scripts (Google reCAPTCHA + YouTube player bits)
+  "script-src 'self' 'unsafe-inline' https://www.google.com https://www.gstatic.com https://www.youtube.com https://www.youtube-nocookie.com",
 
-  // Some older Safari versions look at child-src for iframes; mirror frame-src
-  "child-src https://challenges.cloudflare.com",
-  "frame-src https://challenges.cloudflare.com",
+  // Iframes (reCAPTCHA & YouTube)
+  "frame-src https://www.google.com https://www.gstatic.com https://www.youtube.com https://www.youtube-nocookie.com",
+  // Some Safari versions still use child-src for iframes
+  "child-src https://www.google.com https://www.gstatic.com https://www.youtube.com https://www.youtube-nocookie.com",
 
-  // XHR/fetch targets: self, Turnstile verify, and your API origins
-  `connect-src 'self' https://challenges.cloudflare.com ${API_V1} ${API_DEV}`,
+  // XHR/fetch from your app
+  `connect-src 'self' ${API_V1} ${API_DEV} https://www.youtube.com https://www.youtube-nocookie.com https://www.gstatic.com https://www.google.com`,
 
-  // Images + data/blob
-  "img-src 'self' data: blob:",
+  // Images (YouTube thumbs + possible Google assets)
+  "img-src 'self' data: blob: https://i.ytimg.com https://img.youtube.com https://www.gstatic.com",
 
-  // Inline styles (Tailwind/Next hydration)
   "style-src 'self' 'unsafe-inline'",
-
-  // Local/inline fonts
   "font-src 'self' data:",
-
-  // Media/workers if you use them
   "media-src 'self' blob:",
   "worker-src 'self' blob:",
 ].join("; ");
@@ -42,17 +37,12 @@ const nextConfig: NextConfig = {
   eslint: { ignoreDuringBuilds: true },
   images: {
     remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "flagpedia.net",
-        pathname: "/data/flags/**",
-      },
-      {
-        protocol: "https",
-        hostname: "nigerianbanks.xyz",
-        pathname: "/logo/**",
-      },
+      { protocol: "https", hostname: "flagpedia.net", pathname: "/data/flags/**" },
+      { protocol: "https", hostname: "nigerianbanks.xyz", pathname: "/logo/**" },
       { protocol: "https", hostname: "logo.clearbit.com", pathname: "/**" },
+      // (Optional) if you ever render direct yt thumbnails in <Image/>
+      { protocol: "https", hostname: "i.ytimg.com", pathname: "/**" },
+      { protocol: "https", hostname: "img.youtube.com", pathname: "/**" },
     ],
   },
   async headers() {
@@ -65,11 +55,9 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
           { key: "X-XSS-Protection", value: "0" },
-          // Camera policy: camera usable on same-origin (not inside third-party iframes)
           {
             key: "Permissions-Policy",
-            value:
-              "camera=(self), microphone=(), geolocation=(), interest-cohort=()",
+            value: "camera=(self), microphone=(), geolocation=(), interest-cohort=()",
           },
         ],
       },

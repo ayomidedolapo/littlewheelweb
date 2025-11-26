@@ -9,14 +9,6 @@ export const revalidate = 0;
 const API_BASE = (process.env.BACKEND_API_URL || "").replace(/\/+$/, "");
 const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS ?? 45000);
 
-/* --- Turnstile config (server verify) --- */
-const TURNSTILE_SECRET = (process.env.TURNSTILE_SECRET_KEY || "").trim();
-const TURNSTILE_VERIFY_URL =
-  "https://challenges.cloudflare.com/turnstile/v0/siteverify";
-/** If true, allow missing/failed Turnstile in development */
-const ALLOW_TURNSTILELESS_DEV =
-  (process.env.ALLOW_TURNSTILELESS_DEV || "").toLowerCase() === "true";
-
 /* --- Helpers --- */
 function ensureBase() {
   if (!API_BASE) throw new Error("Missing BACKEND_API_URL");
@@ -65,63 +57,6 @@ async function readBearer(req: NextRequest): Promise<string> {
       .trim() || "";
 
   return fromCookie || fromAuth || fromXlw || "";
-}
-
-/** Extract a Turnstile token from common client body fields */
-function readTurnstileToken(body: any): string {
-  return (
-    String(
-      body?.captchaToken ||
-        body?.turnstileToken ||
-        body?.["cf-turnstile-response"] ||
-        body?.token || // last resort: don't rely on this in prod
-        ""
-    ).trim() || ""
-  );
-}
-
-/** Best-effort client IP (for Turnstile remoteip) */
-function readClientIp(req: NextRequest): string {
-  const h = req.headers;
-  const cf = h.get("CF-Connecting-IP");
-  if (cf) return cf;
-  const xff = h.get("x-forwarded-for") || "";
-  if (xff) return xff.split(",")[0].trim();
-  const xr = h.get("x-real-ip");
-  if (xr) return xr;
-  return "";
-}
-
-/** Verify Turnstile server-side */
-async function verifyTurnstile(token: string, ip?: string) {
-  if (!TURNSTILE_SECRET) {
-    return { ok: false as const, reason: "Missing TURNSTILE_SECRET_KEY env" };
-  }
-  try {
-    const res = await fetch(TURNSTILE_VERIFY_URL, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        secret: TURNSTILE_SECRET,
-        response: token,
-        ...(ip ? { remoteip: ip } : {}),
-        idempotency_key:
-          (globalThis.crypto as any)?.randomUUID?.() ??
-          `${Date.now()}-${Math.random()}`,
-      }),
-    });
-    const json = await res.json().catch(() => ({}));
-    if (json?.success) return { ok: true as const, data: json };
-    return {
-      ok: false as const,
-      data: json,
-      reason: Array.isArray(json?.["error-codes"])
-        ? json["error-codes"].join(",")
-        : "turnstile-failed",
-    };
-  } catch (e: any) {
-    return { ok: false as const, reason: e?.message || "turnstile-error" };
-  }
 }
 
 /* --- Preflight --- */
@@ -205,11 +140,10 @@ export async function GET(req: NextRequest) {
  * POST /api/v1/agent/customers
  *  - Proxies to: {API_BASE}/agent/customers
  *  - Starts onboarding (expects phoneNumber in body)
- *  - Validates Cloudflare Turnstile (server-side)
- *  - Pass-through JSON body otherwise
+ *  - NO captcha / Turnstile checks anymore
+ *  - Pass-through JSON body
  * ------------------------------------------- */
 export async function POST(req: NextRequest) {
-  const isProd = process.env.NODE_ENV === "production";
   const debug = true; // flip to false if you want silence
 
   let rawBody = "";
@@ -227,46 +161,6 @@ export async function POST(req: NextRequest) {
   try {
     ensureBase();
 
-    // 🔐 Turnstile enforcement
-    const tsToken = readTurnstileToken(body);
-    if (!tsToken) {
-      if (isProd || !ALLOW_TURNSTILELESS_DEV) {
-        if (debug) {
-          console.warn(
-            "[onboarding] Missing Turnstile token → rejecting (prod or dev enforcement on)"
-          );
-        }
-        return NextResponse.json(
-          { success: false, message: "Missing Turnstile token" },
-          { status: 400, headers: corsHeaders() }
-        );
-      } else if (debug) {
-        console.warn(
-          "[onboarding] Turnstile token missing — allowed in dev (set ALLOW_TURNSTILELESS_DEV=false to enforce)"
-        );
-      }
-    } else {
-      const ip = readClientIp(req);
-      const verdict = await verifyTurnstile(tsToken, ip);
-      if (!verdict.ok) {
-        if (debug) {
-          console.warn(
-            "[onboarding] Turnstile failed:",
-            verdict.reason,
-            verdict.data || ""
-          );
-        }
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Turnstile verification failed",
-            details: verdict.data ?? verdict.reason ?? "unknown",
-          },
-          { status: 403, headers: corsHeaders() }
-        );
-      }
-    }
-
     const bearer = await readBearer(req); // upstream may require auth for agents
     const inboundCookie = req.headers.get("cookie");
 
@@ -279,11 +173,6 @@ export async function POST(req: NextRequest) {
     }
     if (inboundCookie) headers.set("cookie", inboundCookie);
 
-    // Optionally strip the captcha token before forwarding upstream
-    // (Uncomment if your backend doesn't accept/need it)
-    // if ("captchaToken" in body) delete body.captchaToken;
-    // rawBody = JSON.stringify(body);
-
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort("timeout"), TIMEOUT_MS);
 
@@ -293,14 +182,10 @@ export async function POST(req: NextRequest) {
       console.log("=== /api/v1/agent/customers DEBUG BEGIN ===");
       console.log("env:", {
         NODE_ENV: process.env.NODE_ENV,
-        ALLOW_TURNSTILELESS_DEV,
-        TURNSTILE_SECRET_present: !!TURNSTILE_SECRET,
-        TURNSTILE_SECRET_len: TURNSTILE_SECRET ? TURNSTILE_SECRET.length : 0,
         API_BASE,
       });
       console.log("incoming:", {
         phone_masked: masked,
-        hasCaptcha: !!tsToken,
       });
       console.log("[onboarding] → upstream POST", {
         url: `${API_BASE}/agent/customers`,

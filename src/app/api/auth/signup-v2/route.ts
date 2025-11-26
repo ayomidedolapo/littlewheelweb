@@ -1,39 +1,16 @@
 // app/api/auth/signup-v2/route.ts
+
 import { NextResponse } from "next/server";
 
-/* ========== small helpers ========== */
-const trimTrailingSlash = (s: string) => (s || "").replace(/\/+$/, "");
+/* ========== helpers ========== */
+const trim = (s: string) => (s || "").replace(/\/+$/, "");
 const joinUrl = (base: string, path: string) =>
-  `${trimTrailingSlash(base)}/${String(path || "").replace(/^\/+/, "")}`;
+  `${trim(base)}/${String(path || "").replace(/^\/+/, "")}`;
 const readHeaderSessionId = (h: Headers) =>
   h.get("x-session-id") || h.get("x-lw-session-id") || "";
 
-/** Extract first client IP from common proxy headers */
-function readClientIp(req: Request) {
-  const h = req.headers;
-  const cf = h.get("CF-Connecting-IP");
-  if (cf) return cf;
-  const xff = h.get("X-Forwarded-For") || h.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0].trim();
-  const xr = h.get("x-real-ip");
-  if (xr) return xr;
-  return "";
-}
-
-function setSessionCookie(res: NextResponse, sessionId: string) {
-  if (!sessionId) return;
-  const secure = process.env.NODE_ENV === "production";
-  res.cookies.set("lw_signup_session", sessionId, {
-    path: "/",
-    sameSite: "lax",
-    httpOnly: true,
-    secure,
-    maxAge: 60 * 60 * 24,
-  });
-}
-
-/** Always normalize to +234XXXXXXXXXX */
-const toE164Plus234 = (raw?: string) => {
+/* Normalize phone to +234xxxxxxxx */
+const toE164 = (raw?: string) => {
   const d = String(raw || "").replace(/\D/g, "");
   if (!d) return "";
   if (d.startsWith("234")) return `+${d}`;
@@ -41,85 +18,52 @@ const toE164Plus234 = (raw?: string) => {
   return `+234${d}`;
 };
 
-/* ========== config ========== */
-const V2 = trimTrailingSlash(process.env.BACKEND_API_URL_V2 || "");
+/* ---------- cookies ---------- */
+function setSignupSessionCookie(res: NextResponse, sessionId: string) {
+  if (!sessionId) return;
+  const secure = process.env.NODE_ENV === "production";
+  res.cookies.set("lw_signup_session", sessionId, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure,
+    path: "/",
+    maxAge: 60 * 60 * 24,
+  });
+}
+
+function setSignupTokenCookie(res: NextResponse, token: string) {
+  if (!token) return;
+  const secure = process.env.NODE_ENV === "production";
+  res.cookies.set("lw_signup_token", token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure,
+    path: "/",
+    maxAge: 60 * 60 * 24,
+  });
+}
+
+function setDeviceTokenCookie(res: NextResponse, token: string) {
+  if (!token) return;
+  const secure = process.env.NODE_ENV === "production";
+  res.cookies.set("lw_device_token", token, {
+    httpOnly: false,
+    sameSite: "lax",
+    secure,
+    path: "/",
+    maxAge: 60 * 60 * 24 * 30,
+  });
+}
+
+/* ---------- config ---------- */
+const V2 = trim(process.env.BACKEND_API_URL_V2 || "");
 const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS ?? 45000);
 
-/* ========== Turnstile ========== */
-const TURNSTILE_SECRET = (process.env.TURNSTILE_SECRET_KEY || "").trim();
-const TURNSTILE_VERIFY_URL =
-  "https://challenges.cloudflare.com/turnstile/v0/siteverify";
-
-/** Optional dev bypass (never used in production) */
-const ALLOW_TURNSTILELESS_DEV =
-  (process.env.ALLOW_TURNSTILELESS_DEV || "").toLowerCase() === "true";
-
-/** Read token from body or headers */
-function readTurnstileToken(req: Request, body: any) {
-  // common header Cloudflare uses on forms is "cf-turnstile-response"
-  const hdr =
-    req.headers.get("cf-turnstile-response") ||
-    req.headers.get("x-turnstile-token") ||
-    "";
-  const inBody =
-    String(
-      body?.captchaToken ||
-        body?.turnstileToken ||
-        body?.token ||
-        body?.["cf-turnstile-response"] ||
-        ""
-    ).trim() || "";
-  return (hdr || "").trim() || inBody;
-}
-
-/** Verify Turnstile token server-side */
-async function verifyTurnstile(token: string, ip?: string) {
-  if (!TURNSTILE_SECRET) {
-    return { ok: false as const, reason: "Missing TURNSTILE_SECRET_KEY env" };
-  }
-  try {
-    const res = await fetch(TURNSTILE_VERIFY_URL, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        secret: TURNSTILE_SECRET,
-        response: token,
-        ...(ip ? { remoteip: ip } : {}),
-        idempotency_key:
-          (crypto as any).randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
-      }),
-    });
-    const json = await res.json().catch(() => ({}));
-    if (json?.success) return { ok: true as const, data: json };
-    return {
-      ok: false as const,
-      data: json,
-      reason: Array.isArray(json?.["error-codes"])
-        ? json["error-codes"].join(",")
-        : "turnstile-failed",
-    };
-  } catch (e: any) {
-    return { ok: false as const, reason: e?.message || "turnstile-error" };
-  }
-}
-
-/* ========== handler ========== */
+/* ---------- main handler ---------- */
 export async function POST(req: Request) {
-  /* --- DEBUG: env banner --- */
-  console.log("=== /api/auth/signup-v2 DEBUG BEGIN ===");
-  console.log("env:", {
-    NODE_ENV: process.env.NODE_ENV,
-    ALLOW_TURNSTILELESS_DEV: ALLOW_TURNSTILELESS_DEV,
-    TURNSTILE_SECRET_present: !!TURNSTILE_SECRET,
-    TURNSTILE_SECRET_len: TURNSTILE_SECRET.length || 0,
-    BASE_V2: V2 || "MISSING",
-  });
-
   if (!V2) {
-    console.log("[signup] Missing BACKEND_API_URL_V2");
-    console.log("=== /api/auth/signup-v2 DEBUG END ===");
     return NextResponse.json(
-      { success: false, message: "Missing BACKEND_API_URL_V2 env" },
+      { success: false, message: "Missing BACKEND_API_URL_V2" },
       { status: 500 }
     );
   }
@@ -128,8 +72,6 @@ export async function POST(req: Request) {
   try {
     body = await req.json();
   } catch {
-    console.log("[signup] Invalid JSON body");
-    console.log("=== /api/auth/signup-v2 DEBUG END ===");
     return NextResponse.json(
       { success: false, message: "Invalid JSON body" },
       { status: 400 }
@@ -138,76 +80,10 @@ export async function POST(req: Request) {
 
   const step = Number(body?.step);
   if (![1, 2, 3, 4, 5].includes(step)) {
-    console.log("[signup] Invalid step:", step);
-    console.log("=== /api/auth/signup-v2 DEBUG END ===");
     return NextResponse.json(
-      { success: false, message: "Invalid or missing step (1..5 required)" },
+      { success: false, message: "Invalid step (1-5)" },
       { status: 400 }
     );
-  }
-
-  const ip = readClientIp(req);
-  const pnMasked = (body?.phoneNumber || "")
-    .toString()
-    .replace(/(\+?234)(\d{0,6})\d+/, "$1$2***");
-  console.log("incoming:", {
-    step,
-    phone_masked: pnMasked || undefined,
-    hasEmail: !!body?.email,
-    hasPhoneOtp: !!body?.phoneOtp,
-    hasEmailOtp: !!body?.emailOtp,
-    sessionId_len: (body?.sessionId || "").toString().length || 0,
-    clientIp: ip || "unknown",
-  });
-
-  /* ---- Turnstile enforcement ---- */
-  const isProd = process.env.NODE_ENV === "production";
-  const shouldEnforce = [1, 2].includes(step) || false;
-
-  if (shouldEnforce) {
-    const tsToken = readTurnstileToken(req, body);
-    const allowDevBypass = !isProd && ALLOW_TURNSTILELESS_DEV;
-
-    if (!tsToken) {
-      if (allowDevBypass) {
-        console.warn(
-          "[signup] Turnstile token missing — allowed in dev (set ALLOW_TURNSTILELESS_DEV=false to enforce)"
-        );
-      } else {
-        console.log("[signup] Missing Turnstile token → rejecting");
-        console.log("=== /api/auth/signup-v2 DEBUG END ===");
-        return NextResponse.json(
-          { success: false, message: "Missing Turnstile token" },
-          { status: 400 }
-        );
-      }
-    } else {
-      const verdict = await verifyTurnstile(tsToken, ip);
-      if (!verdict.ok) {
-        console.log(
-          "[signup] Turnstile failed:",
-          verdict.reason,
-          verdict.data || ""
-        );
-        console.log("=== /api/auth/signup-v2 DEBUG END ===");
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Turnstile verification failed",
-            details: verdict.data ?? verdict.reason ?? "unknown",
-          },
-          { status: 403 }
-        );
-      } else {
-        const { data } = verdict;
-        console.log("[signup] Turnstile OK:", {
-          action: data?.action,
-          cdata: data?.cdata ? "[present]" : undefined,
-          hostname: data?.hostname,
-          challenge_ts: data?.challenge_ts,
-        });
-      }
-    }
   }
 
   const incomingSession =
@@ -215,106 +91,95 @@ export async function POST(req: Request) {
     req.headers.get("x-session-id") ||
     "";
 
+  const deviceToken = String(body?.deviceToken || "").trim();
+
   const payload: any = { step };
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "application/json",
   };
+
   if (incomingSession) {
     payload.sessionId = incomingSession;
     headers["x-session-id"] = incomingSession;
   }
 
+  /* ---- step based fields ---- */
   switch (step) {
     case 1: {
-      const pn = toE164Plus234(body?.phoneNumber);
-      if (!pn) {
-        console.log("[signup] step 1 missing phoneNumber");
-        console.log("=== /api/auth/signup-v2 DEBUG END ===");
+      const pn = toE164(body?.phoneNumber);
+      if (!pn)
         return NextResponse.json(
-          { success: false, message: "phoneNumber required for step 1" },
+          { success: false, message: "phoneNumber required" },
           { status: 400 }
         );
-      }
       payload.phoneNumber = pn;
       break;
     }
+
     case 2: {
-      const code = String(body?.phoneOtp || "");
-      if (!code) {
-        console.log("[signup] step 2 missing phoneOtp");
-        console.log("=== /api/auth/signup-v2 DEBUG END ===");
+      if (!body?.phoneOtp)
         return NextResponse.json(
-          { success: false, message: "phoneOtp required for step 2" },
+          { success: false, message: "phoneOtp required" },
           { status: 400 }
         );
-      }
-      payload.phoneOtp = code;
+      payload.phoneOtp = String(body.phoneOtp);
       break;
     }
+
     case 3: {
-      const em = String(body?.email || "")
-        .trim()
-        .toLowerCase();
-      if (!em) {
-        console.log("[signup] step 3 missing email");
-        console.log("=== /api/auth/signup-v2 DEBUG END ===");
+      const email = String(body?.email || "").trim().toLowerCase();
+      if (!email)
         return NextResponse.json(
-          { success: false, message: "email required for step 3" },
+          { success: false, message: "email required" },
           { status: 400 }
         );
-      }
-      payload.email = em;
+      payload.email = email;
       break;
     }
+
     case 4: {
-      const code = String(body?.emailOtp || "");
-      if (!code) {
-        console.log("[signup] step 4 missing emailOtp");
-        console.log("=== /api/auth/signup-v2 DEBUG END ===");
+      if (!body?.emailOtp)
         return NextResponse.json(
-          { success: false, message: "emailOtp required for step 4" },
+          { success: false, message: "emailOtp required" },
           { status: 400 }
         );
-      }
-      payload.emailOtp = code;
+      payload.emailOtp = String(body.emailOtp);
       break;
     }
+
     case 5: {
-      const pn = toE164Plus234(body?.phoneNumber);
-      const em = String(body?.email || "")
-        .trim()
-        .toLowerCase();
-      if (!pn || !em) {
-        console.log("[signup] step 5 missing phone/email");
-        console.log("=== /api/auth/signup-v2 DEBUG END ===");
+      const pn = toE164(body?.phoneNumber);
+      const em = String(body?.email || "").trim().toLowerCase();
+
+      if (!pn && !em)
         return NextResponse.json(
           {
             success: false,
-            message: "phoneNumber and email required for step 5",
+            message:
+              "At least one of phoneNumber or email is required for step 5",
           },
           { status: 400 }
         );
-      }
-      payload.phoneNumber = pn;
-      payload.email = em;
+
+      if (pn) payload.phoneNumber = pn;
+      if (em) payload.email = em;
+
       payload.role = String(body?.role || "AGENT");
       payload.mode = String(body?.mode || "SELF_CREATED");
-      if (body?.deviceToken) payload.deviceToken = String(body.deviceToken);
+
+      if (deviceToken) payload.deviceToken = deviceToken;
+
       break;
     }
   }
 
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort("timeout"), TIMEOUT_MS);
+  /* ---- upstream call ---- */
   const url = joinUrl(V2, "/auth/signup");
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
 
   try {
-    console.log("[signup] → upstream POST", {
-      url,
-      step,
-      hasSession: !!incomingSession,
-    });
     const upstream = await fetch(url, {
       method: "POST",
       headers,
@@ -326,59 +191,48 @@ export async function POST(req: Request) {
     const raw = await upstream.text();
     let data: any;
     try {
-      data = raw ? JSON.parse(raw) : null;
+      data = JSON.parse(raw);
     } catch {
-      data = { message: raw || upstream.statusText };
+      data = { message: raw };
     }
 
+    /* ---- normalize sessionId ---- */
     const headerSession = readHeaderSessionId(upstream.headers);
     const bodySession = data?.sessionId || data?.data?.sessionId || null;
-    const finalSession = bodySession || headerSession || incomingSession || "";
+    const finalSession =
+      bodySession || headerSession || incomingSession || "";
 
-    console.log(
-      "[signup] upstream status:",
-      upstream.status,
-      upstream.statusText,
-      {
-        headerSession_len: (headerSession || "").length || 0,
-        bodySession_len: (bodySession || "").length || 0,
-        finalSession_len: finalSession.length || 0,
-      }
-    );
+    /* ---- STEP 5 → Extract signup token ---- */
+    let signupToken = "";
+    if (step === 5) {
+      signupToken =
+        data?.token ||
+        data?.data?.token ||
+        data?.data?.accessToken ||
+        "";
+    }
 
     const resp = NextResponse.json(
-      { ...data, sessionId: finalSession || undefined },
+      {
+        ...data,
+        sessionId: finalSession || undefined,
+        signupToken: signupToken || undefined,
+      },
       { status: upstream.status }
     );
 
-    // forward any set-cookie headers
-    const anyHeaders = upstream.headers as any;
-    const setCookies =
-      anyHeaders.getSetCookie?.() ||
-      anyHeaders.raw?.()["set-cookie"] ||
-      (upstream.headers.get("set-cookie")
-        ? [upstream.headers.get("set-cookie")]
-        : []);
-    (setCookies || [])
-      .filter(Boolean)
-      .forEach((c: string) => resp.headers.append("set-cookie", c));
+    /* ---- persist cookies ---- */
+    if (finalSession) setSignupSessionCookie(resp, finalSession);
 
-    if (finalSession) setSessionCookie(resp, finalSession);
+    if (signupToken) setSignupTokenCookie(resp, signupToken);
 
-    console.log("=== /api/auth/signup-v2 DEBUG END ===");
+    if (deviceToken) setDeviceTokenCookie(resp, deviceToken);
+
     return resp;
   } catch (e: any) {
-    const aborted = e?.name === "AbortError" || e === "timeout";
-    console.error("[signup] upstream error:", e);
-    console.log("=== /api/auth/signup-v2 DEBUG END ===");
     return NextResponse.json(
-      {
-        success: false,
-        message: aborted
-          ? `Upstream timeout after ${TIMEOUT_MS}ms`
-          : e?.message || "Upstream fetch failed",
-      },
-      { status: aborted ? 504 : 502 }
+      { success: false, message: e?.message || "Upstream error" },
+      { status: 502 }
     );
   } finally {
     clearTimeout(timer);
