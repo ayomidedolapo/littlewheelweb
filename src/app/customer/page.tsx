@@ -655,6 +655,115 @@ export default function CustomerPage() {
   const searchDigits = search.replace(/\D/g, "").trim();
   const canShowCount = searchDigits.length >= 6;
 
+  /* === Draggable Floating Onboard Button state === */
+  const [floatPos, setFloatPos] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const floatRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef({
+    isDown: false,
+    dragging: false,
+    startX: 0,
+    startY: 0,
+    originX: 0,
+    originY: 0,
+  });
+  const ignoreClickRef = useRef(false);
+
+  // Initial position (bottom-right-ish)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    setTimeout(() => {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+
+      const rect = floatRef.current?.getBoundingClientRect();
+      const width = rect?.width ?? 200;
+      const height = rect?.height ?? 60;
+
+      setFloatPos({
+        x: Math.max(0, vw - width - 20),
+        y: Math.max(0, vh - height - 120),
+      });
+    }, 50);
+  }, []);
+
+  const handlePointerDown = (e: any) => {
+    e.preventDefault();
+    const rect = floatRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    dragRef.current = {
+      isDown: true,
+      dragging: false,
+      startX: e.clientX,
+      startY: e.clientY,
+      originX: rect.left,
+      originY: rect.top,
+    };
+
+    setIsDragging(false);
+  };
+
+  useEffect(() => {
+    const move = (e: PointerEvent) => {
+      if (!dragRef.current.isDown) return;
+
+      const dx = e.clientX - dragRef.current.startX;
+      const dy = e.clientY - dragRef.current.startY;
+
+      const threshold = 4;
+      if (!dragRef.current.dragging) {
+        if (Math.abs(dx) < threshold && Math.abs(dy) < threshold) return;
+        dragRef.current.dragging = true;
+        setIsDragging(true);
+      }
+
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+
+      const rect = floatRef.current?.getBoundingClientRect();
+      const width = rect?.width ?? 0;
+      const height = rect?.height ?? 0;
+
+      // Edge-to-edge clamp
+      const rawX = dragRef.current.originX + dx;
+      const rawY = dragRef.current.originY + dy;
+
+      const minX = 0;
+      const minY = 0;
+      const maxX = vw - width;
+      const maxY = vh - height;
+
+      setFloatPos({
+        x: Math.min(Math.max(rawX, minX), maxX),
+        y: Math.min(Math.max(rawY, minY), maxY),
+      });
+    };
+
+    const up = () => {
+      if (!dragRef.current.isDown) return;
+
+      if (dragRef.current.dragging) {
+        ignoreClickRef.current = true;
+      }
+
+      dragRef.current.isDown = false;
+      dragRef.current.dragging = false;
+      setIsDragging(false);
+    };
+
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+    };
+  }, []);
+
   return (
     <>
       {/* ✅ Global route spinner (exact BottomTabs pattern) */}
@@ -897,14 +1006,27 @@ export default function CustomerPage() {
           <div className="h-15" />
         </div>
 
-        {/* Floating Onboard Button */}
+        {/* 🟡 Draggable Floating Onboard Button */}
         <div
-          className="fixed right-4 z-50 pointer-events-none"
-          style={{ top: `calc(env(safe-area-inset-top) + 600px)` }}
+          ref={floatRef}
+          className="fixed z-50"
+          style={{
+            left: floatPos.x,
+            top: floatPos.y,
+            touchAction: "none",
+            cursor: isDragging ? "grabbing" : "grab",
+          }}
+          onPointerDown={handlePointerDown}
         >
           <button
             type="button"
-            onClick={() => routePush("/onboard-form")}
+            onClick={() => {
+              if (ignoreClickRef.current) {
+                ignoreClickRef.current = false;
+                return;
+              }
+              routePush("/onboard-form");
+            }}
             aria-label="Onboard new user"
             disabled={navDisabled}
             className="pointer-events-auto inline-flex items-center gap-2 rounded-sm bg-black px-5 py-3
