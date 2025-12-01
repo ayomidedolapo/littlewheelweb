@@ -33,6 +33,27 @@ type VirtualAccount = {
   accountName?: string;
 };
 
+function extractBankArray(payload: any): any[] {
+  if (!payload) return [];
+
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload.data)) return payload.data;
+  if (Array.isArray(payload.items)) return payload.items;
+  if (Array.isArray(payload.banks)) return payload.banks;
+  if (Array.isArray(payload.bankAccounts)) return payload.bankAccounts;
+  if (Array.isArray(payload.accounts)) return payload.accounts;
+
+  const d = payload.data;
+  if (d && typeof d === "object") {
+    if (Array.isArray(d.items)) return d.items;
+    if (Array.isArray(d.banks)) return d.banks;
+    if (Array.isArray(d.bankAccounts)) return d.bankAccounts;
+    if (Array.isArray(d.accounts)) return d.accounts;
+  }
+
+  return [];
+}
+
 /** Robust token lookup (cookie -> localStorage fallbacks) */
 function getClientToken(): string {
   try {
@@ -186,7 +207,9 @@ export default function CreditRechargePage() {
   const router = useRouter();
 
   const [currentBalance, setCurrentBalance] = useState(0);
-  const [amountRaw, setAmountRaw] = useState("400000");
+
+  // default amount now "0"
+  const [amountRaw, setAmountRaw] = useState("0");
   const amount = useMemo(() => parseNG(amountRaw), [amountRaw]);
 
   // Tier / Virtual account (from /api/user/me)
@@ -194,8 +217,6 @@ export default function CreditRechargePage() {
   const [virtual, setVirtual] = useState<VirtualAccount | null>(null);
 
   // Derived flags:
-  // - Tier 2 WITH virtual => show ONLY virtual account
-  // - Tier 1 OR Tier 2 WITHOUT virtual => show banks
   const hasVirtual = !!virtual?.accountNumber;
   const showTier2VA = isTier2 && hasVirtual;
   const showTier1Banks = !isTier2 || (isTier2 && !hasVirtual);
@@ -310,42 +331,9 @@ export default function CreditRechargePage() {
     };
   }, [loadUserTierAndVirtual, loadCreditBalance]);
 
-  /* ---- Tier 1: load available bank accounts ---- */
-  const fallbackBanks: BankAccount[] = [
-    {
-      id: "wema",
-      name: "WEMA BANK",
-      health: "100%",
-      logoUrls: [
-        "https://nigerianbanks.xyz/logo/wema-bank.png",
-        "https://logo.clearbit.com/wemabank.com",
-      ],
-      accountNumber: "0126461853",
-    },
-    {
-      id: "opay",
-      name: "OPAY",
-      health: "100%",
-      logoUrls: [
-        "https://nigerianbanks.xyz/logo/paycom.png",
-        "https://logo.clearbit.com/opayweb.com",
-      ],
-      accountNumber: "7088867396",
-    },
-    {
-      id: "fcmb",
-      name: "FCMB",
-      health: "100%",
-      logoUrls: [
-        "https://nigerianbanks.xyz/logo/first-city-monument-bank.png",
-        "https://logo.clearbit.com/fcmb.com",
-      ],
-      accountNumber: "2005987367",
-    },
-  ];
-
+  /* ---- Tier 1: load available bank accounts from backend ---- */
   async function loadBanks() {
-    // 🔑 If we should NOT show banks (Tier 2 with virtual), clear + bail
+    // If we shouldn't show banks (Tier 2 with virtual), clear + bail
     if (!showTier1Banks) {
       setBankAccounts([]);
       setBankId("");
@@ -358,44 +346,82 @@ export default function CreditRechargePage() {
       setLoadingBanks(true);
       setBanksErr(null);
 
-      const token = getClientToken();
-      const r = await fetch(`/api/v1/settings/bank-accounts?page=1&limit=30`, {
-        credentials: "include",
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      const qs = new URLSearchParams({
+        page: "1",
+        limit: "30",
+        filter: "active:true",
+        sort: "createdAt:DESC",
+      }).toString();
+
+      const r = await fetch(`/api/v1/settings/bank-accounts?${qs}`, {
+        method: "GET",
         cache: "no-store",
+        credentials: "include",
       });
 
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const text = await r.text();
+      let j: any = {};
+      try {
+        j = JSON.parse(text || "{}");
+      } catch {}
 
-      const data = await r.json().catch(() => ({}));
-      const raw =
-        data?.data?.recharges || data?.data || data?.bankAccounts || [];
-
-      if (Array.isArray(raw) && raw.length) {
-        const accounts: BankAccount[] = raw.map((a: any, i: number) => ({
-          id: String(a.id || a._id || `bank_${i}`),
-          name: String(a.bankName || a.name || "Unknown Bank"),
-          health: a.status === "active" ? "100%" : String(a.health || "100%"),
-          logoUrls: [
-            a.logo || a.logoUrl,
-            a.bankName
-              ? `https://nigerianbanks.xyz/logo/${String(a.bankName)
-                  .toLowerCase()
-                  .replace(/\s+/g, "-")}.png`
-              : undefined,
-          ].filter(Boolean) as string[],
-          accountNumber: String(a.accountNumber || a.account_number || "N/A"),
-        }));
-        setBankAccounts(accounts);
-        setBankId(accounts[0]?.id || "");
-      } else {
-        setBankAccounts(fallbackBanks);
-        setBankId(fallbackBanks[0].id);
+      if (!r.ok) {
+        throw new Error(j?.message || j?.error || `HTTP ${r.status}`);
       }
+
+      const raw = extractBankArray(j);
+
+      if (!Array.isArray(raw) || raw.length === 0) {
+        setBankAccounts([]);
+        setBankId("");
+        setBanksErr("No banks available from server.");
+        return;
+      }
+
+      const accounts: BankAccount[] = raw.map((b: any, idx: number) => {
+        const name = String(b.bankName || b.name || "Unknown Bank");
+        const code = String(
+          b.code || b.bankCode || b.id || b._id || `bank_${idx}`
+        );
+        const logo = b.logo || b.logoUrl || null;
+
+        const logoUrls: string[] = [];
+        if (logo) logoUrls.push(String(logo));
+        if (name) {
+          logoUrls.push(
+            `https://nigerianbanks.xyz/logo/${name
+              .toLowerCase()
+              .replace(/\s+/g, "-")}.png`
+          );
+        }
+
+        const accountNumber =
+          b.accountNumber ||
+          b.account_number ||
+          b.settlementAccount ||
+          b.settlement_account ||
+          "";
+
+        const health =
+          b.status === "active" || b.active === true
+            ? "100%"
+            : String(b.health || "100%");
+
+        return {
+          id: code,
+          name,
+          health,
+          logoUrls,
+          accountNumber: String(accountNumber || ""),
+        };
+      });
+
+      setBankAccounts(accounts);
+      setBankId(accounts[0]?.id || "");
     } catch (e: any) {
-      setBankAccounts(fallbackBanks);
-      setBankId(fallbackBanks[0].id);
-      setBanksErr("Using default banks — couldn't load from server.");
+      setBankAccounts([]);
+      setBankId("");
+      setBanksErr(e?.message || "Failed to load banks from server.");
     } finally {
       setLoadingBanks(false);
     }
@@ -423,7 +449,6 @@ export default function CreditRechargePage() {
       setError("Please enter a valid amount.");
       return;
     }
-    // Show VA popup sheet
     setVaOpen(true);
   };
 

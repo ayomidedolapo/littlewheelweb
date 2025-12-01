@@ -1,11 +1,12 @@
+/* app/(whatever)/reset-password/page.tsx */
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, HelpCircle, Eye, EyeOff } from "lucide-react";
 import LogoSpinner from "../../../../../../components/loaders/LogoSpinner";
 
-const API_CHANGE_PASSWORD = "/api/settings/change-password";
+const API_RESET_PASSWORD = "/api/auth/reset-password";
 
 /* ---------- overlay using shared LogoSpinner ---------- */
 function LoadingOverlay({ show }: { show: boolean }) {
@@ -26,30 +27,40 @@ function LoadingOverlay({ show }: { show: boolean }) {
   );
 }
 
-export default function ChangePasswordPage() {
+export default function ResetPasswordPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
 
-  const [currentPwd, setCurrentPwd] = useState("");
-  const [newPwd, setNewPwd] = useState("");
-  const [confirmPwd, setConfirmPwd] = useState("");
+  const resetToken = searchParams.get("token") || "";
 
-  const [showCurrent, setShowCurrent] = useState(false);
-  const [showNew, setShowNew] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
+  const [pin, setPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+
+  const [showPin, setShowPin] = useState(false);
+  const [showConfirmPin, setShowConfirmPin] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // simple rules – tweak as needed
-  const minLen = 6;
-  const newValid = newPwd.length >= minLen;
-  const matches = newPwd === confirmPwd;
-  const different = newPwd && currentPwd && newPwd !== currentPwd;
+  // only 5 digits
+  const PIN_LENGTH = 5;
+  const isValidPin = /^\d{5}$/.test(pin);
+  const matches = pin === confirmPin;
+  const formValid = isValidPin && matches;
 
-  const formValid = currentPwd.length >= 1 && newValid && matches && different;
   const loading = submitting || isPending;
+
+  function handlePinChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const digits = e.target.value.replace(/\D/g, "").slice(0, PIN_LENGTH);
+    setPin(digits);
+  }
+
+  function handleConfirmPinChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const digits = e.target.value.replace(/\D/g, "").slice(0, PIN_LENGTH);
+    setConfirmPin(digits);
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -60,12 +71,12 @@ export default function ChangePasswordPage() {
     setSuccessMsg(null);
 
     try {
-      const res = await fetch(API_CHANGE_PASSWORD, {
+      const res = await fetch(API_RESET_PASSWORD, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          currentPassword: currentPwd,
-          newPassword: newPwd,
+          password: pin,
+          token: resetToken,
         }),
       });
 
@@ -74,19 +85,18 @@ export default function ChangePasswordPage() {
       if (!res.ok || json?.success === false) {
         setErrorMsg(
           json?.message ||
-            "Could not update password. Please check your details and try again."
+            "Could not reset password. Please check the link and try again."
         );
         setSubmitting(false);
         return;
       }
 
-      setSuccessMsg("Password updated successfully.");
-      setCurrentPwd("");
-      setNewPwd("");
-      setConfirmPwd("");
+      setSuccessMsg("Password reset successfully.");
+      setPin("");
+      setConfirmPin("");
 
       setTimeout(() => {
-        startTransition(() => router.back());
+        startTransition(() => router.push("/agent-login"));
       }, 700);
     } catch {
       setErrorMsg("Network error. Please try again.");
@@ -96,7 +106,6 @@ export default function ChangePasswordPage() {
 
   return (
     <div className="min-h-screen bg-gray-50" aria-busy={loading}>
-      {/* global overlay while submitting or navigating */}
       <LoadingOverlay show={loading} />
 
       {/* Header */}
@@ -118,116 +127,87 @@ export default function ChangePasswordPage() {
 
       {/* Body */}
       <div className="max-w-sm mx-auto px-4 pt-3 pb-10">
-        <h1 className="text-xl font-semibold text-black">Change Password</h1>
+        <h1 className="text-xl font-semibold text-black">Reset Password</h1>
         <p className="text-[13px] text-gray-500 mt-1">
-          Update your current password for better security.
+          Set a new 5-digit password to secure your account.
         </p>
 
         <form onSubmit={onSubmit} className="mt-4 space-y-3">
-          {/* Group card for inputs */}
           <div className="bg-white rounded-2xl border border-gray-100 p-4 space-y-4">
-            {/* Current */}
+            {/* New PIN */}
             <div>
               <label className="block text-[13px] text-gray-700 mb-2">
-                Enter your current password
+                Enter new 5-digit password
               </label>
               <div className="relative">
                 <input
-                  type={showCurrent ? "text" : "password"}
-                  value={currentPwd}
-                  onChange={(e) => setCurrentPwd(e.target.value)}
+                  type={showPin ? "text" : "password"}
+                  value={pin}
+                  onChange={handlePinChange}
                   className="w-full h-11 rounded-xl bg-gray-50 border border-gray-200 px-3 pr-11 text-sm outline-none focus:ring-2 focus:ring-black/10 disabled:opacity-60"
-                  autoComplete="current-password"
-                  disabled={loading}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowCurrent((s) => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 disabled:opacity-40"
-                  aria-label={showCurrent ? "Hide password" : "Show password"}
-                  disabled={loading}
-                >
-                  {showCurrent ? (
-                    <EyeOff className="w-4 h-4" />
-                  ) : (
-                    <Eye className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* New */}
-            <div>
-              <label className="block text-[13px] text-gray-700 mb-2">
-                Enter New password
-              </label>
-              <div className="relative">
-                <input
-                  type={showNew ? "text" : "password"}
-                  value={newPwd}
-                  onChange={(e) => setNewPwd(e.target.value)}
-                  className="w-full h-11 rounded-xl bg-gray-50 border border-gray-200 px-3 pr-11 text-sm outline-none focus:ring-2 focus:ring-black/10 disabled:opacity-60"
+                  inputMode="numeric"
+                  pattern="\d*"
+                  maxLength={PIN_LENGTH}
                   autoComplete="new-password"
                   disabled={loading}
                 />
                 <button
                   type="button"
-                  onClick={() => setShowNew((s) => !s)}
+                  onClick={() => setShowPin((s) => !s)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 disabled:opacity-40"
-                  aria-label={showNew ? "Hide password" : "Show password"}
+                  aria-label={showPin ? "Hide password" : "Show password"}
                   disabled={loading}
                 >
-                  {showNew ? (
+                  {showPin ? (
                     <EyeOff className="w-4 h-4" />
                   ) : (
                     <Eye className="w-4 h-4" />
                   )}
                 </button>
               </div>
-              {/* Inline helper / errors for new password */}
               <div className="mt-1 text-[11px]">
-                {!newValid && newPwd.length > 0 && (
+                {pin.length > 0 && !isValidPin && (
                   <span className="text-red-600">
-                    Must be at least {minLen} characters.
-                  </span>
-                )}
-                {newValid && !different && currentPwd && (
-                  <span className="text-red-600">
-                    New password must be different from current password.
+                    Password must be exactly {PIN_LENGTH} digits.
                   </span>
                 )}
               </div>
             </div>
 
-            {/* Confirm */}
+            {/* Confirm PIN */}
             <div>
               <label className="block text-[13px] text-gray-700 mb-2">
                 Confirm new password
               </label>
               <div className="relative">
                 <input
-                  type={showConfirm ? "text" : "password"}
-                  value={confirmPwd}
-                  onChange={(e) => setConfirmPwd(e.target.value)}
+                  type={showConfirmPin ? "text" : "password"}
+                  value={confirmPin}
+                  onChange={handleConfirmPinChange}
                   className="w-full h-11 rounded-xl bg-gray-50 border border-gray-200 px-3 pr-11 text-sm outline-none focus:ring-2 focus:ring-black/10 disabled:opacity-60"
+                  inputMode="numeric"
+                  pattern="\d*"
+                  maxLength={PIN_LENGTH}
                   autoComplete="new-password"
                   disabled={loading}
                 />
                 <button
                   type="button"
-                  onClick={() => setShowConfirm((s) => !s)}
+                  onClick={() => setShowConfirmPin((s) => !s)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 disabled:opacity-40"
-                  aria-label={showConfirm ? "Hide password" : "Show password"}
+                  aria-label={
+                    showConfirmPin ? "Hide password" : "Show password"
+                  }
                   disabled={loading}
                 >
-                  {showConfirm ? (
+                  {showConfirmPin ? (
                     <EyeOff className="w-4 h-4" />
                   ) : (
                     <Eye className="w-4 h-4" />
                   )}
                 </button>
               </div>
-              {confirmPwd.length > 0 && !matches && (
+              {confirmPin.length > 0 && !matches && (
                 <p className="mt-1 text-[11px] text-red-600">
                   Passwords do not match.
                 </p>
@@ -255,10 +235,10 @@ export default function ChangePasswordPage() {
           >
             {submitting ? (
               <span className="inline-flex items-center gap-2">
-                <LogoSpinner className="w-4 h-4" /> Updating…
+                <LogoSpinner className="w-4 h-4" /> Resetting…
               </span>
             ) : (
-              "Update Password"
+              "Reset Password"
             )}
           </button>
         </form>
