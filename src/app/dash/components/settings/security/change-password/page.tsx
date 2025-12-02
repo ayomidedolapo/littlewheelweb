@@ -1,8 +1,8 @@
-/* app/(whatever)/reset-password/page.tsx */
+/* app/dash/components/settings/security/change-password/ResetPasswordClient.tsx */
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { ChevronLeft, HelpCircle, Eye, EyeOff } from "lucide-react";
 import LogoSpinner from "../../../../../../components/loaders/LogoSpinner";
 
@@ -27,12 +27,12 @@ function LoadingOverlay({ show }: { show: boolean }) {
   );
 }
 
-export default function ResetPasswordPage() {
+export default function ResetPasswordClient({ token }: { token: string }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
 
-  const resetToken = searchParams.get("token") || "";
+  // we now receive token via props
+  const resetToken = token || "";
 
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
