@@ -12,15 +12,11 @@ import {
   Bell,
   Eye,
   EyeOff,
-  ArrowDownCircle,
-  ArrowUpRight,
-  X,
-  Copy,
 } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import RecentTransactions from "./components/RecentTransactions";
-import CommissionSummary from "./components/CommissionSummary";
+import CommissionSummary from "./components/Payments";
 import BottomTabs from "./components/BottomTabs";
 
 /* ✅ Your existing skeleton for content areas */
@@ -370,6 +366,17 @@ export default function MobileDashboard() {
     navReplace("/dash");
   };
 
+  const handleCopyVa = async () => {
+    if (!va?.accountNumber) return;
+    try {
+      await navigator.clipboard.writeText(va.accountNumber);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    } catch {
+      // ignore for now
+    }
+  };
+
   return (
     <>
       {/* 🔵 Centered logo spinner (no overlay/backdrop) */}
@@ -403,205 +410,275 @@ export default function MobileDashboard() {
         <div className="min-h-screen bg-white flex items-start justify-center p-0 md:p-4">
           <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-3xl md:shadow-xl overflow-hidden">
             {/* Header Section */}
-            <div className="bg-black px-6 pt-8 pb-6">
+            <div className="bg-black px-6 pt-8 pb-3">
               {/* Greeting + Notifications */}
               <div className="flex items-center justify-between mb-6">
-                {/* Profile → Settings */}
-                <button
-                  type="button"
-                  onClick={openSettings}
-                  title="Open settings"
-                  className="group flex items-center gap-3 bg-transparent p-0 outline-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                  disabled={isPending}
-                >
-                  <div className="w-10 h-10 bg-gray-300 rounded-full overflow-hidden flex items-center justify-center ring-0 group-hover:ring-2 ring-white/30 transition">
-                    {user?.avatarUrl ? (
-                      <Image
-                        src={user.avatarUrl}
-                        alt="User avatar"
-                        width={48}
-                        height={48}
-                        className="w-full h-full object-cover"
-                        unoptimized
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-gray-400 flex items-center justify-center text-white text-lg font-bold">
-                        {displayName.charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                  </div>
-                  <div className="text-left">
-                    <p className="text-sm text-white font-medium opacity-80">
-                      Good day!
-                    </p>
-                    {loading ? (
-                      <div className="w-32 h-6 bg-white/20 rounded animate-pulse" />
-                    ) : (
-                      <p className="text-md font-bold text-white group-hover:underline">
-                        {displayName}
-                      </p>
-                    )}
-                  </div>
-                </button>
+  {/* Profile → Settings */}
+  <button
+    type="button"
+    onClick={openSettings}
+    title="Open settings"
+    className="group flex items-center gap-3 bg-transparent p-0 outline-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+    disabled={isPending}
+  >
+    {/* UPDATED AVATAR WITH GREY OUTLINE + BLUE VERIFIED TICK */}
+    <div className="relative">
+      {/* Grey outline ring */}
+      <div className="w-10 h-10 rounded-full border border-[#D0D5DD] bg-[#F9FAFB] overflow-hidden flex items-center justify-center">
+        {user?.avatarUrl ? (
+          <Image
+            src={user.avatarUrl}
+            alt="User avatar"
+            width={48}
+            height={48}
+            className="w-full h-full object-cover"
+            unoptimized
+          />
+        ) : (
+          <div className="w-full h-full bg-gray-400 flex items-center justify-center text-white text-lg font-bold">
+            {displayName.charAt(0).toUpperCase()}
+          </div>
+        )}
+      </div>
 
-                <div className="relative">
-                  <button
-                    onClick={goNotifications}
-                    className="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm hover:shadow-md transition-shadow disabled:opacity-60 disabled:cursor-not-allowed"
-                    aria-label="Notifications"
-                    disabled={isPending}
-                  >
-                    <Bell className="w-5 h-5 text-gray-700" />
-                    {notificationCount > 0 && (
-                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
-                        {notificationCount > 99 ? "99+" : notificationCount}
-                      </span>
-                    )}
-                  </button>
-                </div>
-              </div>
+      {/* Blue tick */}
+      <div className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-[#2563EB] flex items-center justify-center border-2 border-black">
+        <svg
+          viewBox="0 0 16 16"
+          className="h-2.5 w-2.5 text-white"
+          aria-hidden="true"
+        >
+          <path
+            d="M6.5 10.2 4.3 8l-.9.9 3.1 3.1 5-5-.9-.9z"
+            fill="currentColor"
+          />
+        </svg>
+      </div>
+    </div>
 
-              {/* Credit Balance card */}
-              <div className="bg-white rounded-md p-6 shadow-sm relative overflow-hidden">
+    <div className="text-left">
+      <p className="text-sm text-white font-medium opacity-80">
+        Good day!
+      </p>
+      {loading ? (
+        <div className="w-32 h-6 bg-white/20 rounded animate-pulse" />
+      ) : (
+        <p className="text-md font-bold text-white group-hover:underline">
+          {displayName}
+        </p>
+      )}
+    </div>
+  </button>
+
+  <div className="relative">
+    <button
+      onClick={goNotifications}
+      className="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm hover:shadow-md transition-shadow disabled:opacity-60 disabled:cursor-not-allowed"
+      aria-label="Notifications"
+      disabled={isPending}
+    >
+      <Bell className="w-5 h-5 text-gray-700" />
+      {notificationCount > 0 && (
+        <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+          {notificationCount > 99 ? "99+" : notificationCount}
+        </span>
+      )}
+    </button>
+  </div>
+</div>
+
+
+              {/* === NEW CREDIT CARD + COMMISSION + VA (matches design) === */}
+              <div className="bg-white rounded-[10px] p-5 shadow-sm relative overflow-hidden">
+                {/* subtle grid like design */}
                 <div
                   aria-hidden
-                  className="pointer-events-none absolute inset-0 rounded-md"
+                  className="pointer-events-none absolute inset-0 rounded-[24px]"
                   style={{
                     backgroundImage:
-                      "repeating-linear-gradient(0deg, rgba(0,0,0,.08) 0, rgba(0,0,0,.08) 1px, transparent 1px, transparent 44px), repeating-linear-gradient(90deg, rgba(0,0,0,.08) 0, rgba(0,0,0,.08) 1px, transparent 1px, transparent 44px)",
-                    backgroundSize: "44px 44px, 44px 44px",
-                    backgroundPosition: "0 0, 0 0",
+                      "linear-gradient(to right, rgba(0,0,0,0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.06) 1px, transparent 1px)",
+                    backgroundSize: "50px 50px",
                   }}
                 />
 
-                {/* VA strip */}
-                <div className="relative z-10 mb-3 -mx-1">
-                  {isTier2 && va?.accountNumber ? (
-                    <div className="relative">
-                      <div className="flex items-center justify-between rounded-full bg-gray-100/80 border border-gray-200 px-5 py-1.5">
-                        <span className="text-[12px] font-semibold text-gray-800">
-                          Your Virtual account
-                        </span>
-
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            try {
-                              await navigator.clipboard.writeText(
-                                va.accountNumber!
-                              );
-                              setCopied(true);
-                              setTimeout(() => setCopied(false), 1400);
-                            } catch {}
+                <div className="relative z-10">
+                  {/* Credit Balance */}
+                  <div className="flex items-start justify-between">
+                    <div className="flex flex-col">
+                      <span className="text-xs font-medium text-[#667185]">
+                        Credit Balance
+                      </span>
+                      <div className="mt-1 flex items-center gap-2">
+                        <span
+                          style={{
+                            fontFamily: "Inter",
+                            fontWeight: 700,
+                            fontSize: "25px",
+                            lineHeight: "120%",
                           }}
-                          className="group inline-flex items-center gap-2 text-gray-800 hover:text黒 disabled:opacity-60 disabled:cursor-not-allowed"
-                          title="Copy account number"
+                          className="text-[#101828]"
+                        >
+                          {loading
+                            ? "₦0.00"
+                            : showBalance
+                            ? NGN_FULL(creditBalance)
+                            : "₦••••"}
+                        </span>
+                        <button
+                          onClick={() => setShowBalance(!showBalance)}
+                          className="mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full disabled:opacity-60 disabled:cursor-not-allowed"
+                          aria-label={showBalance ? "Hide balance" : "Show balance"}
                           disabled={isPending}
                         >
-                          <span className="font-mono text-[13px] tracking-wide leading-none">
-                            {va.accountNumber}
-                          </span>
-                          <Copy className="w-3.5 h-3.5 opacity-80 group-hover:opacity-100" />
+                          {showBalance ? (
+                            <Eye className="w-5 h-5" />
+                          ) : (
+                            <EyeOff className="w-5 h-5" />
+                          )}
                         </button>
                       </div>
-
-                      {copied && (
-                        <div className="absolute right-3 mt-1 rounded-full bg-black text-white text-[10px] px-2 py-0.5">
-                          Copied!
-                        </div>
-                      )}
                     </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => nav("/dash/components/kyc")}
-                      className="w-full flex items中心 justify-between rounded-full bg-amber-100/40 border border-amber-200 px-5 py-1.5 text-amber-900 hover:bg-amber-100/60 disabled:opacity-60 disabled:cursor-not-allowed"
-                      title="Upgrade to Tier 2"
-                      disabled={isPending}
-                    >
-                      <span className="text-[12px] font-semibold leading-none">
-                        Your Virtual account
-                      </span>
-                      <span className="text-[12px] font-medium leading-none">
-                        {isTier2 ? "Pending setup" : "Upgrade to Tier 2 →"}
-                      </span>
-                    </button>
-                  )}
-                </div>
-
-                {/* Balance row + Add credit */}
-                <div className="relative z-10 flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <p className="text-sm text-gray-600 font-medium">
-                        Credit Balance
-                      </p>
-                      <button
-                        onClick={() => setShowBalance(!showBalance)}
-                        className="text-gray-400 hover:text-gray-600 disabled:opacity-60 disabled:cursor-not-allowed"
-                        aria-label={
-                          showBalance ? "Hide balance" : "Show balance"
-                        }
-                        disabled={isPending}
-                      >
-                        {showBalance ? (
-                          <Eye className="w-4 h-4" />
-                        ) : (
-                          <EyeOff className="w-4 h-4" />
-                        )}
-                      </button>
-                    </div>
-                    {loading ? (
-                      <div className="w-24 h-6 bg-gray-200 rounded animate-pulse" />
-                    ) : (
-                      <p className="text-xl font-extrabold text-gray-900">
-                        {showBalance ? NGN_FULL(creditBalance) : "₦••••"}
-                      </p>
-                    )}
                   </div>
 
-                  <button
-                    onClick={goRecharge}
-                    className="bg-black hover:bg-gray-800 text-white px-4 py-2 rounded-xl flex items-center gap-2 transition-colors font-medium text-sm disabled:opacity-60 disabled:cursor-not-allowed"
-                    disabled={isPending}
-                  >
-                    Add Credit
-                  </button>
+                  {/* Commission Earned pill */}
+                  <div className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#101928] px-4 py-2 text-xs text-white shadow-sm">
+                    <span className="inline-flex h-5 w-5 items-center justify-center">
+                      <Image
+                        src="/uploads/coin-stack.png"
+                        alt="Commission icon"
+                        width={20}
+                        height={20}
+                      />
+                    </span>
+                    <span className="font-medium">Commission Earned:</span>
+                    <span className="font-semibold">
+                      {NGN_FULL(commissionTotal)}
+                    </span>
+                  </div>
+
+      {/* Virtual Account box */}
+<div className="mt-5 rounded-lg bg-[#E4E7EC] px-2 py-2  text-[#101828]">
+  {isTier2 && va?.accountNumber ? (
+    <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-col gap-1">
+        <span className="text-xs font-semibold text-[#667185]">
+          Virtual Account
+        </span>
+        <span className="text-xs font-medium">
+          {va.bankName || "Virtual account"}
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={handleCopyVa}
+        className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-[#101828] whitespace-nowrap"
+        disabled={isPending}
+      >
+        <span className="font-mono tracking-wide">
+          {va.accountNumber}
+        </span>
+        <Image
+          src="/uploads/copyclip.png"
+          alt="Copy account"
+          width={16}
+          height={16}
+        />
+      </button>
+      {copied && (
+        <span className="absolute right-4 -bottom-5 text-[10px] text-[#667185]">
+          Copied!
+        </span>
+      )}
+    </div>
+  ) : (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-xs px-2 font-semibold text-[#1D2739] whitespace-nowrap flex-shrink-0">
+        No virtual account
+      </span>
+      <button
+        type="button"
+        onClick={() => nav("/dash/components/kyc")}
+        className="rounded-lg bg-black px-5 py-2 text-xs font-normal text-white disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0"
+        disabled={isPending}
+      >
+        Open account
+      </button>
+    </div>
+  )}
+</div>
                 </div>
+              </div>
+
+              {/* Withdraw / Add credit buttons under card */}
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={goWithdraw}
+                  className="flex items-center justify-center gap-2 rounded-md bg-white  px-4 py-2 text-sm font-semibold text-[#101828] shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                  disabled={isPending}
+                >
+                  <Image
+                    src="/uploads/arrow-down.png"
+                    alt="Withdraw"
+                    width={20}
+                    height={20}
+                  />
+                  <span>Withdraw</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={goRecharge}
+                  className="flex items-center justify-center gap-2 rounded-md bg-white px-4 py-2 text-sm font-semibold text-[#101828] shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                  disabled={isPending}
+                >
+                  <Image
+                    src="/uploads/addicon.png"
+                    alt="Add credit"
+                    className="text-black"
+                    width={20}
+                    height={20}
+                  />
+                  <span>Add credit</span>
+                </button>
               </div>
             </div>
 
-            {/* Main Content */}
-            <div className="bg-white flex-1">
-              <div className="px-6 py-6">
-                {loading ? (
-                  <LoadingDetails />
-                ) : (
-                  <RecentTransactions
-                    items={user?.transactions ?? []}
-                    onSeeAll={goToFullTransactions}
-                  />
-                )}
-              </div>
+                  {/* Main Content */}
+<div className="bg-white flex-1">
 
-              <div className="-mx-6 p-4">
-                {loading ? (
-                  <div className="bg-gray-50 rounded-lg p-4 mx-4">
-                    <div className="h-6 bg-gray-200 rounded animate-pulse w-1/2 mb-4" />
-                    <div className="h-4 bg-gray-200 rounded animate-pulse w-full mb-2" />
-                    <div className="h-4 bg-gray-200 rounded animate-pulse w-3/4" />
-                  </div>
-                ) : (
-                  <CommissionSummary
-                    total={commissionTotal}
-                    withdrawablePct={0.7}
-                    onWithdraw={goWithdraw}
-                  />
-                )}
-              </div>
+  {/* CommissionSummary — no top space */}
+  <div className="-mx-6 pt-0 px-4 pb-4">
+    {loading ? (
+      <div className="bg-gray-50 rounded-lg p-4 mx-4">
+        <div className="h-6 bg-gray-200 rounded animate-pulse w-1/2 mb-4" />
+        <div className="h-4 bg-gray-200 rounded animate-pulse w-full mb-2" />
+        <div className="h-4 bg-gray-200 rounded animate-pulse w-3/4" />
+      </div>
+    ) : (
+      <CommissionSummary
+        total={commissionTotal}
+        withdrawablePct={0.7}
+        onWithdraw={goWithdraw}
+      />
+    )}
+  </div>
 
-              <BottomTabs value="home" onChange={() => {}} className="mt-8" />
-            </div>
+  {/* Recent Transactions */}
+  <div className="px-6 py-2">
+    {loading ? (
+      <LoadingDetails />
+    ) : (
+      <RecentTransactions
+        items={user?.transactions ?? []}
+        onSeeAll={goToFullTransactions}
+      />
+    )}
+  </div>
+
+  <BottomTabs value="home" onChange={() => {}} className="mt-8" />
+</div>
+
           </div>
         </div>
       )}

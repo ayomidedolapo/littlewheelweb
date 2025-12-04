@@ -2,17 +2,11 @@
 
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Info, X, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
+import Image from "next/image";
 
 /* ✅ Logo spinner overlay */
 import LogoSpinner from "../../../components/loaders/LogoSpinner";
-
-/* ---------- money ---------- */
-const NGN = new Intl.NumberFormat("en-NG", {
-  style: "currency",
-  currency: "NGN",
-  minimumFractionDigits: 2,
-});
 
 /* ---------- tiny spinner (for small inline buttons) ---------- */
 function Spinner({ className = "w-4 h-4" }: { className?: string }) {
@@ -41,6 +35,7 @@ function Spinner({ className = "w-4 h-4" }: { className?: string }) {
 }
 
 export default function CommissionSummary({
+  // kept for compatibility but no longer used in the UI
   total = 60000,
   withdrawablePct = 0.7,
   onWithdraw,
@@ -51,17 +46,11 @@ export default function CommissionSummary({
   onWithdraw?: () => void | Promise<void>;
   onOnboard?: () => void | Promise<void>;
 }) {
-  const [open, setOpen] = useState(false);
-  const tooltipId = useId();
   const router = useRouter();
 
-  const pctLabel = `${Math.round(withdrawablePct * 100)}% withdrawable`;
-
-  // navigation/loading states
-  const [isWithdrawing, setIsWithdrawing] = useState(false);
+  // navigation/loading states (for onboard CTA)
   const [navOverlay, startTransition] = useTransition();
   const [forceOverlay, setForceOverlay] = useState(false);
-
   const showOverlay = navOverlay || forceOverlay;
 
   // draggable state
@@ -100,7 +89,7 @@ export default function CommissionSummary({
     }, 50);
   }, []);
 
-  // keep overlay visible briefly
+  // keep overlay visible briefly after nav
   useEffect(() => {
     if (!navOverlay) return;
     setForceOverlay(true);
@@ -125,16 +114,6 @@ export default function CommissionSummary({
     }
 
     startTransition(() => router.push("./onboard"));
-  };
-
-  const doWithdraw = async () => {
-    if (!onWithdraw) return;
-    setIsWithdrawing(true);
-    try {
-      await Promise.resolve(onWithdraw());
-    } finally {
-      setIsWithdrawing(false);
-    }
   };
 
   /* ===================== DRAG LOGIC ===================== */
@@ -186,9 +165,8 @@ export default function CommissionSummary({
       const minX = padding;
       const minY = padding;
       const maxX = vw - width - padding;
-const bottomPadding = 70; // adjust here
-const maxY = vh - height - bottomPadding;
-
+      const bottomPadding = 70; // adjust here
+      const maxY = vh - height - bottomPadding;
 
       setFloatPos({
         x: Math.min(Math.max(rawX, minX), maxX),
@@ -217,13 +195,47 @@ const maxY = vh - height - bottomPadding;
     };
   }, []);
 
+  /* ===================== PAYMENT SHORTCUTS ===================== */
+
+  const payments = [
+     {
+      key: "data",
+      label: "DATA",
+      route: "/dash/payments/data",
+    },
+    {
+      key: "airtime",
+      label: "AIRTIME",
+      route: "/dash/payments/airtime",
+    },
+    {
+      key: "electricity",
+      label: "ELECTRICITY",
+      route: "/dash/payments/electricity",
+    },
+    {
+      key: "cable",
+      label: "CABLE TV",
+      route: "/dash/payments/cable-tv",
+    },
+    {
+      key: "education",
+      label: "EDUCATION",
+      route: "/dash/payments/education",
+    },
+  ];
+
+  const handlePaymentClick = (route: string) => {
+    startTransition(() => router.push(route));
+  };
+
   /* ===================== RENDER ===================== */
 
   return (
     <>
       <LogoSpinner show={showOverlay} />
 
-      {/* Floating draggable CTA */}
+      {/* Floating draggable CTA (unchanged) */}
       <div
         ref={floatRef}
         className="fixed z-50"
@@ -256,67 +268,37 @@ const maxY = vh - height - bottomPadding;
         </button>
       </div>
 
-      {/* Black commission bar */}
-      <section className="mt-4 w-full bg-black px-6 py-6 h-28">
-        <div className="flex items-center justify-between">
-          {/* Left: label + amount */}
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-[12px] text-gray-300">Total Commission</span>
+      {/* Payments section (new UI) */}
+      <section className=" w-full bg-[#F9FAFB] px-6 py-4">
+        <h2 className="text-md font-semibold text-[#000000] mb-3">
+          Payments
+        </h2>
 
-              <div className="relative">
-                <button
-                  type="button"
-                  className="inline-flex items-center justify-center rounded-full border border-gray-500/60 text-white hover:bg-gray-800 w-4 h-4"
-                  aria-label="Show withdrawable info"
-                  aria-expanded={open}
-                  aria-controls={tooltipId}
-                  onClick={() => setOpen((v) => !v)}
-                >
-                  <Info className="w-3 h-3" />
-                </button>
-
-                {open && (
-                  <div
-                    id={tooltipId}
-                    role="tooltip"
-                    className="absolute z-10 left-0 mt-2 rounded-md bg-gray-900 text-gray-200 px-3 py-2 text-[10px] shadow-lg"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span>{pctLabel}</span>
-                      <button
-                        type="button"
-                        aria-label="Close"
-                        className="text-gray-400 hover:text-white"
-                        onClick={() => setOpen(false)}
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-
-                    <div className="absolute -top-1 left-3 w-2 h-2 bg-gray-900 rotate-45" />
-                  </div>
-                )}
+        <div className="flex gap-3 overflow-x-auto pb-1">
+          {payments.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => handlePaymentClick(item.route)}
+              className="min-w-[96px] max-w-[104px] h-[96px] rounded-2xl bg-white flex flex-col items-center justify-center gap-3 active:scale-[0.97] transition-transform"
+            >
+              {/* Icon box */}
+              <div className="h-7 w-7 flex items-center justify-center">
+                <Image
+                  src="/uploads/Group.png"
+                  alt={item.label}
+                  className="text-black"
+                  width={16}
+                  height={16}
+                />
               </div>
-            </div>
 
-            <p className="mt-1 text-[22px] font-semibold text-white">
-              {NGN.format(total)}
-            </p>
-          </div>
-
-          {/* Withdraw */}
-          <button
-            type="button"
-            onClick={doWithdraw}
-            aria-busy={isWithdrawing}
-            className="shrink-0 rounded-lg bg-white text-black px-3 py-1.5 text-[12px] font-semibold
-              hover:bg-gray-100 active:bg-gray-200 disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
-            disabled={isWithdrawing}
-          >
-            {isWithdrawing && <Spinner className="w-3.5 h-3.5" />}
-            {isWithdrawing ? "Processing…" : "Withdraw"}
-          </button>
+              {/* Label */}
+              <span className="text-[11px] font-semibold tracking-[0.12em] text-[#101828]">
+                {item.label}
+              </span>
+            </button>
+          ))}
         </div>
       </section>
     </>
