@@ -2,42 +2,36 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Home, Users2 } from "lucide-react";
-
-/* ✅ Use your logo spinner */
+import Image from "next/image";
 import LogoSpinner from "../../../components/loaders/LogoSpinner";
 
 type TabKey = "home" | "customers";
 
-const TABS: {
-  key: TabKey;
-  label: string;
-  Icon: React.ComponentType<any>;
-  route: string;
-}[] = [
-  { key: "home", label: "Home", Icon: Home, route: "./dash" },
-  { key: "customers", label: "Customers", Icon: Users2, route: "./customer" },
+const TABS = [
+  {
+    key: "home",
+    label: "Home",
+    iconLight: "/uploads/homeicon.png",
+    iconDark: "/uploads/iconhomedark.png",
+    route: "./dash",
+  },
+  {
+    key: "customers",
+    label: "Customers",
+    iconLight: "/uploads/customericon.png",
+    iconDark: "/uploads/iconcustomerdark.png",
+    route: "./customer",
+  },
 ];
 
-export default function InlineTabs({
-  value = "home",
-  onChange,
-  className = "",
-}: {
-  value?: TabKey;
-  onChange?: (t: TabKey) => void;
-  className?: string;
-}) {
+export default function InlineTabs({ value = "home", onChange, className = "" }) {
   const router = useRouter();
   const pathname = usePathname();
   const [active, setActive] = useState<TabKey>(value);
-
-  // track route transition state
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => setActive(value), [value]);
 
-  // Update active tab based on current pathname
   useEffect(() => {
     const current = TABS.find((tab) =>
       pathname.includes(tab.route.replace("./", ""))
@@ -45,68 +39,63 @@ export default function InlineTabs({
     if (current) setActive(current.key);
   }, [pathname]);
 
-  // Prefetch tab routes for snappier transitions
   useEffect(() => {
     TABS.forEach((t) => {
       try {
-        // Next automatically resolves relative path from current route
         router.prefetch(t.route);
       } catch {}
     });
   }, [router]);
 
-  const colPct = 100 / TABS.length;
-  const activeIndex = Math.max(
-    0,
-    TABS.findIndex((t) => t.key === active)
-  );
-
   const select = (key: TabKey) => {
-    const selectedTab = TABS.find((tab) => tab.key === key);
-    if (!selectedTab) return;
+    const tab = TABS.find((t) => t.key === key);
+    if (!tab) return;
+
     setActive(key);
     onChange?.(key);
 
-    // show logo spinner while navigating
     startTransition(() => {
-      router.push(selectedTab.route);
+      router.push(tab.route);
     });
   };
 
-  const disabled = isPending;
+  const colPct = 100 / TABS.length;
+  const activeIndex = TABS.findIndex((t) => t.key === active);
 
   return (
     <>
-      {/* 🔄 Logo spinner while routing */}
       <LogoSpinner show={isPending} />
 
       <nav
         className={`fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 shadow-[0_-2px_10px_rgba(0,0,0,0.04)] ${className}`}
         style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0px)" }}
-        aria-busy={disabled}
       >
         <div className="relative max-w-md mx-auto">
-          {/* Tabs row */}
           <div className="grid grid-cols-2">
-            {TABS.map(({ key, label, Icon }) => {
+            {TABS.map(({ key, label, iconLight, iconDark }) => {
               const selected = key === active;
+
+              const iconSrc = selected ? iconDark : iconLight;
+
               return (
                 <button
                   key={key}
                   onClick={() => select(key)}
-                  className="py-3 flex flex-col items-center justify-center gap-1 disabled:opacity-60 disabled:cursor-not-allowed"
-                  aria-current={selected ? "page" : undefined}
-                  disabled={disabled}
+                  className="py-3 flex flex-col items-center justify-center gap-1"
                 >
-                  <Icon
-                    className={`w-5 h-5 ${
-                      selected ? "text-black" : "text-slate-500"
-                    }`}
-                    strokeWidth={selected ? 2.6 : 2}
+                  {/* ICON SWITCH */}
+                  <Image
+                    src={iconSrc}
+                    alt={label}
+                    width={22}
+                    height={22}
+                    className="transition-all duration-200"
                   />
+
+                  {/* TEXT COLOR */}
                   <span
-                    className={`text-[11px] ${
-                      selected ? "text-black font-bold" : "text-slate-500"
+                    className={`text-[11px] transition ${
+                      selected ? "text-[#000000] font-bold" : "text-[#667185]"
                     }`}
                   >
                     {label}
@@ -116,7 +105,7 @@ export default function InlineTabs({
             })}
           </div>
 
-          {/* Rounded indicator */}
+          {/* Indicator Bar */}
           <div className="absolute left-0 right-0 -bottom-1.5 h-3 pointer-events-none">
             <div
               className="absolute inset-y-0"

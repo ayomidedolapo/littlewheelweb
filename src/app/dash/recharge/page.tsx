@@ -33,6 +33,27 @@ type VirtualAccount = {
   accountName?: string;
 };
 
+function extractBankArray(payload: any): any[] {
+  if (!payload) return [];
+
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload.data)) return payload.data;
+  if (Array.isArray(payload.items)) return payload.items;
+  if (Array.isArray(payload.banks)) return payload.banks;
+  if (Array.isArray(payload.bankAccounts)) return payload.bankAccounts;
+  if (Array.isArray(payload.accounts)) return payload.accounts;
+
+  const d = payload.data;
+  if (d && typeof d === "object") {
+    if (Array.isArray(d.items)) return d.items;
+    if (Array.isArray(d.banks)) return d.banks;
+    if (Array.isArray(d.bankAccounts)) return d.bankAccounts;
+    if (Array.isArray(d.accounts)) return d.accounts;
+  }
+
+  return [];
+}
+
 /** Robust token lookup (cookie -> localStorage fallbacks) */
 function getClientToken(): string {
   try {
@@ -58,8 +79,7 @@ function getClientToken(): string {
   }
 }
 
-/** Parse virtual account from flexible shapes (same idea as dashboard) */
-/* ---------- FIX: support `VirtualAccount` and fields { name, number, provider } ---------- */
+/** Parse virtual account from flexible shapes */
 function pickVirtualAccount(obj: any): VirtualAccount | null {
   if (!obj) return null;
 
@@ -86,7 +106,7 @@ function pickVirtualAccount(obj: any): VirtualAccount | null {
   const d = normalize(direct);
   if (d) return d;
 
-  // 2) Look through arrays
+  // 2) Arrays
   const arr = obj.accounts || obj.bankAccounts || obj.bank_accounts || [];
   if (Array.isArray(arr)) {
     const v =
@@ -101,7 +121,7 @@ function pickVirtualAccount(obj: any): VirtualAccount | null {
     if (n) return n;
   }
 
-  // 3) Flat fields on the user
+  // 3) Flat fields
   const num =
     obj.virtualAccountNumber ||
     obj.virtual_account_number ||
@@ -129,10 +149,8 @@ function pickVirtualAccount(obj: any): VirtualAccount | null {
 
   return null;
 }
-/* ---------- END FIX ---------- */
 
-/** Parse tier-2 indicator from flexible shapes (same idea as dashboard) */
-/* ---------- FIX: recognize `accountTier: "TIER_2"` ---------- */
+/** Parse tier-2 indicator from flexible shapes */
 function pickIsTier2(obj: any): boolean {
   const accountTier = (obj?.accountTier || obj?.account_tier || "").toString();
   if (/^TIER[_\s-]*2$/i.test(accountTier)) return true;
@@ -154,7 +172,6 @@ function pickIsTier2(obj: any): boolean {
     obj?.VirtualAccount
   );
 }
-/* ---------- END FIX ---------- */
 
 /** Bank logo with graceful fallback to initials */
 function BankLogo({ name, urls }: { name: string; urls: string[] }) {
@@ -190,17 +207,24 @@ export default function CreditRechargePage() {
   const router = useRouter();
 
   const [currentBalance, setCurrentBalance] = useState(0);
-  const [amountRaw, setAmountRaw] = useState("400000");
+
+  // default amount now "0"
+  const [amountRaw, setAmountRaw] = useState("0");
   const amount = useMemo(() => parseNG(amountRaw), [amountRaw]);
 
   // Tier / Virtual account (from /api/user/me)
   const [isTier2, setIsTier2] = useState(false);
   const [virtual, setVirtual] = useState<VirtualAccount | null>(null);
 
+  // Derived flags:
+  const hasVirtual = !!virtual?.accountNumber;
+  const showTier2VA = isTier2 && hasVirtual;
+  const showTier1Banks = !isTier2 || (isTier2 && !hasVirtual);
+
   // Sheets
-  const [selectOpen, setSelectOpen] = useState(false); // Tier-1 sheet (banks)
-  const [pendingOpen, setPendingOpen] = useState(false); // Tier-1 only
-  const [vaOpen, setVaOpen] = useState(false); // Tier-2 sheet (VA details)
+  const [selectOpen, setSelectOpen] = useState(false); // bank sheet
+  const [pendingOpen, setPendingOpen] = useState(false); // Tier-1 pending
+  const [vaOpen, setVaOpen] = useState(false); // Tier-2 VA details
 
   const [loading, setLoading] = useState(false); // submitting state (T1)
   const [error, setError] = useState<string | null>(null);
@@ -211,7 +235,7 @@ export default function CreditRechargePage() {
   const [bankId, setBankId] = useState<string>(""); // set after load
   const chosen = bankAccounts.find((b) => b.id === bankId) || null;
 
-  /* ---- load current credit balance (DASHBOARD-COMPATIBLE) ---- */
+  /* ---- load current credit balance ---- */
   const loadCreditBalance = useCallback(async () => {
     try {
       const r = await fetch("/api/v1/agent/balances", {
@@ -287,7 +311,7 @@ export default function CreditRechargePage() {
     loadCreditBalance();
   }, [loadUserTierAndVirtual, loadCreditBalance]);
 
-  // refresh hooks like dashboard (focus / visibility)
+  // refresh on focus / visibility
   useEffect(() => {
     const onFocus = () => {
       loadUserTierAndVirtual();
@@ -307,44 +331,12 @@ export default function CreditRechargePage() {
     };
   }, [loadUserTierAndVirtual, loadCreditBalance]);
 
-  /* ---- Tier 1: load available bank accounts ---- */
-  const fallbackBanks: BankAccount[] = [
-    {
-      id: "wema",
-      name: "WEMA BANK",
-      health: "100%",
-      logoUrls: [
-        "https://nigerianbanks.xyz/logo/wema-bank.png",
-        "https://logo.clearbit.com/wemabank.com",
-      ],
-      accountNumber: "0126461853",
-    },
-    {
-      id: "opay",
-      name: "OPAY",
-      health: "100%",
-      logoUrls: [
-        "https://nigerianbanks.xyz/logo/paycom.png",
-        "https://logo.clearbit.com/opayweb.com",
-      ],
-      accountNumber: "7088867396",
-    },
-    {
-      id: "fcmb",
-      name: "FCMB",
-      health: "100%",
-      logoUrls: [
-        "https://nigerianbanks.xyz/logo/first-city-monument-bank.png",
-        "https://logo.clearbit.com/fcmb.com",
-      ],
-      accountNumber: "2005987367",
-    },
-  ];
-
+  /* ---- Tier 1: load available bank accounts from backend ---- */
   async function loadBanks() {
-    if (isTier2) {
-      // Tier 2: banks are hidden/unused
+    // If we shouldn't show banks (Tier 2 with virtual), clear + bail
+    if (!showTier1Banks) {
       setBankAccounts([]);
+      setBankId("");
       setLoadingBanks(false);
       setBanksErr(null);
       return;
@@ -354,44 +346,82 @@ export default function CreditRechargePage() {
       setLoadingBanks(true);
       setBanksErr(null);
 
-      const token = getClientToken();
-      const r = await fetch(`/api/v1/settings/bank-accounts?page=1&limit=30`, {
-        credentials: "include",
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      const qs = new URLSearchParams({
+        page: "1",
+        limit: "30",
+        filter: "active:true",
+        sort: "createdAt:DESC",
+      }).toString();
+
+      const r = await fetch(`/api/v1/settings/bank-accounts?${qs}`, {
+        method: "GET",
         cache: "no-store",
+        credentials: "include",
       });
 
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const text = await r.text();
+      let j: any = {};
+      try {
+        j = JSON.parse(text || "{}");
+      } catch {}
 
-      const data = await r.json().catch(() => ({}));
-      const raw =
-        data?.data?.recharges || data?.data || data?.bankAccounts || [];
-
-      if (Array.isArray(raw) && raw.length) {
-        const accounts: BankAccount[] = raw.map((a: any, i: number) => ({
-          id: String(a.id || a._id || `bank_${i}`),
-          name: String(a.bankName || a.name || "Unknown Bank"),
-          health: a.status === "active" ? "100%" : String(a.health || "100%"),
-          logoUrls: [
-            a.logo || a.logoUrl,
-            a.bankName
-              ? `https://nigerianbanks.xyz/logo/${String(a.bankName)
-                  .toLowerCase()
-                  .replace(/\s+/g, "-")}.png`
-              : undefined,
-          ].filter(Boolean) as string[],
-          accountNumber: String(a.accountNumber || a.account_number || "N/A"),
-        }));
-        setBankAccounts(accounts);
-        setBankId(accounts[0]?.id || "");
-      } else {
-        setBankAccounts(fallbackBanks);
-        setBankId(fallbackBanks[0].id);
+      if (!r.ok) {
+        throw new Error(j?.message || j?.error || `HTTP ${r.status}`);
       }
+
+      const raw = extractBankArray(j);
+
+      if (!Array.isArray(raw) || raw.length === 0) {
+        setBankAccounts([]);
+        setBankId("");
+        setBanksErr("No banks available from server.");
+        return;
+      }
+
+      const accounts: BankAccount[] = raw.map((b: any, idx: number) => {
+        const name = String(b.bankName || b.name || "Unknown Bank");
+        const code = String(
+          b.code || b.bankCode || b.id || b._id || `bank_${idx}`
+        );
+        const logo = b.logo || b.logoUrl || null;
+
+        const logoUrls: string[] = [];
+        if (logo) logoUrls.push(String(logo));
+        if (name) {
+          logoUrls.push(
+            `https://nigerianbanks.xyz/logo/${name
+              .toLowerCase()
+              .replace(/\s+/g, "-")}.png`
+          );
+        }
+
+        const accountNumber =
+          b.accountNumber ||
+          b.account_number ||
+          b.settlementAccount ||
+          b.settlement_account ||
+          "";
+
+        const health =
+          b.status === "active" || b.active === true
+            ? "100%"
+            : String(b.health || "100%");
+
+        return {
+          id: code,
+          name,
+          health,
+          logoUrls,
+          accountNumber: String(accountNumber || ""),
+        };
+      });
+
+      setBankAccounts(accounts);
+      setBankId(accounts[0]?.id || "");
     } catch (e: any) {
-      setBankAccounts(fallbackBanks);
-      setBankId(fallbackBanks[0].id);
-      setBanksErr("Using default banks — couldn't load from server.");
+      setBankAccounts([]);
+      setBankId("");
+      setBanksErr(e?.message || "Failed to load banks from server.");
     } finally {
       setLoadingBanks(false);
     }
@@ -400,7 +430,7 @@ export default function CreditRechargePage() {
   useEffect(() => {
     loadBanks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isTier2]); // reload if tier changes
+  }, [showTier1Banks]);
 
   /* ---- actions ---- */
   const quick = (n: number) => setAmountRaw(String(n));
@@ -419,7 +449,6 @@ export default function CreditRechargePage() {
       setError("Please enter a valid amount.");
       return;
     }
-    // Show VA popup sheet
     setVaOpen(true);
   };
 
@@ -427,7 +456,6 @@ export default function CreditRechargePage() {
     try {
       await navigator.clipboard.writeText(text);
     } catch {
-      // fallback
       const el = document.createElement("textarea");
       el.value = text;
       document.body.appendChild(el);
@@ -459,7 +487,7 @@ export default function CreditRechargePage() {
         credentials: "include",
         cache: "no-store",
         body: JSON.stringify({
-          amount: String(amount), // backend expects string
+          amount: String(amount),
           selectedBank: chosen.name,
           bankId,
         }),
@@ -506,7 +534,7 @@ export default function CreditRechargePage() {
   /* ---------------- UI ---------------- */
   return (
     <>
-      {/* 🔥 Your centered logo spinner (shows during submit + when banks are loading) */}
+      {/* Centered logo spinner */}
       <LogoSpinner show={loading || loadingBanks} invert blurStrength={1.5} />
 
       <div className="min-h-screen bg-white flex items-start justify-center p-0 md:p-4">
@@ -554,7 +582,7 @@ export default function CreditRechargePage() {
               Credit Recharge
             </h1>
             <p className="text-[12px] text-gray-600 mt-1 mb-4">
-              {isTier2
+              {showTier2VA
                 ? "Transfer to your Virtual Account to top up instantly."
                 : "Load credit to serve customers"}
             </p>
@@ -567,7 +595,9 @@ export default function CreditRechargePage() {
               <div>
                 <p className="text-sm text-red-700 font-medium">Heads up</p>
                 {error && <p className="text-xs text-red-600">{error}</p>}
-                {banksErr && <p className="text-xs text-red-600">{banksErr}</p>}
+                {banksErr && (
+                  <p className="text-xs text-red-600">{banksErr}</p>
+                )}
               </div>
             </div>
           )}
@@ -597,12 +627,13 @@ export default function CreditRechargePage() {
                 </span>
               </p>
 
-              {!isTier2 && (
+              {/* Quick amounts only when banks are in use (Tier 1 or Tier 2 w/o VA) */}
+              {showTier1Banks && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {[2000, 5000, 10000, 20000].map((n) => (
                     <button
                       key={n}
-                      onClick={() => setAmountRaw(String(n))}
+                      onClick={() => quick(n)}
                       className={`h-9 px-3 rounded-md text-sm font-medium transition-colors ${
                         parseNG(amountRaw) === n
                           ? "bg-black text-white"
@@ -617,8 +648,8 @@ export default function CreditRechargePage() {
             </div>
           </div>
 
-          {/* Optional inline Tier-2 VA preview */}
-          {isTier2 && (
+          {/* Inline Tier-2 VA preview (only when VA exists) */}
+          {showTier2VA && (
             <div className="px-4 mt-4">
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
                 <p className="text-[12px] font-semibold text-emerald-800 mb-2">
@@ -633,7 +664,7 @@ export default function CreditRechargePage() {
 
           {/* Tier-based CTA */}
           <div className="px-4 pt-10 pb-6 mt-auto">
-            {!isTier2 ? (
+            {showTier1Banks ? (
               <>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[12px] text-gray-600">
@@ -677,8 +708,8 @@ export default function CreditRechargePage() {
           </div>
         </div>
 
-        {/* ===== Tier 2 Sheet: Virtual Account (no pending, just Done) ===== */}
-        {isTier2 && vaOpen && (
+        {/* ===== Tier 2 Sheet: Virtual Account (only when VA exists) ===== */}
+        {showTier2VA && vaOpen && (
           <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">
             <div
               className="absolute inset-0 bg-black/40"
@@ -731,7 +762,7 @@ export default function CreditRechargePage() {
         )}
 
         {/* ===== Tier 1 Sheet: Select bank / transfer details ===== */}
-        {!isTier2 && selectOpen && (
+        {showTier1Banks && selectOpen && (
           <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">
             <div
               className="absolute inset-0 bg-black/40"
@@ -817,7 +848,7 @@ export default function CreditRechargePage() {
         )}
 
         {/* ===== Tier 1 Sheet: Transaction Pending ===== */}
-        {!isTier2 && pendingOpen && (
+        {showTier1Banks && pendingOpen && (
           <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">
             <div
               className="absolute inset-0 bg-black/40"

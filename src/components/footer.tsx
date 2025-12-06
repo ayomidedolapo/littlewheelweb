@@ -10,9 +10,7 @@ import { FaXTwitter } from "react-icons/fa6";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Separator } from "./ui/separator";
-import CBN from "../../public/uploads/cbn";
-import NDIC from "../../public/uploads/ndic";
-import Fortress from "../../public/uploads/fortress";
+
 import Image from "next/image";
 
 const contactDetails = [
@@ -137,15 +135,11 @@ export default function Footer() {
         <Separator className="my-8 bg-[#344054]" />
 
         {/* Bottom section with copyright and logos */}
-        <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
-          <p className="text-sm text-[#F7F9FC] text-center md:text-left">
+        <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-8">
+          <p className="text-sm text-[#F7F9FC] text-center md:text-center">
             All Right reserved, 2025 || Little Wheel.
           </p>
-          <div className="flex items-center justify-center md:justify-end gap-2 md:gap-4">
-            <CBN />
-            <NDIC />
-            <Fortress />
-          </div>
+          
         </div>
       </div>
 

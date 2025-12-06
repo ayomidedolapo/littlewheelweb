@@ -126,7 +126,7 @@ export default function RecentTransactions({
   items = MOCK_TXNS,
   onSeeAll,
   page = 1,
-  limit = 5, // ← fetch only 5 by default
+  limit = 7, // ← fetch only 5 by default
 }: {
   items?: Txn[];
   onSeeAll?: () => void;
