@@ -3,7 +3,7 @@
 
 import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ChevronDown, Check } from "lucide-react";
+import { ArrowLeft, ChevronDown, Check, AlertCircle } from "lucide-react";
 import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 
 /** Where to go after saving the address */
@@ -59,9 +59,8 @@ export default function AddressPage() {
   const [form, setForm] = useState({
     address: "",
     lga: "",
-    city: "Ibadan",
-    state: "Oyo",
-    country: "Nigeria",
+    city: "",
+    state: "",
   });
 
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -85,6 +84,25 @@ export default function AddressPage() {
   }, [form, isIbadanOyo]);
 
   const isValid = Object.keys(errors).length === 0;
+
+  const baseField =
+    "w-full rounded-xl bg-white h-12 px-3 text-sm outline-none transition-all duration-150 placeholder:text-gray-400";
+  const labelCls =
+    "text-xs font-medium text-gray-700 flex items-center gap-1 mb-1.5 tracking-wide uppercase";
+  const errorCls = "mt-1 text-xs text-red-600";
+
+  const fieldHasError = (field: keyof typeof form) =>
+    touched[field] && errors[field];
+
+  const fieldClass = (field: keyof typeof form) => {
+    const hasError = fieldHasError(field);
+    return [
+      baseField,
+      hasError
+        ? "border border-red-500 bg-red-50 focus:border-red-500 focus:ring-2 focus:ring-red-100"
+        : "border border-gray-200 focus:border-gray-900 focus:ring-2 focus:ring-gray-100",
+    ].join(" ");
+  };
 
   const onChange =
     (field: keyof typeof form) =>
@@ -111,12 +129,6 @@ export default function AddressPage() {
 
   const markTouched = (f: keyof typeof form) =>
     setTouched((t) => ({ ...t, [f]: true }));
-
-  const fieldBox =
-    "w-full rounded-lg border border-gray-300 focus:border-black focus:ring-0 placeholder-gray-400 bg-white h-12 px-3 text-sm";
-  const labelCls =
-    "text-sm font-medium text-gray-800 flex items-center gap-1 mb-2";
-  const errorCls = "mt-1 text-xs text-red-600";
 
   const handleBack = () => router.back();
 
@@ -147,7 +159,8 @@ export default function AddressPage() {
         cache: "no-store",
         body: JSON.stringify({
           token,
-          country: form.country.trim() || "Nigeria",
+          // ✅ No more form.country.trim() – just send Nigeria
+          country: "Nigeria",
           state: form.state.trim(),
           city: form.city.trim(),
           lga: form.lga.trim(),
@@ -189,35 +202,88 @@ export default function AddressPage() {
   // previous steps already done in your flow
   const isPhoneVerified = true;
   const isPersonalDetailsAdded = true;
+  const isUserAddressStep = true; // last step – circle should be green
+
+  const hasTouchedSomething = Object.values(touched).some(Boolean);
 
   return (
     <div
-      className="min-h-screen bg-gray-50 flex items-center justify-center p-0 md:p-4"
+      className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-gray-100 flex items-center justify-center px-0 py-0 md:px-6 md:py-8"
       aria-busy={submitting}
     >
-      <div className="w-full max-w-3xl bg-white min-h-screen md:min-h-0 md:rounded-2xl md:shadow-xl overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center p-4 pt-8 bg-white">
-          <button
-            onClick={handleBack}
-            className="flex items-center text-gray-600 hover:text-gray-800"
-            disabled={submitting}
-          >
-            <ArrowLeft className="w-5 h-5 mr-2" />
-            <span className="text-sm font-medium">Back</span>
-          </button>
+      <LogoSpinner show={submitting} />
+
+      <div
+        className="
+          w-full
+          bg-white
+          min-h-screen
+          md:min-h-0
+          md:max-w-5xl
+          md:rounded-3xl
+          md:shadow-[0_18px_60px_rgba(15,23,42,0.14)]
+          md:border md:border-gray-100
+          overflow-hidden
+          flex flex-col
+        "
+      >
+        {/* Top progress + header */}
+        <div className="border-b border-gray-100 bg-white/90 backdrop-blur-sm">
+          <div className="px-4 md:px-8 pt-4 pb-3 flex items-center justify-between gap-3">
+            <button
+              onClick={handleBack}
+              className="inline-flex items-center gap-2 text-xs font-medium text-gray-600 hover:text-gray-900 transition-colors disabled:opacity-60"
+              disabled={submitting}
+            >
+              <ArrowLeft className="w-4 h-4 text-black" />
+              Back
+            </button>
+
+            <div className="hidden md:flex items-center gap-2 text-[11px] font-medium text-gray-500">
+              <span className="h-1.5 w-16 rounded-full bg-green-500" />
+              <span className="h-1.5 w-16 rounded-full bg-green-500" />
+              <span className="h-1.5 w-16 rounded-full bg-black" />
+              <span className="ml-3 tracking-wide uppercase">
+                Step 3 of 3 • Address
+              </span>
+            </div>
+          </div>
+
+          <div className="h-1 w-full bg-gray-100">
+            <div className="h-full bg-black rounded-r-full w-full" />
+          </div>
         </div>
 
-        {/* Body */}
-        <div className="px-4 md:px-8 pb-8">
-          <h1 className="text-2xl font-bold text-gray-900">
-            You are almost done!
-          </h1>
-          <p className="text-sm text-gray-600 mt-1 mb-6">Enter their address</p>
+        {/* Main layout */}
+        <div className="px-4 md:px-8 py-6 md:py-8 grid grid-cols-1 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-8 flex-1">
+          {/* Left: form */}
+          <div className="space-y-6">
+            {/* Heading */}
+            <div>
+              <p className="inline-flex items-center gap-2 rounded-full border border-gray-100 bg-gray-50 px-3 py-1 text-[11px] font-medium text-gray-600 mb-3">
+                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-green-500" />
+                Onboarding • Address details
+              </p>
+              <h1 className="text-xl md:text-2xl font-semibold text-gray-900 tracking-tight">
+                Final step – address
+              </h1>
+              <p className="text-sm text-gray-600 mt-1.5">
+                Add the customer&apos;s address so they can be reached easily.
+              </p>
+            </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Form */}
-            <div className="md:col-span-2 space-y-5">
+            {/* Validation summary */}
+            {!isValid && hasTouchedSomething && (
+              <div className="flex items-start gap-2 rounded-2xl border border-red-100 bg-red-50 px-3.5 py-2.5 text-xs text-red-700">
+                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                <p>
+                  Some address fields need your attention. Please fix the
+                  highlighted inputs.
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-5">
               {/* Address */}
               <div>
                 <label className={labelCls}>
@@ -228,10 +294,10 @@ export default function AddressPage() {
                   value={form.address}
                   onChange={onChange("address")}
                   onBlur={() => markTouched("address")}
-                  placeholder="e.g No 6, Bolanle Str"
-                  className={fieldBox}
+                  className={fieldClass("address")}
+                  aria-invalid={!!fieldHasError("address")}
                 />
-                {touched.address && errors.address && (
+                {fieldHasError("address") && (
                   <p className={errorCls}>{errors.address}</p>
                 )}
               </div>
@@ -246,8 +312,13 @@ export default function AddressPage() {
                     value={form.lga}
                     onChange={onChange("lga")}
                     onBlur={() => markTouched("lga")}
-                    className={`${fieldBox} appearance-none pr-8 cursor-pointer`}
+                    className={`${fieldClass(
+                      "lga"
+                    )} appearance-none pr-9 cursor-pointer ${
+                      !isIbadanOyo ? "bg-gray-50 text-gray-400" : ""
+                    }`}
                     disabled={!isIbadanOyo}
+                    aria-invalid={!!fieldHasError("lga")}
                   >
                     <option value="" disabled>
                       {isIbadanOyo
@@ -260,9 +331,9 @@ export default function AddressPage() {
                       </option>
                     ))}
                   </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-black pointer-events-none" />
                 </div>
-                {touched.lga && errors.lga && (
+                {fieldHasError("lga") && (
                   <p className={errorCls}>{errors.lga}</p>
                 )}
               </div>
@@ -277,14 +348,10 @@ export default function AddressPage() {
                   value={form.city}
                   onChange={onChange("city")}
                   onBlur={() => markTouched("city")}
-                  placeholder="e.g. Ibadan"
-                  className={fieldBox}
-                  list="city-suggestions"
+                  className={fieldClass("city")}
+                  aria-invalid={!!fieldHasError("city")}
                 />
-                <datalist id="city-suggestions">
-                  <option value="Ibadan" />
-                </datalist>
-                {touched.city && errors.city && (
+                {fieldHasError("city") && (
                   <p className={errorCls}>{errors.city}</p>
                 )}
               </div>
@@ -299,109 +366,101 @@ export default function AddressPage() {
                   value={form.state}
                   onChange={onChange("state")}
                   onBlur={() => markTouched("state")}
-                  placeholder="e.g. Oyo"
-                  className={fieldBox}
-                  list="state-suggestions"
+                  className={fieldClass("state")}
+                  aria-invalid={!!fieldHasError("state")}
                 />
-                <datalist id="state-suggestions">
-                  <option value="Oyo" />
-                </datalist>
-                {touched.state && errors.state && (
+                {fieldHasError("state") && (
                   <p className={errorCls}>{errors.state}</p>
                 )}
               </div>
 
+              {/* API error */}
               {errorMsg && (
-                <p className="text-xs text-red-600" role="alert">
-                  {errorMsg}
-                </p>
+                <div
+                  className="mt-2 flex items-start gap-2 rounded-2xl border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700"
+                  role="alert"
+                >
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <p>{errorMsg}</p>
+                </div>
               )}
             </div>
 
-            {/* Steps */}
-            <aside className="md:col-span-1">
-              <div className="mb-15 mt-20">
-                <h3 className="text-gray-900 font-semibold text-sm mb-4 underline">
-                  Steps to Onboard New Users
-                </h3>
+            {/* Footer CTA */}
+            <div className="pt-2 pb-4 md:pb-0">
+              <button
+                onClick={handleContinue}
+                disabled={!isValid || submitting}
+                className={`w-full md:w-auto px-7 py-3.5 rounded-2xl text-sm font-semibold tracking-wide inline-flex items-center justify-center gap-2 transition-all ${
+                  isValid && !submitting
+                    ? "bg-black text-white hover:bg-black/90 shadow-[0_14px_30px_rgba(15,23,42,0.25)]"
+                    : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                }`}
+              >
+                {submitting ? (
+                  <>
+                    <LogoSpinner className="w-4 h-4" />
+                    Saving address…
+                  </>
+                ) : (
+                  "Save & finish"
+                )}
+              </button>
+            </div>
+          </div>
 
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`w-5 h-5 rounded-full flex items-center justify-center ${
-                        isPhoneVerified ? "bg-green-500" : "bg-gray-400"
-                      }`}
-                    >
-                      <Check className="w-3 h-3 text-white" />
-                    </div>
-                    <span className="text-gray-600 text-sm">
-                      Phone Verification
-                    </span>
-                  </div>
+          {/* Right: Steps to onboard new users */}
+          <aside className="md:border-l md:border-gray-100 md:pl-6">
+            <div className="mt-4 md:mt-10 rounded-2xl border border-gray-100 bg-gray-50/60 px-4 py-5">
+              <h3 className="text-sm font-semibold text-gray-900 mb-4 underline">
+                Steps to Onboard New Users
+              </h3>
 
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`w-5 h-5 rounded-full flex items-center justify-center ${
-                        isPersonalDetailsAdded ? "bg-green-500" : "bg-gray-400"
-                      }`}
-                    >
-                      <Check className="w-3 h-3 text-white" />
-                    </div>
-                    <span className="text-gray-600 text-sm">
-                      Add Personal Details
-                    </span>
+              <div className="space-y-3">
+                {/* Step 1 */}
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`flex h-5 w-5 items-center justify-center rounded-full ${
+                      isPhoneVerified ? "bg-green-500" : "bg-gray-400"
+                    }`}
+                  >
+                    <Check className="w-3 h-3 text-white" />
                   </div>
+                  <span className="text-gray-700 text-sm">
+                    Phone Verification
+                  </span>
+                </div>
 
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`w-5 h-5 rounded-full flex items-center justify-center ${
-                        isValid ? "bg-green-500" : "bg-gray-400"
-                      }`}
-                    >
-                      <Check className="w-3 h-3 text-white" />
-                    </div>
-                    <span
-                      className={`text-sm ${
-                        isValid ? "text-gray-700 font-medium" : "text-gray-600"
-                      }`}
-                    >
-                      Add User Address
-                    </span>
+                {/* Step 2 */}
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`flex h-5 w-5 items-center justify-center rounded-full ${
+                      isPersonalDetailsAdded ? "bg-green-500" : "bg-gray-400"
+                    }`}
+                  >
+                    <Check className="w-3 h-3 text-white" />
                   </div>
+                  <span className="text-gray-700 text-sm">
+                    Add Personal Details
+                  </span>
+                </div>
 
-                  <div className="flex items-center gap-3">
-                    <div className="w-5 h-5 bg-gray-400 rounded-full flex items-center justify-center">
-                      <Check className="w-3 h-3 text-white" />
-                    </div>
-                    <span className="text-gray-600 text-sm">
-                      Face Capturing
-                    </span>
+                {/* Step 3 – always green on this last form */}
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`flex h-5 w-5 items-center justify-center rounded-full ${
+                      isUserAddressStep ? "bg-green-500" : "bg-gray-400"
+                    }`}
+                  >
+                    <Check className="w-3 h-3 text-white" />
                   </div>
+                  <span className="text-gray-700 text-sm">
+                    Add User Address
+                  </span>
                 </div>
               </div>
-            </aside>
-          </div>
-
-          {/* Footer */}
-          <div className="mt-8">
-            <button
-              onClick={handleContinue}
-              disabled={!isValid || submitting}
-              className={`w-full md:w-auto px-6 py-4 rounded-xl text-sm font-semibold transition-colors ${
-                isValid && !submitting
-                  ? "bg-black text-white hover:bg-black/90"
-                  : "bg-gray-200 text-gray-500 cursor-not-allowed"
-              }`}
-            >
-              {submitting ? (
-                <span className="inline-flex items-center gap-2">
-                  <LogoSpinner className="w-4 h-4" />
-                </span>
-              ) : (
-                "Save and Continue"
-              )}
-            </button>
-          </div>
+            </div>
+          </aside>
         </div>
       </div>
     </div>

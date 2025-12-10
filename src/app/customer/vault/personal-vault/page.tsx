@@ -10,7 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
-  Check, // <- use tick icon
+  ArrowUpRight, // <- same icon as /customer/vault recent tx
 } from "lucide-react";
 import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 
@@ -149,6 +149,7 @@ function PersonalVaultCustomerPageInner() {
 
   // ✅ Global route spinner
   const [isRouting, startTransition] = useTransition();
+  const navDisabled = isRouting;
 
   // stable token
   const tokenRef = useRef<string>("");
@@ -472,7 +473,7 @@ function PersonalVaultCustomerPageInner() {
     };
   }, [sp, token]);
 
-  /* Load vaults when picker opens (unchanged except types) */
+  /* Load vaults when picker opens */
   useEffect(() => {
     if (!pickerOpen) return;
     const customerId = getActiveCustomerId(sp);
@@ -549,6 +550,17 @@ function PersonalVaultCustomerPageInner() {
   const pct = (b: number, t: number) =>
     t ? Math.min(100, Math.round((b / t) * 100)) : 0;
 
+  // ✅ same transaction-details route as /customer/vault
+  const pushTransactionDetail = (t: Tx) => {
+    const customerId = getActiveCustomerId(sp);
+    const q = new URLSearchParams();
+    if (customerId) q.set("customerId", customerId);
+    q.set("txId", t.id);
+    startTransition(() =>
+      router.push(`/customer/vault/transaction-details?${q.toString()}`)
+    );
+  };
+
   return (
     <>
       {/* ✅ Global route spinner */}
@@ -559,8 +571,17 @@ function PersonalVaultCustomerPageInner() {
           {/* Back */}
           <div className="px-4 pt-4 pb-2">
             <button
-              onClick={() => startTransition(() => router.back())}
-              className="inline-flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900"
+              onClick={() =>
+                startTransition(() => {
+                  const customerId = getActiveCustomerId(sp);
+                  const q = customerId
+                    ? `?customerId=${encodeURIComponent(customerId)}`
+                    : "";
+                  router.push(`/customer/vault${q}`);
+                })
+              }
+              className="inline-flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900 disabled:opacity-60"
+              disabled={navDisabled}
             >
               <ArrowLeft className="h-4 w-4" />
               Back
@@ -619,7 +640,9 @@ function PersonalVaultCustomerPageInner() {
                 </div>
 
                 <div className="text-right">
-                  <p className="text-[11px] text-white/70">Reg. Phone Number</p>
+                  <p className="text-[11px] text-white/70">
+                    Reg. Phone Number
+                  </p>
                   <p className="text-[13px] font-semibold mt-0.5">
                     {loading ? (
                       <span className="inline-flex items-center gap-2">
@@ -729,14 +752,15 @@ function PersonalVaultCustomerPageInner() {
                     router.push(`/customer/vault/transactions?${q.toString()}`)
                   );
                 }}
-                className="text-[12px] text-gray-600 underline"
+                className="text-[12px] text-gray-600 underline disabled:opacity-60"
+                disabled={navDisabled}
               >
                 See all
               </button>
             </div>
           </div>
 
-          {/* Recent Transactions list (tick icon) */}
+          {/* Recent Transactions list — same styling/logic as /customer/vault */}
           <div className="px-4 mt-2">
             <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
               {txLoading ? (
@@ -759,23 +783,18 @@ function PersonalVaultCustomerPageInner() {
                 </div>
               ) : (
                 txs.map((t, i) => (
-                  <div
+                  <button
                     key={t.id}
-                    className={`flex items-center justify-between px-3 py-3 ${
+                    onClick={() => pushTransactionDetail(t)}
+                    className={`w-full flex items-center justify-between px-3 py-3 text-left ${
                       i !== txs.length - 1 ? "border-b border-gray-100" : ""
-                    }`}
+                    } hover:bg-gray-50 disabled:opacity-60`}
+                    disabled={navDisabled}
                   >
                     <div className="flex items-center gap-3">
-                      <div
-                        className={`h-8 w-8 rounded-full flex items-center justify-center ${
-                          t.isCredit ? "bg-emerald-50" : "bg-rose-50"
-                        }`}
-                      >
-                        <Check
-                          className={`w-4 h-4 ${
-                            t.isCredit ? "text-emerald-700" : "text-rose-700"
-                          }`}
-                        />
+                      {/* same green circle + ArrowUpRight icon */}
+                      <div className="h-8 w-8 rounded-full bg-emerald-50 flex items-center justify-center">
+                        <ArrowUpRight className="w-4 h-4 text-emerald-600" />
                       </div>
                       <div>
                         <p className="text-[13px] font-medium text-gray-900">
@@ -788,12 +807,13 @@ function PersonalVaultCustomerPageInner() {
                     </div>
                     <div
                       className={`text-[13px] font-semibold ${
-                        t.isCredit ? "text-emerald-600" : "text-rose-600"
+                        t.isCredit ? "text-gray-900" : "text-rose-600"
                       }`}
                     >
+                      {t.isCredit ? "" : "-"}
                       {NGN(t.amount)}
                     </div>
-                  </div>
+                  </button>
                 ))
               )}
             </div>
@@ -804,13 +824,15 @@ function PersonalVaultCustomerPageInner() {
             <div className="grid grid-cols-2 gap-4">
               <button
                 onClick={() => openPicker("withdraw")}
-                className="h-12 rounded-2xl font-semibold bg-gray-100 text-rose-600"
+                className="h-12 rounded-2xl font-semibold bg-gray-100 text-rose-600 disabled:opacity-60"
+                disabled={navDisabled}
               >
                 Withdraw
               </button>
               <button
                 onClick={() => openPicker("deposit")}
-                className="h-12 rounded-2xl font-semibold bg-black text-white"
+                className="h-12 rounded-2xl font-semibold bg-black text-white disabled:opacity-60"
+                disabled={navDisabled}
               >
                 Deposit
               </button>
@@ -922,9 +944,9 @@ function PersonalVaultCustomerPageInner() {
               {/* CTA */}
               <button
                 onClick={proceed}
-                disabled={!selectedVaultId}
+                disabled={!selectedVaultId || navDisabled}
                 className={`mt-4 w-full h-12 rounded-2xl font-semibold ${
-                  selectedVaultId
+                  selectedVaultId && !navDisabled
                     ? "bg-black text-white"
                     : "bg-gray-200 text-gray-500 cursor-not-allowed"
                 }`}

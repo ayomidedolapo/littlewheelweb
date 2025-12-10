@@ -15,11 +15,18 @@ import {
   Eye,
   CheckSquare,
   ChevronRight,
-  Check,
+  ArrowUpRight,
 } from "lucide-react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import LogoSpinner from "../../../components/loaders/LogoSpinner";
+
+/* ---------- tiny skeleton helper ---------- */
+function Skeleton({ className = "" }: { className?: string }) {
+  return (
+    <div className={`animate-pulse rounded-md bg-gray-200 ${className}`} />
+  );
+}
 
 /* ---------- types ---------- */
 type APIVault = {
@@ -48,6 +55,8 @@ type Tx = {
 };
 
 /* ---------- utils ---------- */
+const MIN_SKELETON_MS = 400;
+
 const formatNGN = (v: number) =>
   `₦${(v || 0).toLocaleString("en-NG", {
     minimumFractionDigits: 0,
@@ -201,6 +210,14 @@ function CustomerVaultPageInner() {
     routePush(`/customer/vault/${encodeURIComponent(slug)}?${q.toString()}`);
   };
 
+  const pushTransactionDetail = (t: Tx) => {
+    const customerId = getActiveCustomerId(sp);
+    const q = new URLSearchParams();
+    if (customerId) q.set("customerId", customerId);
+    q.set("txId", t.id);
+    routePush(`/customer/vault/transaction-details?${q.toString()}`);
+  };
+
   const extractArray = (payload: any): any[] => {
     const d = payload?.data ?? payload;
     if (Array.isArray(d)) return d;
@@ -237,6 +254,7 @@ function CustomerVaultPageInner() {
     const { signal } = ac;
 
     (async () => {
+      const start = performance.now();
       try {
         setLoading(true);
         setError(null);
@@ -312,7 +330,13 @@ function CustomerVaultPageInner() {
         if (e?.name === "AbortError") return;
         setError(e?.message || "Failed to load vaults.");
       } finally {
-        setLoading(false);
+        const elapsed = performance.now() - start;
+        const remaining = MIN_SKELETON_MS - elapsed;
+        if (remaining > 0) {
+          setTimeout(() => setLoading(false), remaining);
+        } else {
+          setLoading(false);
+        }
       }
     })();
 
@@ -329,6 +353,7 @@ function CustomerVaultPageInner() {
     const { signal } = ac;
 
     (async () => {
+      const start = performance.now();
       try {
         setTxLoading(true);
         const res = await apiGet(
@@ -376,7 +401,13 @@ function CustomerVaultPageInner() {
         if (e?.name === "AbortError") return;
         setTxs([]);
       } finally {
-        setTxLoading(false);
+        const elapsed = performance.now() - start;
+        const remaining = MIN_SKELETON_MS - elapsed;
+        if (remaining > 0) {
+          setTimeout(() => setTxLoading(false), remaining);
+        } else {
+          setTxLoading(false);
+        }
       }
     })();
 
@@ -385,7 +416,6 @@ function CustomerVaultPageInner() {
   }, []);
 
   const total = useMemo(() => totalBalance, [totalBalance]);
-  const withdrawable = useMemo(() => Math.max(total - 1000, 0), [total]); // business rule placeholder
 
   const navDisabled = isRouting;
 
@@ -414,7 +444,7 @@ function CustomerVaultPageInner() {
           {/* HERO */}
           <div className="px-4 relative">
             <div
-              className="relative rounded-2xl bg-black text-white p-5 overflow-hidden pb-8"
+              className="relative rounded-2xl bg-black text-white px-5 pt-7 pb-10 overflow-hidden"
               style={{
                 backgroundImage:
                   "repeating-linear-gradient(0deg, rgba(255,255,255,.08) 0, rgba(255,255,255,.08) 1px, transparent 1px, transparent 64px), repeating-linear-gradient(90deg, rgba(255,255,255,.08) 0, rgba(255,255,255,.08) 1px, transparent 1px, transparent 64px)",
@@ -428,34 +458,16 @@ function CustomerVaultPageInner() {
                 Add new <Plus className="h-4 w-4" />
               </button>
 
-              <div className="flex items-center gap-1 text-[12px] text-white/85 mb-1">
+              <div className="flex items-center gap-1 text-[12px] text-white/85 mb-2">
                 <span>Total Balance</span>
                 <Eye className="h-3.5 w-3.5 opacity-80" />
               </div>
-              <div className="text-[28px] leading-none font-extrabold tracking-tight mb-6">
+              <div className="text-[28px] leading-none font-extrabold tracking-tight mb-3">
                 {loading ? (
-                  <span className="inline-flex items-center gap-2">
-                    <LogoSpinner show={true} />
-                    Loading…
-                  </span>
+                  <Skeleton className="w-40 h-7 bg-white/20 rounded-lg" />
                 ) : (
                   formatNGN(total)
                 )}
-              </div>
-
-              <div className="mb-6">
-                <div className="inline-flex items-center rounded-full border border-white/10 bg-[#2A3F5D]/90 px-3 py-1 text-[12px] shadow-sm">
-                  <span className="opacity-95">Withdrawable Amount:&nbsp;</span>
-                  <span className="font-semibold">
-                    {loading ? (
-                      <span className="inline-flex items-center gap-2">
-                        <LogoSpinner show={true} />…
-                      </span>
-                    ) : (
-                      formatNGN(withdrawable)
-                    )}
-                  </span>
-                </div>
               </div>
             </div>
 
@@ -508,11 +520,20 @@ function CustomerVaultPageInner() {
             {error && <p className="text-xs text-rose-600 mb-2">{error}</p>}
 
             {loading ? (
-              <div className="px-1 py-6 flex items-center justify-center">
-                <span className="inline-flex items-center gap-2 text-sm text-gray-700">
-                  <LogoSpinner show={true} />
-                  Loading vaults…
-                </span>
+              <div className="space-y-3 py-2">
+                {[0, 1, 2].map((i) => (
+                  <div
+                    key={i}
+                    className="w-full flex items-stretch gap-3 rounded-xl border border-gray-200 p-3 bg-white"
+                  >
+                    <Skeleton className="h-16 w-16 rounded-xl" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-3 w-40" />
+                      <Skeleton className="h-2 w-full rounded-full" />
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : vaults.length === 0 ? (
               <p className="text-sm text-gray-500">No vaults yet.</p>
@@ -554,7 +575,10 @@ function CustomerVaultPageInner() {
                               {formatNGN(v.balance)}
                             </span>
                             <span className="text-gray-400 font-normal">
-                              /{formatNGN(v.target)}
+                              /
+                            </span>
+                            <span className="text-green-600 font-semibold">
+                              {formatNGN(v.target)}
                             </span>
                           </p>
                         </div>
@@ -588,7 +612,7 @@ function CustomerVaultPageInner() {
               <h2 className="text-[13px] font-semibold text-gray-900">
                 Recent Transactions
               </h2>
-              <button
+            <button
                 onClick={() => pushWithCustomer("/customer/vault/transactions")}
                 className="text-[12px] text-gray-600 inline-flex items-center gap-1 disabled:opacity-60"
                 disabled={navDisabled}
@@ -599,11 +623,22 @@ function CustomerVaultPageInner() {
 
             <div className="rounded-xl border border-gray-200 overflow-hidden bg-white">
               {txLoading ? (
-                <div className="px-3 py-4 flex items-center justify-center">
-                  <span className="inline-flex items-center gap-2 text-sm text-gray-700">
-                    <LogoSpinner show={true} />
-                    Loading transactions…
-                  </span>
+                <div className="divide-y divide-gray-100">
+                  {[0, 1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between px-3 py-3"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Skeleton className="h-8 w-8 rounded-full" />
+                        <div className="space-y-1">
+                          <Skeleton className="h-3 w-28" />
+                          <Skeleton className="h-2 w-20" />
+                        </div>
+                      </div>
+                      <Skeleton className="h-3 w-16" />
+                    </div>
+                  ))}
                 </div>
               ) : txs.length === 0 ? (
                 <div className="px-3 py-4 text-sm text-gray-500">
@@ -611,23 +646,18 @@ function CustomerVaultPageInner() {
                 </div>
               ) : (
                 txs.map((t, i) => (
-                  <div
+                  <button
                     key={t.id}
-                    className={`flex items-center justify-between px-3 py-3 ${
+                    onClick={() => pushTransactionDetail(t)}
+                    className={`w-full flex items-center justify-between px-3 py-3 text-left ${
                       i !== txs.length - 1 ? "border-b border-gray-100" : ""
-                    }`}
+                    } hover:bg-gray-50 disabled:opacity-60`}
+                    disabled={navDisabled}
                   >
                     <div className="flex items-center gap-3">
-                      <div
-                        className={`h-8 w-8 rounded-full ${
-                          t.isCredit ? "bg-emerald-50" : "bg-rose-50"
-                        } flex items-center justify-center`}
-                      >
-                        <Check
-                          className={`w-4 h-4 ${
-                            t.isCredit ? "text-emerald-600" : "text-rose-600"
-                          }`}
-                        />
+                      {/* Icon */}
+                      <div className="h-8 w-8 rounded-full bg-emerald-50 flex items-center justify-center">
+                        <ArrowUpRight className="w-4 h-4 text-emerald-600" />
                       </div>
                       <div>
                         <p className="text-[13px] font-medium text-gray-900">
@@ -640,13 +670,13 @@ function CustomerVaultPageInner() {
                     </div>
                     <div
                       className={`text-[13px] font-semibold ${
-                        t.isCredit ? "text-emerald-600" : "text-rose-600"
+                        t.isCredit ? "text-gray-900" : "text-rose-600"
                       }`}
                     >
-                      {t.isCredit ? "+" : "-"}
+                      {t.isCredit ? "" : "-"}
                       {formatNGN(t.amount)}
                     </div>
-                  </div>
+                  </button>
                 ))
               )}
             </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ChevronLeft, ChevronDown, Copy, Check } from "lucide-react";
+import { ChevronLeft, ChevronDown, Copy, Check, AlertCircle } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import LogoSpinner from "../../../../../../components/loaders/LogoSpinner"; // ✅ use your spinner
@@ -93,19 +93,12 @@ export default function WithdrawalBank() {
         ""
       : "";
 
-  /* Load saved display from backend (fallback to local cache) */
+  /* Load saved display from backend (backend is source of truth) */
   useEffect(() => {
     let cancelled = false;
     async function loadSaved() {
       setInitialLoading(true);
       try {
-        // optimistic: local cache
-        try {
-          const raw = localStorage.getItem("lw_withdrawal_bank");
-          if (raw && !cancelled) setSaved(JSON.parse(raw));
-        } catch {}
-
-        // authoritative
         const r = await fetch("/api/v1/settings/withdrawal-method", {
           cache: "no-store",
           headers: tokenHeader ? { "x-lw-auth": tokenHeader } : undefined,
@@ -118,7 +111,16 @@ export default function WithdrawalBank() {
           j = JSON.parse(text || "{}");
         } catch {}
 
-        if (!r.ok) return;
+        if (!r.ok) {
+          // if backend says error, clear any stale local cache for this screen
+          if (!cancelled) {
+            setSaved(null);
+            try {
+              localStorage.removeItem("lw_withdrawal_bank");
+            } catch {}
+          }
+          return;
+        }
 
         const d = j?.data || j?.method || j;
         const bankName =
@@ -131,21 +133,45 @@ export default function WithdrawalBank() {
           d?.accountNumber || d?.account_number || d?.account || "";
         const accountName = d?.accountName || d?.account_name || d?.name || "";
 
-        if (bankName && accountNumber) {
-          const s: SavedBank = {
-            bank: {
-              name: bankName,
-              code: bankCode,
-              logo: bankLogoUrl(bankName, logoUrl),
-            },
-            accountNumber: String(accountNumber),
-            accountName: String(accountName || ""),
-          };
+        // ✅ If backend has NO bank for this user, make sure nothing is shown
+        if (!bankName || !accountNumber) {
           if (!cancelled) {
-            setSaved(s);
+            setSaved(null);
             try {
-              localStorage.setItem("lw_withdrawal_bank", JSON.stringify(s));
+              localStorage.removeItem("lw_withdrawal_bank");
             } catch {}
+          }
+          return;
+        }
+
+        const s: SavedBank = {
+          bank: {
+            name: bankName,
+            code: bankCode,
+            logo: bankLogoUrl(bankName, logoUrl),
+          },
+          accountNumber: String(accountNumber),
+          accountName: String(accountName || ""),
+        };
+
+        if (!cancelled) {
+          setSaved(s);
+          try {
+            localStorage.setItem("lw_withdrawal_bank", JSON.stringify(s));
+          } catch {}
+        }
+      } catch {
+        // network error → as a fallback, we can show local cache if any
+        if (!cancelled) {
+          try {
+            const raw = localStorage.getItem("lw_withdrawal_bank");
+            if (raw) {
+              setSaved(JSON.parse(raw));
+            } else {
+              setSaved(null);
+            }
+          } catch {
+            setSaved(null);
           }
         }
       } finally {
@@ -363,7 +389,7 @@ export default function WithdrawalBank() {
               </div>
               <button
                 onClick={() => copy(saved!.accountNumber)}
-                className="p-2 rounded-lg hover:bg-white/10 transition"
+                className="p-2 rounded-lg hover:bg:white/10 transition"
                 aria-label="Copy account number"
                 disabled={disableAll}
               >
@@ -401,35 +427,35 @@ export default function WithdrawalBank() {
           </div>
         )}
 
-        {/* Entry / Edit form */}
+        {/* Entry / Edit form for first-time user */}
         {!hasSaved && (
-          <label className="block mt-5 text-[12px] text-gray-700 mb-1">
-            Bank name
-          </label>
-        )}
+          <>
+            <label className="block mt-5 text-[12px] text-gray-700 mb-1">
+              Bank name
+            </label>
 
-        {!hasSaved && (
-          <button
-            onClick={() => !disableAll && setPickerOpen(true)}
-            className="w-full h-11 px-3 rounded-xl border border-gray-200 text-left text-[13px] flex items-center justify-between disabled:opacity-60"
-            disabled={disableAll}
-          >
-            <div className="flex items-center gap-2">
-              {bank ? (
-                <Image
-                  src={bankLogoUrl(bank.name, bank.logo)}
-                  alt={bank.name}
-                  width={18}
-                  height={18}
-                  className="object-contain"
-                />
-              ) : null}
-              <span className={bank ? "text-gray-900" : "text-gray-400"}>
-                {bank ? bank.name : "Select Bank"}
-              </span>
-            </div>
-            <ChevronDown className="w-4 h-4 text-gray-500" />
-          </button>
+            <button
+              onClick={() => !disableAll && setPickerOpen(true)}
+              className="w-full h-11 px-3 rounded-xl border border-gray-200 text-left text-[13px] flex items-center justify-between disabled:opacity-60"
+              disabled={disableAll}
+            >
+              <div className="flex items-center gap-2">
+                {bank ? (
+                  <Image
+                    src={bankLogoUrl(bank.name, bank.logo)}
+                    alt={bank.name}
+                    width={18}
+                    height={18}
+                    className="object-contain"
+                  />
+                ) : null}
+                <span className={bank ? "text-gray-900" : "text-gray-400"}>
+                  {bank ? bank.name : "Select Bank"}
+                </span>
+              </div>
+              <ChevronDown className="w-4 h-4 text-gray-500" />
+            </button>
+          </>
         )}
 
         {/* Account number input */}
@@ -472,7 +498,7 @@ export default function WithdrawalBank() {
                 <div className="text-[13px] font-semibold leading-tight">
                   {toTitle(resolvedName)}
                 </div>
-                <div className="text-[12px] text-white/70 mt-0.5">
+                <div className="text-[12px] text:white/70 mt-0.5">
                   {maskAcct(acct)}
                 </div>
               </div>
@@ -488,11 +514,15 @@ export default function WithdrawalBank() {
           </div>
         )}
 
-        {/* Error */}
+        {/* Error – styled */}
         {error && (
-          <p className="mt-3 text-[12px] text-red-600" role="alert">
-            {error}
-          </p>
+          <div
+            className="mt-3 flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[12px] text-red-700"
+            role="alert"
+          >
+            <AlertCircle className="w-4 h-4 mt-[2px]" />
+            <p>{error}</p>
+          </div>
         )}
 
         {/* Confirm */}
@@ -618,8 +648,11 @@ function BankPickerSheet({
               Loading banks…
             </div>
           ) : err ? (
-            <div className="px-2 py-6 text-[13px] text-red-600">
-              Error: {err}
+            <div className="px-2 py-4">
+              <div className="flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[12px] text-red-700">
+                <AlertCircle className="w-4 h-4 mt-[2px]" />
+                <p>{err}</p>
+              </div>
             </div>
           ) : (
             <div className="max-h-[50vh] overflow-y-auto -mx-2">

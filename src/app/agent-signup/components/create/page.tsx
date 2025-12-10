@@ -9,6 +9,7 @@ import {
   Phone as PhoneIcon,
   Mail as MailIcon,
   CheckCircle2,
+  AlertCircle, // ✅ for styled error alert
 } from "lucide-react";
 import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 import { ReCaptcha } from "../../../../../components/ReCaptcha"; // new import
@@ -57,6 +58,7 @@ type StepState =
   | "verifying"
   | "verified"
   | "error";
+
 const otpBorder = (state: StepState) =>
   state === "verified"
     ? "border-emerald-500"
@@ -82,17 +84,13 @@ function getToken(data: any): string | null {
 function persistToken(tok: string | null | undefined) {
   if (!tok) return;
   try {
-    // Local storage (for client-side reads)
     localStorage.setItem("lw_token", tok);
-
-    // Non-HttpOnly cookies that the browser can see
     document.cookie = `lw_token=${encodeURIComponent(
       tok
     )}; Path=/; SameSite=Lax`;
     document.cookie = `lw_auth=${encodeURIComponent(
       tok
     )}; Path=/; SameSite=Lax`;
-    // 🔑 Signup-specific cookie so /api/auth/submit-user-data can read it
     document.cookie = `lw_signup_token=${encodeURIComponent(
       tok
     )}; Path=/; SameSite=Lax`;
@@ -269,6 +267,13 @@ export default function CreateExactDualOTP() {
       sending
     )
       return;
+
+    // 🔒 Require reCAPTCHA BEFORE sending OTP or showing boxes
+    if (!captchaToken) { 
+      setPageError("Please confirm you’re not a robot.");
+      return;
+    }
+
     setPageError(null);
 
     const e164 = toE164(phone);
@@ -276,14 +281,6 @@ export default function CreateExactDualOTP() {
     persistInputs(e164, cleanEmail);
 
     setSending(true);
-
-    // 🔒 Require reCAPTCHA in production before sending phone OTP
-    if (process.env.NODE_ENV === "production" && !captchaToken) {
-      setSending(false);
-      setPState("error");
-      setPageError("Please confirm you’re not a robot.");
-      return;
-    }
 
     const payload: any = {
       step: 1,
@@ -347,7 +344,6 @@ export default function CreateExactDualOTP() {
       return;
     }
 
-    // NOTE: backend does NOT return token on step 2; we don't expect it here
     const e164 = toE164(phone);
     persistInputs(e164, (email || "").trim().toLowerCase());
     saveSessionId(
@@ -375,6 +371,13 @@ export default function CreateExactDualOTP() {
       sending
     )
       return;
+
+    // 🔒 Require reCAPTCHA BEFORE sending OTP or showing boxes
+    if (!captchaToken) {
+      setPageError("Please confirm you’re not a robot.");
+      return;
+    }
+
     setPageError(null);
 
     const cleanEmail = (email || "").trim().toLowerCase();
@@ -384,13 +387,6 @@ export default function CreateExactDualOTP() {
     } catch {}
 
     setSending(true);
-
-    if (process.env.NODE_ENV === "production" && !captchaToken) {
-      setSending(false);
-      setEState("error");
-      setPageError("Please confirm you’re not a robot.");
-      return;
-    }
 
     setEState("sending");
     const payload = {
@@ -447,7 +443,6 @@ export default function CreateExactDualOTP() {
       return;
     }
 
-    // NOTE: backend does NOT return token on step 4; token comes only in step 5
     saveSessionId(
       data?.sessionId || data?.data?.sessionId || data?.data?.data?.sessionId
     );
@@ -585,7 +580,6 @@ export default function CreateExactDualOTP() {
       return;
     }
 
-    // 🔑 Get token from step 5 response — this is the ONLY place backend gives it
     const tok = getToken(data);
     if (tok) {
       persistToken(tok);
@@ -593,7 +587,6 @@ export default function CreateExactDualOTP() {
       console.warn("[create] Step 5 succeeded but no token in response:", data);
     }
 
-    // Persist normalized session + inputs for next screen
     const finalSession =
       data?.sessionId || data?.data?.sessionId || sessionId || "";
     if (finalSession) {
@@ -609,7 +602,6 @@ export default function CreateExactDualOTP() {
       }
     } catch {}
 
-    // ✅ Now that token + session are set, move to personal-details
     router.push(
       `${NEXT_STEP_ROUTE}?sessionId=${encodeURIComponent(
         finalSession || sessionId
@@ -730,7 +722,7 @@ export default function CreateExactDualOTP() {
               </div>
             </div>
 
-            {/* Phone OTP – shows when code has been sent */}
+            {/* Phone OTP – only when a code has actually been sent */}
             {(pState === "code_sent" ||
               pState === "verifying" ||
               pState === "error") && (
@@ -914,11 +906,19 @@ export default function CreateExactDualOTP() {
             <ReCaptcha onChange={setCaptchaToken} />
           </div>
 
-          {/* page error */}
+          {/* page error – styled nicely */}
           {pageError && (
-            <p className="mt-3 text-[11px] text-rose-600" role="alert">
-              {pageError}
-            </p>
+            <div
+              className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 flex items-start gap-2"
+              role="alert"
+            >
+              <div className="mt-0.5 rounded-full bg-rose-100 p-1">
+                <AlertCircle className="w-3 h-3 text-rose-600" />
+              </div>
+              <p className="text-[11px] text-rose-700 pt-1 leading-snug">
+                {pageError}
+              </p>
+            </div>
           )}
 
           {/* login link */}

@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 const API_BASE = (process.env.BACKEND_API_URL || "").replace(/\/+$/, "");
 const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS ?? 45000);
-const ROUTE_REV = "withdraw-finalize-R2";
+const ROUTE_REV = "withdraw-finalize-R3";
 
 const finalizePath = (id: string, vaultId: string) =>
   `/agent/customers/${encodeURIComponent(id)}/vaults/${encodeURIComponent(
@@ -102,6 +102,28 @@ export async function POST(
       return j({ ok: false, message: "Invalid JSON body" }, 400);
     }
 
+    // 🔥 NEW: normalize `mode` for backend: "facial" or "otp"
+    let mode =
+      typeof body.mode === "string" ? body.mode.toLowerCase().trim() : "";
+
+    if (!mode) {
+      const hasImage =
+        body.selfieImageURL ||
+        body.selfieImage ||
+        body.image ||
+        body.photo ||
+        body.faceImage;
+      const hasOtp = body.otp || body.pin || body.code;
+
+      if (hasImage && !hasOtp) mode = "facial";
+      else if (hasOtp && !hasImage) mode = "otp";
+      // if both or neither, leave empty and let backend validate
+    }
+
+    if (mode) {
+      body.mode = mode; // ensures backend always receives `mode`
+    }
+
     const upstreamUrl = `${API_BASE}${finalizePath(id, vaultId)}`;
 
     // Timeout control
@@ -114,7 +136,7 @@ export async function POST(
         headers: {
           Accept: "application/json",
           "Content-Type": "application/json",
-          // IMPORTANT: send Bearer in BOTH headers (some gateways check one or the other)
+          // send Bearer in BOTH headers (some gateways check one or the other)
           Authorization: `Bearer ${token}`,
           "x-lw-auth": `Bearer ${token}`,
         },
@@ -141,7 +163,7 @@ export async function POST(
             upstreamErrors: payload?.errors || payload?.details || undefined,
             hint:
               upstream.status === 422
-                ? "Common causes: missing/invalid reference, OTP/face token, or method constraints."
+                ? "Common causes: missing/invalid mode, selfieImageURL or OTP."
                 : undefined,
           },
           upstream.status

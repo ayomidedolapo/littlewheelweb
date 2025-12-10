@@ -3,40 +3,36 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, HelpCircle, Eye, EyeOff } from "lucide-react";
+import {
+  ChevronLeft,
+  HelpCircle,
+  Eye,
+  EyeOff,
+  AlertCircle,
+  CheckCircle2,
+} from "lucide-react";
 import LogoSpinner from "../../../../../../components/loaders/LogoSpinner";
 
 const API_RESET_PASSWORD = "/api/auth/reset-password";
 
-/* ---------- overlay using shared LogoSpinner ---------- */
+/* ---------- CLEAN OVERLAY WITH ONLY LOGO SPINNER ---------- */
 function LoadingOverlay({ show }: { show: boolean }) {
   if (!show) return null;
+
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-[1px] flex items-center justify-center"
-    >
-      <div className="rounded-xl bg-white px-4 py-3 shadow-2xl flex items-center gap-3">
-        <LogoSpinner className="w-5 h-5" />
-        <span className="text-[13px] font-semibold text-gray-900">
-          Loading…
-        </span>
-      </div>
+    <div className="fixed inset-0 z-[60] bg-black/20 backdrop-blur-[2px] flex items-center justify-center">
+      {/* Centered Logo Spinner */}
+      <LogoSpinner show={true} />
     </div>
   );
 }
 
-export default function ResetPasswordClient({ token }: { token: string }) {
+export default function ResetPasswordClient({ token }: { token?: string }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  // we now receive token via props
-  const resetToken = token || "";
-
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
-
   const [showPin, setShowPin] = useState(false);
   const [showConfirmPin, setShowConfirmPin] = useState(false);
 
@@ -44,7 +40,6 @@ export default function ResetPasswordClient({ token }: { token: string }) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // only 5 digits
   const PIN_LENGTH = 5;
   const isValidPin = /^\d{5}$/.test(pin);
   const matches = pin === confirmPin;
@@ -74,18 +69,14 @@ export default function ResetPasswordClient({ token }: { token: string }) {
       const res = await fetch(API_RESET_PASSWORD, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          password: pin,
-          token: resetToken,
-        }),
+        body: JSON.stringify({ password: pin }),
       });
 
       const json = await res.json().catch(() => ({}));
 
       if (!res.ok || json?.success === false) {
         setErrorMsg(
-          json?.message ||
-            "Could not reset password. Please check the link and try again."
+          json?.message || "Could not reset password. Please try again."
         );
         setSubmitting(false);
         return;
@@ -96,7 +87,7 @@ export default function ResetPasswordClient({ token }: { token: string }) {
       setConfirmPin("");
 
       setTimeout(() => {
-        startTransition(() => router.push("/agent-login"));
+        startTransition(() => router.push("/dash"));
       }, 700);
     } catch {
       setErrorMsg("Network error. Please try again.");
@@ -106,6 +97,7 @@ export default function ResetPasswordClient({ token }: { token: string }) {
 
   return (
     <div className="min-h-screen bg-gray-50" aria-busy={loading}>
+      {/* Updated spinner overlay */}
       <LoadingOverlay show={loading} />
 
       {/* Header */}
@@ -144,12 +136,9 @@ export default function ResetPasswordClient({ token }: { token: string }) {
                   type={showPin ? "text" : "password"}
                   value={pin}
                   onChange={handlePinChange}
-                  className="w-full h-11 rounded-xl bg-gray-50 border border-gray-200 px-3 pr-11 text-sm outline-none focus:ring-2 focus:ring-black/10 disabled:opacity-60"
+                  className="w-full h-11 rounded-xl bg-gray-50 border border-gray-200 px-3 pr-11 text-sm outline-none focus:ring-2 focus:ring-black/10"
                   inputMode="numeric"
-                  pattern="\d*"
                   maxLength={PIN_LENGTH}
-                  autoComplete="new-password"
-                  disabled={loading}
                 />
                 <button
                   type="button"
@@ -165,13 +154,12 @@ export default function ResetPasswordClient({ token }: { token: string }) {
                   )}
                 </button>
               </div>
-              <div className="mt-1 text-[11px]">
-                {pin.length > 0 && !isValidPin && (
-                  <span className="text-red-600">
-                    Password must be exactly {PIN_LENGTH} digits.
-                  </span>
-                )}
-              </div>
+
+              {pin.length > 0 && !isValidPin && (
+                <p className="mt-1 text-[11px] text-red-600">
+                  Password must be exactly {PIN_LENGTH} digits.
+                </p>
+              )}
             </div>
 
             {/* Confirm PIN */}
@@ -184,12 +172,9 @@ export default function ResetPasswordClient({ token }: { token: string }) {
                   type={showConfirmPin ? "text" : "password"}
                   value={confirmPin}
                   onChange={handleConfirmPinChange}
-                  className="w-full h-11 rounded-xl bg-gray-50 border border-gray-200 px-3 pr-11 text-sm outline-none focus:ring-2 focus:ring-black/10 disabled:opacity-60"
+                  className="w-full h-11 rounded-xl bg-gray-50 border border-gray-200 px-3 pr-11 text-sm outline-none focus:ring-2 focus:ring-black/10"
                   inputMode="numeric"
-                  pattern="\d*"
                   maxLength={PIN_LENGTH}
-                  autoComplete="new-password"
-                  disabled={loading}
                 />
                 <button
                   type="button"
@@ -207,6 +192,7 @@ export default function ResetPasswordClient({ token }: { token: string }) {
                   )}
                 </button>
               </div>
+
               {confirmPin.length > 0 && !matches && (
                 <p className="mt-1 text-[11px] text-red-600">
                   Passwords do not match.
@@ -217,29 +203,30 @@ export default function ResetPasswordClient({ token }: { token: string }) {
 
           {/* Global error/success */}
           {errorMsg && (
-            <p className="text-[12px] text-red-600 px-1">{errorMsg}</p>
-          )}
-          {successMsg && (
-            <p className="text-[12px] text-emerald-600 px-1">{successMsg}</p>
+            <div className="flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[12px] text-red-700">
+              <AlertCircle className="w-4 h-4" />
+              <p>{errorMsg}</p>
+            </div>
           )}
 
-          {/* Submit */}
+          {successMsg && (
+            <div className="flex items-start gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-700">
+              <CheckCircle2 className="w-4 h-4" />
+              <p>{successMsg}</p>
+            </div>
+          )}
+
+          {/* Submit Button */}
           <button
             type="submit"
-            disabled={!formValid || submitting}
+            disabled={!formValid || loading}
             className={`w-full h-12 rounded-2xl font-semibold transition ${
-              !formValid || submitting
-                ? "bg-black/30 text-white cursor-not-allowed"
+              !formValid || loading
+                ? "bg-black/30 text-white"
                 : "bg-black text-white hover:bg-black/90"
             }`}
           >
-            {submitting ? (
-              <span className="inline-flex items-center gap-2">
-                <LogoSpinner className="w-4 h-4" /> Resetting…
-              </span>
-            ) : (
-              "Reset Password"
-            )}
+            {loading ? " " : "Reset Password"}
           </button>
         </form>
       </div>

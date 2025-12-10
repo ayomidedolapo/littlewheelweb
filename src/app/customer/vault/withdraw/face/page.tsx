@@ -1,12 +1,17 @@
 /* app/customer/vault/withdraw/face/page.tsx */
 "use client";
 
-import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronLeft,
   Camera as CameraIcon,
-  Check,
   RefreshCcw,
   X,
 } from "lucide-react";
@@ -14,6 +19,7 @@ import LogoSpinner from "../../../../../components/loaders/LogoSpinner";
 
 /* ---------------- helpers ---------------- */
 const isBrowser = typeof window !== "undefined";
+const OTP_LEN = 4;
 
 function getAuthToken(): string {
   try {
@@ -67,12 +73,50 @@ function FaceCapturePageInner() {
 
   const token = getAuthToken();
 
-  // preview + submit
-  const [img, setImg] = useState<string | null>(null); // dataURL preview
+  /* ---------------- shared state ---------------- */
   const [submitting, setSubmitting] = useState(false);
-  const [successOpen, setSuccessOpen] = useState(false);
+  const [globalError, setGlobalError] = useState<string | null>(null);
 
-  // camera (mirrors Personal Details camera behavior)
+  /* ---------------- mode & swipe (facial / otp) ---------------- */
+  type Mode = "facial" | "otp";
+  const [mode, setMode] = useState<Mode>("facial"); // default to facial
+
+  const swipeStartX = useRef<number | null>(null);
+  const swipePointerId = useRef<number | null>(null);
+
+  const handleSwipePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    swipeStartX.current = e.clientX;
+    swipePointerId.current = e.pointerId;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const handleSwipePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (swipePointerId.current !== e.pointerId) return;
+
+    const startX = swipeStartX.current;
+    swipeStartX.current = null;
+    swipePointerId.current = null;
+    (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+
+    if (startX == null) return;
+    const dx = e.clientX - startX;
+    const THRESHOLD = 40;
+
+    if (Math.abs(dx) < THRESHOLD) return;
+
+    // Swipe left (dx < 0) from facial -> OTP
+    if (dx < -THRESHOLD && mode === "facial") {
+      setMode("otp");
+    }
+    // Swipe right (dx > 0) from OTP -> facial
+    else if (dx > THRESHOLD && mode === "otp") {
+      setMode("facial");
+    }
+  };
+
+  /* ---------------- facial capture state ---------------- */
+  const [img, setImg] = useState<string | null>(null); // dataURL preview
+
   const [cameraOpen, setCameraOpen] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
   const [processingPhoto, setProcessingPhoto] = useState(false);
@@ -192,7 +236,7 @@ function FaceCapturePageInner() {
         return;
       }
       setImg(dataUrl);
-      closeCamera(); // show preview; Proceed button enables after this
+      closeCamera(); // show preview; Confirm button enables after this
     } finally {
       setProcessingPhoto(false);
     }
@@ -204,29 +248,203 @@ function FaceCapturePageInner() {
     };
   }, []);
 
-  // ✅ enable proceed as soon as we have a photo
-  const canProceed = useMemo(() => !!img, [img]);
+  /* ---------------- OTP state (4 boxes) ---------------- */
+  const [otpDigits, setOtpDigits] = useState<string[]>(Array(OTP_LEN).fill(""));
+  const [otpStatus, setOtpStatus] = useState<"idle" | "error" | "success">(
+    "idle"
+  );
+  const otpInputsRef = useRef<Array<HTMLInputElement | null>>([]);
+
+  const otpValue = useMemo(() => otpDigits.join(""), [otpDigits]);
+
+  const focusOtpIndex = (i: number) => otpInputsRef.current[i]?.focus();
+  const setOtpDigit = (i: number, v: string) => {
+    const next = [...otpDigits];
+    next[i] = v;
+    setOtpDigits(next);
+  };
+
+  const handleOtpChange = (index: number, raw: string) => {
+    const v = raw.replace(/\D/g, "").slice(0, 1);
+    if (!v) {
+      setOtpDigit(index, "");
+      return;
+    }
+    setOtpDigit(index, v);
+    if (index < OTP_LEN - 1) focusOtpIndex(index + 1);
+  };
+
+  const handleOtpKeyDown = (
+    index: number,
+    e: React.KeyboardEvent<HTMLInputElement>
+  ) => {
+    if (e.key === "Backspace" && otpDigits[index] === "" && index > 0) {
+      e.preventDefault();
+      setOtpDigit(index - 1, "");
+      focusOtpIndex(index - 1);
+    }
+    if ((e.key === "ArrowLeft" || e.key === "ArrowUp") && index > 0) {
+      e.preventDefault();
+      focusOtpIndex(index - 1);
+    }
+    if (
+      (e.key === "ArrowRight" || e.key === "ArrowDown") &&
+      index < OTP_LEN - 1
+    ) {
+      e.preventDefault();
+      focusOtpIndex(index + 1);
+    }
+  };
+
+  const handleOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const txt = e.clipboardData
+      .getData("text")
+      .replace(/\D/g, "")
+      .slice(0, OTP_LEN);
+    if (txt.length) {
+      e.preventDefault();
+      const next = txt
+        .padEnd(OTP_LEN, " ")
+        .split("")
+        .slice(0, OTP_LEN)
+        .map((c) => (/\d/.test(c) ? c : ""));
+      setOtpDigits(next);
+      focusOtpIndex(Math.min(txt.length, OTP_LEN - 1));
+    }
+  };
+
+  const baseOtpBox =
+    "w-12 h-12 md:w-14 md:h-14 text-center text-xl md:text-2xl font-bold rounded-xl border-2 focus:outline-none transition-all duration-150";
+
+  const colorForOtpStatus = (filled: boolean) => {
+    if (otpStatus === "success")
+      return "border-green-500 bg-green-50 text-green-700";
+    if (otpStatus === "error") return "border-red-500 bg-red-50 text-red-700";
+    return filled
+      ? "border-black text-gray-900 bg-white"
+      : "border-gray-300 text-gray-900 bg-white";
+  };
+
+  /* ---------------- Request OTP (wired) ---------------- */
+  const [requestingOtp, setRequestingOtp] = useState(false);
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [otpInfo, setOtpInfo] = useState<string | null>(null);
+
+  async function handleRequestOtp() {
+    if (!customerId || !vaultId) {
+      setOtpError("Missing customer or vault reference.");
+      setOtpInfo(null);
+      return;
+    }
+
+    if (!token) {
+      setOtpError("Missing authentication. Please log in again.");
+      setOtpInfo(null);
+      return;
+    }
+
+    try {
+      setRequestingOtp(true);
+      setOtpError(null);
+      setOtpInfo(null);
+      setOtpStatus("idle");
+
+      const payload: Record<string, any> = {};
+      if (ref) {
+        payload.reference = ref;
+        payload.referenceId = ref;
+      }
+      if (amount) payload.amount = String(amount);
+
+      const res = await fetch(
+        `/api/v1/agent/customers/${customerId}/vaults/${vaultId}/withdraw/request-otp`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-lw-auth": token,
+          },
+          cache: "no-store",
+          body: JSON.stringify(payload),
+        }
+      );
+
+      const ct = res.headers.get("content-type") || "";
+      const j =
+        ct.includes("application/json") && (await res.json().catch(() => ({})));
+
+      if (!res.ok) {
+        const msg =
+          (j as any)?.message ||
+          (j as any)?.error ||
+          (j as any)?.upstream?.message ||
+          `Failed to request OTP (HTTP ${res.status}).`;
+        setOtpError(msg);
+        setOtpStatus("error");
+        return;
+      }
+
+      // reset boxes + focus first
+      setOtpDigits(Array(OTP_LEN).fill(""));
+      setTimeout(() => focusOtpIndex(0), 50);
+
+      setOtpInfo("Code sent to the customer’s phone.");
+      setOtpStatus("idle");
+    } catch (e: any) {
+      setOtpError(
+        e?.message || "Failed to request OTP. Please try again."
+      );
+      setOtpInfo(null);
+      setOtpStatus("error");
+    } finally {
+      setRequestingOtp(false);
+    }
+  }
+
+  /* ---------------- Proceed / finalize ---------------- */
+  const canProceed = useMemo(() => {
+    if (!customerId || !vaultId) return false;
+    if (mode === "facial") return !!img;
+    if (mode === "otp") return otpValue.length === OTP_LEN;
+    return false;
+  }, [customerId, vaultId, mode, img, otpValue]);
 
   async function finalize() {
-    if (!img) return;
+    setGlobalError(null);
 
-    // guard+message if params are missing (so button still works after capture)
     if (!customerId || !vaultId) {
-      alert("Missing customer or vault reference. Go back and try again.");
+      setGlobalError("Missing customer or vault reference. Go back and try again.");
+      return;
+    }
+
+    if (mode === "facial" && !img) {
+      setGlobalError("Capture the customer’s face before confirming.");
+      return;
+    }
+    if (mode === "otp" && otpValue.length !== OTP_LEN) {
+      setGlobalError("Enter the 4-digit OTP code.");
       return;
     }
 
     try {
       setSubmitting(true);
 
-      const payload: Record<string, any> = {
-        selfieImageURL: img,
-        selfieImage: img,
-        image: img,
-        photo: img,
-        ...(ref ? { reference: ref, referenceId: ref } : {}),
-        ...(amount ? { amount: String(amount) } : {}),
-      };
+      const payload: Record<string, any> = { mode }; // "facial" | "otp"
+
+      if (mode === "facial") {
+        payload.selfieImageURL = img;
+        payload.selfieImage = img;
+        payload.image = img;
+        payload.photo = img;
+      } else if (mode === "otp") {
+        payload.otp = otpValue;
+      }
+
+      if (ref) {
+        payload.reference = ref;
+        payload.referenceId = ref;
+      }
+      if (amount) payload.amount = String(amount);
 
       const res = await fetch(
         `/api/v1/agent/customers/${customerId}/vaults/${vaultId}/withdraw/finalize`,
@@ -241,19 +459,29 @@ function FaceCapturePageInner() {
         }
       );
 
-      const j = await res.json().catch(() => ({}));
+      const ct = res.headers.get("content-type") || "";
+      const j =
+        ct.includes("application/json") && (await res.json().catch(() => ({})));
+
       if (!res.ok) {
         const msg =
-          j?.message ||
-          j?.error ||
-          j?.upstream?.message ||
+          (j as any)?.message ||
+          (j as any)?.error ||
+          (j as any)?.upstream?.message ||
           `Finalize failed (HTTP ${res.status}).`;
-        throw new Error(msg);
+        setOtpStatus("error");
+        setGlobalError(msg);
+        return;
       }
 
-      setSuccessOpen(true);
+      setOtpStatus("success");
+
+      // ✅ On success, go straight to dashboard
+      router.push("/dash");
     } catch (e: any) {
-      alert(e?.message || "Couldn’t finalize withdrawal.");
+      setGlobalError(
+        e?.message || "Couldn’t finalize withdrawal. Please try again."
+      );
     } finally {
       setSubmitting(false);
     }
@@ -263,7 +491,8 @@ function FaceCapturePageInner() {
 
   return (
     <div className="min-h-screen bg-white">
-      <div className="max-w-sm mx-auto px-5 pt-4">
+      <div className="max-w-sm mx-auto px-5 pt-4 pb-8 flex flex-col min-h-screen">
+        {/* header */}
         <button
           onClick={goBack}
           className="flex items-center gap-2 text-gray-700 hover:text-black"
@@ -273,53 +502,127 @@ function FaceCapturePageInner() {
         </button>
 
         <h1 className="mt-4 text-[22px] font-extrabold text-black">
-          Face Capturing
+          Verify withdrawal
         </h1>
+        <p className="mt-1 text-[12px] text-gray-600">
+          Swipe to choose how to confirm this withdrawal:{" "}
+          <span className="font-semibold">Face match</span> or{" "}
+          <span className="font-semibold">OTP code</span>.
+        </p>
 
-        <div className="mt-6 flex flex-col items-center">
+        {/* swipe container */}
+        <div
+          className="mt-6 flex-1 relative overflow-hidden"
+          style={{ touchAction: "pan-y" }}
+          onPointerDown={handleSwipePointerDown}
+          onPointerUp={handleSwipePointerUp}
+        >
           <div
-            className="w-44 h-44 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden"
-            aria-live="polite"
+            className="flex h-full transition-transform duration-300 ease-out"
+            style={{
+              transform:
+                mode === "facial" ? "translateX(0%)" : "translateX(-100%)",
+            }}
           >
-            {img ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={img}
-                alt="Captured preview"
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <CameraIcon className="w-10 h-10 text-gray-400" />
-            )}
-          </div>
+            {/* -------- FACIAL SLIDE -------- */}
+            <div className="w-full flex-shrink-0 flex flex-col items-center justify-center">
+              <div
+                className="w-44 h-44 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden"
+                aria-live="polite"
+              >
+                {img ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={img}
+                    alt="Captured preview"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <CameraIcon className="w-10 h-10 text-gray-400" />
+                )}
+              </div>
 
-          <button
-            type="button"
-            onClick={() => openCamera("user")}
-            className="mt-4 inline-flex items-center gap-2 px-5 h-11 rounded-2xl bg-black text-white font-semibold"
-          >
-            <CameraIcon className="w-5 h-5" />
-            Open camera
-          </button>
+              <button
+                type="button"
+                onClick={() => openCamera("user")}
+                className="mt-4 inline-flex items-center gap-2 px-5 h-11 rounded-2xl bg-black text-white font-semibold"
+              >
+                <CameraIcon className="w-5 h-5" />
+                Open camera
+              </button>
 
-          <div className="mt-6 w-full rounded-2xl border border-gray-200 bg-white p-4">
-            <p className="text-[13px] font-semibold text-gray-800 mb-2">
-              We recommend that you…
-            </p>
-            <ul className="text-[12px] text-gray-700 space-y-2">
-              <li>💡 Stay in a highly lit environment</li>
-              <li>🧭 Keep your face inside the frame</li>
-              <li>🧢 Remove sun glasses, hats, masks or other coverings</li>
-            </ul>
-            {!customerId || !vaultId ? (
-              <p className="mt-3 text-[11px] text-amber-700">
-                Heads up: customerId or vaultId missing in URL.
-              </p>
-            ) : null}
+              <div className="mt-6 w-full rounded-2xl border border-gray-200 bg-white p-4">
+                <p className="text-[13px] font-semibold text-gray-800 mb-2">
+                  For best match:
+                </p>
+                <ul className="text-[12px] text-gray-700 space-y-2">
+                  <li>💡 Stay in a bright, well-lit place.</li>
+                  <li>🧭 Keep the customer’s face inside the circle.</li>
+                  <li>🧢 Remove caps, glasses, or face coverings.</li>
+                </ul>
+                {!customerId || !vaultId ? (
+                  <p className="mt-3 text-[11px] text-amber-700">
+                    Heads up: customerId or vaultId missing in URL.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            {/* -------- OTP SLIDE -------- */}
+            <div className="w-full flex-shrink-0 flex flex-col items-center justify-center">
+              <div className="mt-2 max-w-xs text-center">
+                <h2 className="text-[18px] font-semibold text-gray-900">
+                  Enter OTP code
+                </h2>
+                <p className="mt-1 text-[12px] text-gray-600">
+                  A 4-digit code will be sent to the customer&apos;s phone.
+                  Enter it to confirm this withdrawal.
+                </p>
+              </div>
+
+              {/* OTP boxes */}
+              <div className="flex justify-center gap-3 my-5">
+                {otpDigits.map((digit, i) => (
+                  <input
+                    key={i}
+                    ref={(el) => (otpInputsRef.current[i] = el)}
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={1}
+                    value={digit}
+                    onChange={(e) => handleOtpChange(i, e.target.value)}
+                    onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                    onPaste={handleOtpPaste}
+                    className={`${baseOtpBox} ${colorForOtpStatus(
+                      !!digit
+                    )} focus:ring-2 focus:ring-gray-100 focus:border-black`}
+                  />
+                ))}
+              </div>
+
+              {/* Request code */}
+              <button
+                type="button"
+                onClick={handleRequestOtp}
+                disabled={requestingOtp}
+                className="text-sm font-medium text-black underline disabled:opacity-60"
+              >
+                {requestingOtp ? "Requesting code…" : "Request code"}
+              </button>
+
+              {otpInfo && (
+                <p className="mt-2 text-[11px] text-emerald-700">{otpInfo}</p>
+              )}
+              {otpError && (
+                <p className="mt-2 text-[11px] text-rose-600">{otpError}</p>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="pt-8 pb-10">
+        {/* footer */}
+        <div className="pt-6">
           <button
             onClick={finalize}
             disabled={!canProceed || submitting}
@@ -331,9 +634,13 @@ function FaceCapturePageInner() {
           >
             <span className="inline-flex items-center gap-2">
               {submitting && <LogoSpinner className="w-4 h-4" />}
-              {submitting ? "Submitting…" : "Proceed"}
+              {submitting ? "Submitting…" : "Confirm"}
             </span>
           </button>
+
+          {globalError && (
+            <p className="mt-3 text-xs text-rose-600">{globalError}</p>
+          )}
         </div>
       </div>
 
@@ -419,48 +726,6 @@ function FaceCapturePageInner() {
           </div>
         </div>
       )}
-
-      {/* ===== Success Bottom Sheet ===== */}
-      <div
-        className={`fixed inset-0 z-50 ${
-          successOpen ? "pointer-events-auto" : "pointer-events-none"
-        }`}
-      >
-        <div
-          className={`absolute inset-0 bg-black/60 transition-opacity ${
-            successOpen ? "opacity-100" : "opacity-0"
-          }`}
-          onClick={() => setSuccessOpen(false)}
-        />
-        <div
-          className={`absolute left-0 right-0 bottom-0 transition-transform duration-300 ${
-            successOpen ? "translate-y-0" : "translate-y-full"
-          }`}
-        >
-          <div className="mx-auto w-full max-w-sm bg-white rounded-t-3xl p-8 shadow-2xl">
-            <div className="mx-auto w-16 h-16 rounded-full bg-green-50 flex items-center justify-center mb-6">
-              <Check className="w-8 h-8 text-green-500" />
-            </div>
-            <h3 className="text-xl font-semibold text-gray-900 text-center mb-2">
-              Withdrawal Submitted
-            </h3>
-            <p className="text-sm text-gray-600 text-center mb-6">
-              We’ve received your confirmation.
-            </p>
-            <button
-              onClick={() => {
-                setSuccessOpen(false);
-                const q = new URLSearchParams();
-                if (customerId) q.set("customerId", customerId);
-                router.push(`/customer/vault?${q.toString()}`);
-              }}
-              className="w-full h-12 rounded-2xl bg-black text-white font-semibold hover:bg-black/90"
-            >
-              Done
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

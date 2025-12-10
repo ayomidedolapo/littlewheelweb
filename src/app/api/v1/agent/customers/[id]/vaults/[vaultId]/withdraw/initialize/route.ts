@@ -1,4 +1,4 @@
-// app/api/v1/agent/customers/[id]/vaults/[vaultId]/withdraw/initialize/route.ts
+// app/api/v1/agent/customers/[id]/set-withdrawal-method/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { cookies as cookiesFn, headers as headersFn } from "next/headers";
 
@@ -6,9 +6,18 @@ export const dynamic = "force-dynamic";
 
 const API_BASE = (process.env.BACKEND_API_URL || "").replace(/\/+$/, "");
 const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS ?? 45000);
-const ROUTE_REV = "withdraw-init-R6";
+const ROUTE_REV = "set-withdrawal-method-R2";
 
-/* ---------- Next-safe accessors ---------- */
+type Ctx = {
+  params:
+    | { id: string }
+    | Promise<{ id: string }>;
+};
+
+const upstreamPath = (id: string) =>
+  `/agent/customers/${encodeURIComponent(id)}/set-withdrawal-method`;
+
+/* ---------- Next 13/14/15-safe accessors ---------- */
 async function getCookieStore() {
   const maybe = (cookiesFn as any)();
   return typeof maybe?.then === "function" ? await maybe : maybe;
@@ -18,7 +27,7 @@ async function getHeadersStore() {
   return typeof maybe?.then === "function" ? await maybe : maybe;
 }
 
-/* ---------- auth: prefer x-lw-auth, then Authorization, then cookies ---------- */
+/* ---------- Auth: prefer x-lw-auth, then Authorization, then cookies ---------- */
 async function readBearer(req: NextRequest): Promise<string> {
   try {
     const jar = await getCookieStore();
@@ -44,6 +53,7 @@ async function readBearer(req: NextRequest): Promise<string> {
 
     return fromX || fromAuth || fromCookie || "";
   } catch {
+    // very defensive fallback
     return (
       (req.headers.get("authorization") || "")
         .replace(/^Bearer\s+/i, "")
@@ -54,144 +64,210 @@ async function readBearer(req: NextRequest): Promise<string> {
   }
 }
 
+/* ---------- tiny helpers ---------- */
 function j(body: any, status = 200) {
   const r = NextResponse.json(body, { status });
   r.headers.set("X-Route-Rev", ROUTE_REV);
   return r;
 }
 
-function int(val: any) {
-  const n = Number(val);
-  return Number.isFinite(n) ? n : 0;
+async function safeParams(ctx: Ctx): Promise<{ id: string } | undefined> {
+  const maybe = (ctx as any).params;
+  const resolved =
+    typeof maybe?.then === "function" ? await maybe : maybe;
+  return resolved;
 }
 
-type ParamsShape =
-  | Promise<{ id?: string; customerId?: string; vaultId?: string }>
-  | { id?: string; customerId?: string; vaultId?: string };
-
-export async function POST(req: NextRequest, ctx: { params: ParamsShape }) {
-  if (!API_BASE)
-    return j({ success: false, message: "Missing BACKEND_API_URL" }, 500);
-
-  const params =
-    typeof (ctx.params as any)?.then === "function"
-      ? await (ctx.params as any)
-      : (ctx.params as any);
-
-  // In this route [id] is the customerId, [vaultId] is the vault
-  const customerId = params.customerId || params.id;
-  const vaultId = params.vaultId;
-
-  if (!customerId || !vaultId) {
-    return j({ success: false, message: "Missing customerId or vaultId" }, 400);
-  }
-
-  const token = await readBearer(req);
-  if (!token)
-    return j({ success: false, message: "Authentication required" }, 401);
-
-  // read incoming (from client / agent app)
-  let incoming: any = {};
+/* ---------- GET: fetch customer's withdrawal method ---------- */
+export async function GET(req: NextRequest, ctx: Ctx) {
   try {
-    incoming = await req.json();
-  } catch {
-    incoming = {};
-  }
-
-  // Backend expects: { "amount": "1000" }
-  const amountRaw =
-    incoming?.amount ?? incoming?.amountNaira ?? incoming?.naira ?? null;
-  const amountNaira = int(amountRaw);
-
-  if (!amountNaira) {
-    return j(
-      {
-        success: false,
-        message: "Amount required (naira).",
-        hint: 'Send body like { "amount": 2500 }  (₦2,500).',
-      },
-      422
-    );
-  }
-
-  // Swagger screenshot shows amount as a string, so stringify here
-  const upstreamBody = {
-    amount: String(amountNaira),
-  };
-
-  const upstreamUrl = `${API_BASE}/agent/customers/${encodeURIComponent(
-    String(customerId)
-  )}/vaults/${encodeURIComponent(String(vaultId))}/withdraw/initialize`;
-
-  // Timeout control
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort("timeout"), TIMEOUT_MS);
-
-  try {
-    const res = await fetch(upstreamUrl, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-        "x-lw-auth": `Bearer ${token}`,
-      },
-      cache: "no-store",
-      signal: ac.signal,
-      body: JSON.stringify(upstreamBody),
-    });
-
-    const ct = res.headers.get("content-type") || "";
-    const payload = ct.includes("application/json")
-      ? await res.json().catch(() => ({}))
-      : await res.text().catch(() => "");
-
-    if (res.ok) {
-      if (typeof payload === "string") {
-        const out = new NextResponse(payload, {
-          status: res.status,
-          headers: {
-            "Content-Type": ct || "application/json; charset=utf-8",
-          },
-        });
-        out.headers.set("X-Route-Rev", ROUTE_REV);
-        return out;
-      }
-      return j(payload, res.status);
+    if (!API_BASE) {
+      return j({ success: false, message: "Missing BACKEND_API_URL" }, 500);
     }
 
-    // Bubble up useful validation errors
-    return j(
-      {
-        success: false,
-        message:
-          (payload as any)?.message ||
-          (payload as any)?.error ||
-          `Withdraw initialize failed (HTTP ${res.status}).`,
-        upstreamStatus: res.status,
-        upstreamBody:
-          typeof payload === "string"
-            ? payload.slice(0, 500)
-            : (payload as any),
-      },
-      422
-    );
-  } catch (e: any) {
-    const aborted = e?.name === "AbortError" || e === "timeout";
+    const params = await safeParams(ctx);
+    const customerId = params?.id;
+
+    if (!customerId) {
+      return j(
+        { success: false, message: "Missing customer id" },
+        400
+      );
+    }
+
+    const token = await readBearer(req);
+    if (!token) {
+      return j(
+        { success: false, message: "Authentication required" },
+        401
+      );
+    }
+
+    const url = `${API_BASE}${upstreamPath(customerId)}`;
+
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort("timeout"), TIMEOUT_MS);
+
+    try {
+      const upstream = await fetch(url, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          // send Bearer in BOTH headers
+          Authorization: `Bearer ${token}`,
+          "x-lw-auth": `Bearer ${token}`,
+        },
+        cache: "no-store",
+        signal: ac.signal,
+      });
+
+      const ct = upstream.headers.get("content-type") || "";
+
+      if (!upstream.ok && ct.includes("application/json")) {
+        const payload = await upstream.json().catch(() => ({}));
+        return j(
+          {
+            success: false,
+            message:
+              payload?.message ||
+              payload?.error ||
+              (upstream.status === 422
+                ? "Validation failed (422)"
+                : `HTTP ${upstream.status}`),
+            upstreamStatus: upstream.status,
+            upstreamBody: payload,
+          },
+          upstream.status
+        );
+      }
+
+      if (ct.includes("application/json")) {
+        const json = await upstream.json().catch(() => ({}));
+        return j(json, upstream.status);
+      } else {
+        const text = await upstream.text().catch(() => "");
+        return new NextResponse(text, {
+          status: upstream.status,
+          headers: { "Content-Type": ct || "text/plain; charset=utf-8" },
+        });
+      }
+    } finally {
+      clearTimeout(t);
+    }
+  } catch (err: any) {
+    const aborted = err?.name === "AbortError" || err === "timeout";
     return j(
       {
         success: false,
         message: aborted
           ? `Upstream timeout after ${TIMEOUT_MS}ms`
-          : e?.message || "Upstream error",
+          : err?.message || "Proxy error",
       },
       aborted ? 504 : 502
     );
-  } finally {
-    clearTimeout(timer);
   }
 }
 
-export async function GET() {
-  return j({ message: "Not Found" }, 404);
+/* ---------- POST: set / update customer's withdrawal method ---------- */
+export async function POST(req: NextRequest, ctx: Ctx) {
+  try {
+    if (!API_BASE) {
+      return j({ success: false, message: "Missing BACKEND_API_URL" }, 500);
+    }
+
+    const params = await safeParams(ctx);
+    const customerId = params?.id;
+
+    if (!customerId) {
+      return j(
+        { success: false, message: "Missing customer id" },
+        400
+      );
+    }
+
+    const token = await readBearer(req);
+    if (!token) {
+      return j(
+        { success: false, message: "Authentication required" },
+        401
+      );
+    }
+
+    // Parse JSON (return a clean 400 if invalid)
+    let body: any = {};
+    try {
+      const raw = await req.text();
+      body = raw ? JSON.parse(raw) : {};
+    } catch {
+      return j({ success: false, message: "Invalid JSON body" }, 400);
+    }
+
+    const url = `${API_BASE}${upstreamPath(customerId)}`;
+
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort("timeout"), TIMEOUT_MS);
+
+    try {
+      const upstream = await fetch(url, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          "x-lw-auth": `Bearer ${token}`,
+        },
+        body: JSON.stringify(body || {}),
+        cache: "no-store",
+        signal: ac.signal,
+      });
+
+      const ct = upstream.headers.get("content-type") || "";
+
+      if (!upstream.ok && ct.includes("application/json")) {
+        const payload = await upstream.json().catch(() => ({}));
+        return j(
+          {
+            success: false,
+            message:
+              payload?.message ||
+              payload?.error ||
+              (upstream.status === 422
+                ? "Validation failed (422)"
+                : `HTTP ${upstream.status}`),
+            upstreamStatus: upstream.status,
+            upstreamBody: payload,
+            hint:
+              upstream.status === 422
+                ? "Common causes: missing or invalid fields for withdrawal method (e.g. bank details, channel, or account)."
+                : undefined,
+          },
+          upstream.status
+        );
+      }
+
+      if (ct.includes("application/json")) {
+        const json = await upstream.json().catch(() => ({}));
+        return j(json, upstream.status);
+      } else {
+        const text = await upstream.text().catch(() => "");
+        return new NextResponse(text, {
+          status: upstream.status,
+          headers: { "Content-Type": ct || "text/plain; charset=utf-8" },
+        });
+      }
+    } finally {
+      clearTimeout(t);
+    }
+  } catch (err: any) {
+    const aborted = err?.name === "AbortError" || err === "timeout";
+    return j(
+      {
+        success: false,
+        message: aborted
+          ? `Upstream timeout after ${TIMEOUT_MS}ms`
+          : err?.message || "Proxy error",
+      },
+      aborted ? 504 : 502
+    );
+  }
 }

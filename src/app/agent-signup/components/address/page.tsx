@@ -132,12 +132,13 @@ function AddressPageInner() {
     })();
   }, [bearerToken, signupSessionId]);
 
-  /* form fields */
-  const [address, setAddress] = useState("No. 15, University Road, Agbowo,");
-  const [stateName, setStateName] = useState("Oyo");
-  const [lga, setLga] = useState("Ibadan North");
-  const [city, setCity] = useState("Ibadan");
-  const [country, setCountry] = useState("Nigeria");
+  /* form fields – start EMPTY (no default text) */
+  const [address, setAddress] = useState("");
+  const [stateName, setStateName] = useState("");
+  const [lga, setLga] = useState("");
+  const [lgaIsOther, setLgaIsOther] = useState(false);
+  const [city, setCity] = useState("");
+  const [country, setCountry] = useState("");
 
   const [openState, setOpenState] = useState(false);
   const [openLga, setOpenLga] = useState(false);
@@ -153,9 +154,11 @@ function AddressPageInner() {
     if (stateName === "Oyo") {
       setCity((prev) => (prev ? prev : "Ibadan"));
       setLga((prev) => (prev ? prev : "Ibadan North"));
+      setLgaIsOther(false);
     } else {
       setCity("");
       setLga("");
+      setLgaIsOther(false);
     }
   }, [stateName]);
 
@@ -166,9 +169,9 @@ function AddressPageInner() {
           stateName.trim() &&
           city.trim() &&
           country.trim() &&
-          lga.trim()
+          (lgaIsOther ? lga.trim() : lga.trim())
       ),
-    [address, stateName, city, country, lga]
+    [address, stateName, city, country, lga, lgaIsOther]
   );
 
   const goBack = () => router.back();
@@ -314,7 +317,7 @@ function AddressPageInner() {
 
           {/* Address */}
           <label className="block mt-5 text-[13px] font-semibold text-gray-800">
-            Address*
+            Address<span className="text-red-500">*</span>
           </label>
           <div className="mt-2 flex items-center gap-2 rounded-xl bg-gray-100 px-3 py-3">
             <MapPin className="w-4 h-4 text-gray-900" />
@@ -328,7 +331,7 @@ function AddressPageInner() {
 
           {/* State */}
           <label className="block mt-4 text-[13px] font-semibold text-gray-800">
-            State*
+            State<span className="text-red-500">*</span>
           </label>
           <div className="mt-2 relative" ref={stateMenuRef}>
             <button
@@ -367,7 +370,7 @@ function AddressPageInner() {
 
           {/* LGA */}
           <label className="block mt-4 text-[13px] font-semibold text-gray-800">
-            Local Government*
+            Local Government<span className="text-red-500">*</span>
           </label>
           <div className="mt-2 relative" ref={lgaMenuRef}>
             <button
@@ -379,7 +382,9 @@ function AddressPageInner() {
               className="w-full flex items-center justify-between rounded-xl bg-gray-100 px-3 py-3 text-left text-sm text-gray-900"
             >
               <span className="truncate">
-                {lga || "Select local government"}
+                {lgaIsOther
+                  ? "Type your LGA"
+                  : lga || "Select local government"}
               </span>
               <ChevronDown className="w-4 h-4 text-gray-900" />
             </button>
@@ -390,11 +395,17 @@ function AddressPageInner() {
                     key={opt}
                     type="button"
                     onClick={() => {
-                      setLga(opt === "Other" ? "" : opt);
+                      if (opt === "Other") {
+                        setLga("");
+                        setLgaIsOther(true);
+                      } else {
+                        setLga(opt);
+                        setLgaIsOther(false);
+                      }
                       setOpenLga(false);
                     }}
                     className={`${menuItem} ${
-                      opt === lga ? "font-semibold" : ""
+                      !lgaIsOther && opt === lga ? "font-semibold" : ""
                     }`}
                   >
                     {opt}
@@ -403,7 +414,7 @@ function AddressPageInner() {
               </div>
             )}
           </div>
-          {lga === "" && (
+          {lgaIsOther && (
             <input
               autoFocus
               value={lga}
@@ -415,7 +426,7 @@ function AddressPageInner() {
 
           {/* City */}
           <label className="block mt-4 text-[13px] font-semibold text-gray-800">
-            City*
+            City<span className="text-red-500">*</span>
           </label>
           <div className="mt-2 flex items-center gap-2 rounded-xl bg-gray-100 px-3 py-3">
             <Building2 className="w-4 h-4 text-gray-900" />
@@ -429,7 +440,7 @@ function AddressPageInner() {
 
           {/* Country */}
           <label className="block mt-4 text-[13px] font-semibold text-gray-800">
-            Country*
+            Country<span className="text-red-500">*</span>
           </label>
           <div className="mt-2 flex items-center gap-2 rounded-xl bg-gray-100 px-3 py-3">
             <Globe2 className="w-4 h-4 text-gray-900" />
@@ -441,14 +452,18 @@ function AddressPageInner() {
             />
           </div>
 
+          {/* Styled error banner */}
           {error && (
-            <p
-              className="text-[12px] text-rose-600 mt-3"
+            <div
+              className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-800 flex items-start gap-2"
               role="alert"
               aria-live="assertive"
             >
-              {error}
-            </p>
+              <span className="mt-[px] inline-flex h-4 w-4 items-center justify-center rounded-full bg-rose-100 text-rose-700 text-[10px] font-bold">
+                !
+              </span>
+              <p className="flex-1">{error}</p>
+            </div>
           )}
         </div>
 
@@ -464,7 +479,7 @@ function AddressPageInner() {
             </div>
             <div className="h-1.5 w-full rounded-full bg-gray-200 overflow-hidden">
               <div
-                className="h-full bg-black rounded-full"
+                className="h-full bg-emerald-500 rounded-full"
                 style={{ width: "100%" }}
               />
             </div>

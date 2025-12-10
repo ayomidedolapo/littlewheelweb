@@ -5,7 +5,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, UserRound, Landmark, X } from "lucide-react";
-import LogoSpinner from "../../../components/loaders/LogoSpinner"; // ← ✅ import your logo loader
+import LogoSpinner from "../../../components/loaders/LogoSpinner"; // ← ✅ logo loader
 
 /* ---------------- money helpers ---------------- */
 const fmt = (v: number) =>
@@ -282,6 +282,11 @@ export default function CommissionWithdrawalPage() {
   const canProceed =
     amountValid && !!method && (method === "BANK" ? bankReady : true);
 
+  // 🔁 Toggle method (click again to deselect)
+  const toggleMethod = (next: Method) => {
+    setMethod((current) => (current === next ? "" : next));
+  };
+
   const setQuick = (val: number | "ALL") => {
     if (val === "ALL") setAmount(String(availableBalance || 0));
     else setAmount(String(val));
@@ -352,12 +357,11 @@ export default function CommissionWithdrawalPage() {
   }
 
   const overlayOn = submitting;
-  const overlayLabel = submitting ? "Submitting…" : "Loading…";
 
   /* ---------------- UI ---------------- */
   return (
     <div className="min-h-screen bg-white" aria-busy={overlayOn}>
-      {/* 🔥 Logo spinner replaces the old overlay: shows when submitting or initial data is loading */}
+      {/* 🔥 Logo spinner overlay for submitting / loading */}
       <LogoSpinner
         show={overlayOn || loadingBalance || loadingBank}
         invert
@@ -398,7 +402,9 @@ export default function CommissionWithdrawalPage() {
               inputMode="decimal"
               placeholder="Amount"
               value={amount}
-              onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))}
+              onChange={(e) =>
+                setAmount(e.target.value.replace(/[^\d.]/g, ""))
+              }
               className="w-full bg-transparent outline-none text-[13px] text-gray-900 placeholder:text-gray-400"
               aria-label="Amount to withdraw"
               disabled={overlayOn}
@@ -417,10 +423,11 @@ export default function CommissionWithdrawalPage() {
             </p>
           )}
 
+          {/* Quick amount buttons (back to original spot) */}
           <div className="mt-2.5 flex flex-wrap gap-1.5">
             <button
               onClick={() => setQuick("ALL")}
-              className="h-8 px-3 rounded-full bg-gray-100 text-[11px] font-semibold text-gray-800"
+              className="h-8 px-3 rounded-md bg-gray-100 text-[11px] font-semibold text-gray-800"
               disabled={overlayOn}
             >
               All
@@ -429,7 +436,7 @@ export default function CommissionWithdrawalPage() {
               <button
                 key={v}
                 onClick={() => setQuick(v)}
-                className="h-8 px-3 rounded-full bg-gray-100 text-[11px] font-semibold text-gray-800"
+                className="h-8 px-3 rounded-md bg-gray-100 text-[11px] font-semibold text-gray-800"
                 disabled={overlayOn}
               >
                 {fmt(v).replace(".00", "")}
@@ -442,14 +449,14 @@ export default function CommissionWithdrawalPage() {
       {/* Method Card */}
       <div className="px-4 mt-4">
         <p className="text-[11px] font-semibold text-gray-800 mb-2">
-          Select a withdrawal method
+          Set a withdrawal method
         </p>
 
         <div className="rounded-2xl bg-white shadow-[0_1px_0_0_rgba(0,0,0,0.04)] ring-1 ring-gray-100">
           {/* Recharge Balance */}
           <button
             type="button"
-            onClick={() => setMethod("RECHARGE")}
+            onClick={() => toggleMethod("RECHARGE")}
             className="w-full flex items-center justify-between px-3.5 py-3"
             disabled={overlayOn}
           >
@@ -481,7 +488,7 @@ export default function CommissionWithdrawalPage() {
           {/* Bank Account */}
           <button
             type="button"
-            onClick={() => setMethod("BANK")}
+            onClick={() => toggleMethod("BANK")}
             className="w-full flex items-center justify-between px-3.5 py-3"
             disabled={overlayOn}
           >
@@ -497,9 +504,7 @@ export default function CommissionWithdrawalPage() {
                   {loadingBank
                     ? "Loading your saved bank…"
                     : savedBank
-                    ? `${savedBank.bank.name} · ${maskAcct(
-                        savedBank.accountNumber
-                      )}`
+                    ? "Withdraw to your bank account"
                     : "No bank set. Add one in Settings → Withdrawal Bank."}
                 </p>
               </div>
@@ -514,7 +519,7 @@ export default function CommissionWithdrawalPage() {
             />
           </button>
 
-          {/* Black info chip when Bank is selected */}
+          {/* Black account details card (only when Bank method is selected) */}
           {method === "BANK" && savedBank && (
             <div className="px-3.5 pb-3">
               <div className="mt-1 w-full rounded-xl bg-black text-white px-4 py-3 flex items-center justify-between">
@@ -652,7 +657,9 @@ export default function CommissionWithdrawalPage() {
                 type="password"
                 inputMode="numeric"
                 value={pin}
-                onChange={(e) => setPin(e.target.value.replace(/[^\d]/g, ""))}
+                onChange={(e) =>
+                  setPin(e.target.value.replace(/[^\d]/g, ""))
+                }
                 placeholder="Enter your PIN"
                 className="w-full h-11 rounded-xl border border-gray-200 px-3 text-[13px] outline-none focus:ring-2 focus:ring-black"
                 aria-label="Password or PIN"
@@ -665,10 +672,18 @@ export default function CommissionWithdrawalPage() {
               )}
             </div>
 
+            {/* Error style (same pattern as other pages) */}
             {submitErr && (
-              <p className="mt-2 text-[12px] text-rose-600" role="alert">
-                {submitErr}
-              </p>
+              <div
+                className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-800 flex items-start gap-2"
+                role="alert"
+                aria-live="assertive"
+              >
+                <span className="mt-[2px] inline-flex h-4 w-4 items-center justify-center rounded-full bg-rose-100 text-rose-700 text-[10px] font-bold">
+                  !
+                </span>
+                <p className="flex-1">{submitErr}</p>
+              </div>
             )}
 
             <button

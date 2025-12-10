@@ -714,7 +714,7 @@ function TransactionDetailsPageInner() {
     const cid = customerId || "";
     startTransition(() =>
       router.replace(
-        `/customer/vault/transactions${
+        `/customer/vault${
           cid ? `?customerId=${encodeURIComponent(cid)}` : ""
         }`
       )

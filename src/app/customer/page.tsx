@@ -3,7 +3,13 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Plus, RotateCcw, ChevronRight } from "lucide-react";
+import {
+  Search,
+  Plus,
+  RotateCcw,
+  ChevronRight,
+  AlertCircle,
+} from "lucide-react";
 import Image from "next/image";
 import BottomTabs from "../dash/components/BottomTabs";
 
@@ -373,9 +379,8 @@ export default function CustomerPage() {
         if (!cancelled) {
           setBeneficiaries(deduped);
           setLoading(false);
-          if (deduped.length === 0) {
-            setErrorMsg("No users with deposits yet.");
-          }
+          // ⛔️ Do NOT set errorMsg when there are no beneficiaries.
+          //     We will show a "No beneficiaries" message in the body instead.
         }
       } catch (e: any) {
         if (!cancelled) {
@@ -770,8 +775,7 @@ export default function CustomerPage() {
       <LogoSpinner show={isRouting} />
 
       <div className="min-h-screen bg-white flex items-start justify-center p-0 md:p-4">
-        {/* global route loader (kept) */}
-
+        {/* main card */}
         <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-3xl md:shadow-xl overflow-hidden">
           {/* Header */}
           <div className="bg-white px-4 pt-8 pb-6 border-b border-gray-100">
@@ -814,14 +818,19 @@ export default function CustomerPage() {
               )}
             </div>
 
+            {/* 🔴 Error style (only for real errors, not empty beneficiaries) */}
             {errorMsg && !search && (
-              <p className="mt-3 text-[12px] text-rose-600" role="alert">
-                {errorMsg}
-              </p>
+              <div
+                className="mt-3 flex items-start gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[11px] text-red-700"
+                role="alert"
+              >
+                <AlertCircle className="w-4 h-4 mt-0.5" />
+                <p>{errorMsg}</p>
+              </div>
             )}
           </div>
 
-          {/* NEW: “My Beneficiaries” header row with View all */}
+          {/* “My Beneficiaries” header row with View all */}
           <div className="px-4 py-4 border-b border-gray-100 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-sm font-extrabold text-black">
@@ -872,7 +881,7 @@ export default function CustomerPage() {
                     ? "Enter at least the first 6 digits"
                     : search
                     ? "No users match your phone number"
-                    : "No customers with deposits yet"}
+                    : "No beneficiaries yet."}
                 </p>
                 {!search && (
                   <p className="text-gray-400 text-xs mt-1">
