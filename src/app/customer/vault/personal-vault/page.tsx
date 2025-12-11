@@ -807,10 +807,10 @@ function PersonalVaultCustomerPageInner() {
                     </div>
                     <div
                       className={`text-[13px] font-semibold ${
-                        t.isCredit ? "text-gray-900" : "text-rose-600"
+                        t.isCredit ? "text-green-900" : "text-black-600"
                       }`}
                     >
-                      {t.isCredit ? "" : "-"}
+                      {t.isCredit ? "+" : ""}
                       {NGN(t.amount)}
                     </div>
                   </button>

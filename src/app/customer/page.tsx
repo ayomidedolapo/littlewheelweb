@@ -662,6 +662,7 @@ export default function CustomerPage() {
 
   /* === Draggable Floating Onboard Button state === */
   const [floatPos, setFloatPos] = useState({ x: 0, y: 0 });
+  const [floatReady, setFloatReady] = useState(false); // 🔥 new: hide until positioned
   const [isDragging, setIsDragging] = useState(false);
   const floatRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef({
@@ -690,6 +691,8 @@ export default function CustomerPage() {
         x: Math.max(0, vw - width - 20),
         y: Math.max(0, vh - height - 120),
       });
+
+      setFloatReady(true); // ✅ only show after we’ve positioned it
     }, 50);
   }, []);
 
@@ -1015,38 +1018,40 @@ export default function CustomerPage() {
           <div className="h-15" />
         </div>
 
-        {/* 🟡 Draggable Floating Onboard Button */}
-        <div
-          ref={floatRef}
-          className="fixed z-50"
-          style={{
-            left: floatPos.x,
-            top: floatPos.y,
-            touchAction: "none",
-            cursor: isDragging ? "grabbing" : "grab",
-          }}
-          onPointerDown={handlePointerDown}
-        >
-          <button
-            type="button"
-            onClick={() => {
-              if (ignoreClickRef.current) {
-                ignoreClickRef.current = false;
-                return;
-              }
-              routePush("/onboard-form");
+        {/* 🟡 Draggable Floating Onboard Button — only render when ready */}
+        {floatReady && (
+          <div
+            ref={floatRef}
+            className="fixed z-50"
+            style={{
+              left: floatPos.x,
+              top: floatPos.y,
+              touchAction: "none",
+              cursor: isDragging ? "grabbing" : "grab",
             }}
-            aria-label="Onboard new user"
-            disabled={navDisabled}
-            className="pointer-events-auto inline-flex items-center gap-2 rounded-sm bg-black px-5 py-3
-               text-white text-[12px] font-semibold shadow-xl shadow-black/40 active:scale-[0.98] transition disabled:opacity-60 disabled:cursor-not-allowed"
+            onPointerDown={handlePointerDown}
           >
-            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-black">
-              <Plus className="h-4 w-4" strokeWidth={2.5} />
-            </span>
-            Onboard new user
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (ignoreClickRef.current) {
+                  ignoreClickRef.current = false;
+                  return;
+                }
+                routePush("/onboard-form");
+              }}
+              aria-label="Onboard new user"
+              disabled={navDisabled}
+              className="pointer-events-auto inline-flex items-center gap-2 rounded-sm bg-black px-5 py-3
+               text-white text-[12px] font-semibold shadow-xl shadow-black/40 active:scale-[0.98] transition disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-black">
+                <Plus className="h-4 w-4" strokeWidth={2.5} />
+              </span>
+              Onboard new user
+            </button>
+          </div>
+        )}
 
         {/* ===== Vault Picker Modal (Deposit / Withdraw) ===== */}
         {pickerOpen && (

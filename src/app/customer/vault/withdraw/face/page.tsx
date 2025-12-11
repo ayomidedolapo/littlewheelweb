@@ -25,7 +25,7 @@ function getAuthToken(): string {
   try {
     const m = isBrowser
       ? document.cookie.match(
-          /(?:^|;\s*)(authToken|lw_token|token)\s*=\s*([^;]+)/
+          /(?:^|;\s*)(authToken|lw_token|token)\s*=\s*([^;]+)/,
         )
       : null;
     if (m?.[2]) return decodeURIComponent(m[2]);
@@ -121,7 +121,7 @@ function FaceCapturePageInner() {
   const [videoReady, setVideoReady] = useState(false);
   const [processingPhoto, setProcessingPhoto] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<"user" | "environment">(
-    "user"
+    "user",
   );
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -251,7 +251,7 @@ function FaceCapturePageInner() {
   /* ---------------- OTP state (4 boxes) ---------------- */
   const [otpDigits, setOtpDigits] = useState<string[]>(Array(OTP_LEN).fill(""));
   const [otpStatus, setOtpStatus] = useState<"idle" | "error" | "success">(
-    "idle"
+    "idle",
   );
   const otpInputsRef = useRef<Array<HTMLInputElement | null>>([]);
 
@@ -276,7 +276,7 @@ function FaceCapturePageInner() {
 
   const handleOtpKeyDown = (
     index: number,
-    e: React.KeyboardEvent<HTMLInputElement>
+    e: React.KeyboardEvent<HTMLInputElement>,
   ) => {
     if (e.key === "Backspace" && otpDigits[index] === "" && index > 0) {
       e.preventDefault();
@@ -325,82 +325,6 @@ function FaceCapturePageInner() {
       : "border-gray-300 text-gray-900 bg-white";
   };
 
-  /* ---------------- Request OTP (wired) ---------------- */
-  const [requestingOtp, setRequestingOtp] = useState(false);
-  const [otpError, setOtpError] = useState<string | null>(null);
-  const [otpInfo, setOtpInfo] = useState<string | null>(null);
-
-  async function handleRequestOtp() {
-    if (!customerId || !vaultId) {
-      setOtpError("Missing customer or vault reference.");
-      setOtpInfo(null);
-      return;
-    }
-
-    if (!token) {
-      setOtpError("Missing authentication. Please log in again.");
-      setOtpInfo(null);
-      return;
-    }
-
-    try {
-      setRequestingOtp(true);
-      setOtpError(null);
-      setOtpInfo(null);
-      setOtpStatus("idle");
-
-      const payload: Record<string, any> = {};
-      if (ref) {
-        payload.reference = ref;
-        payload.referenceId = ref;
-      }
-      if (amount) payload.amount = String(amount);
-
-      const res = await fetch(
-        `/api/v1/agent/customers/${customerId}/vaults/${vaultId}/withdraw/request-otp`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-lw-auth": token,
-          },
-          cache: "no-store",
-          body: JSON.stringify(payload),
-        }
-      );
-
-      const ct = res.headers.get("content-type") || "";
-      const j =
-        ct.includes("application/json") && (await res.json().catch(() => ({})));
-
-      if (!res.ok) {
-        const msg =
-          (j as any)?.message ||
-          (j as any)?.error ||
-          (j as any)?.upstream?.message ||
-          `Failed to request OTP (HTTP ${res.status}).`;
-        setOtpError(msg);
-        setOtpStatus("error");
-        return;
-      }
-
-      // reset boxes + focus first
-      setOtpDigits(Array(OTP_LEN).fill(""));
-      setTimeout(() => focusOtpIndex(0), 50);
-
-      setOtpInfo("Code sent to the customer’s phone.");
-      setOtpStatus("idle");
-    } catch (e: any) {
-      setOtpError(
-        e?.message || "Failed to request OTP. Please try again."
-      );
-      setOtpInfo(null);
-      setOtpStatus("error");
-    } finally {
-      setRequestingOtp(false);
-    }
-  }
-
   /* ---------------- Proceed / finalize ---------------- */
   const canProceed = useMemo(() => {
     if (!customerId || !vaultId) return false;
@@ -413,7 +337,9 @@ function FaceCapturePageInner() {
     setGlobalError(null);
 
     if (!customerId || !vaultId) {
-      setGlobalError("Missing customer or vault reference. Go back and try again.");
+      setGlobalError(
+        "Missing customer or vault reference. Go back and try again.",
+      );
       return;
     }
 
@@ -456,7 +382,7 @@ function FaceCapturePageInner() {
           },
           cache: "no-store",
           body: JSON.stringify(payload),
-        }
+        },
       );
 
       const ct = res.headers.get("content-type") || "";
@@ -464,11 +390,24 @@ function FaceCapturePageInner() {
         ct.includes("application/json") && (await res.json().catch(() => ({})));
 
       if (!res.ok) {
-        const msg =
+        const rawMsg =
           (j as any)?.message ||
           (j as any)?.error ||
           (j as any)?.upstream?.message ||
-          `Finalize failed (HTTP ${res.status}).`;
+          "";
+
+        // If backend says it's already completed, treat as success
+        if (
+          typeof rawMsg === "string" &&
+          rawMsg.toLowerCase().includes("withdrawal is already completed")
+        ) {
+          setOtpStatus("success");
+          router.push("/dash");
+          return;
+        }
+
+        const msg =
+          rawMsg || `Finalize failed (HTTP ${res.status}).`;
         setOtpStatus("error");
         setGlobalError(msg);
         return;
@@ -480,7 +419,7 @@ function FaceCapturePageInner() {
       router.push("/dash");
     } catch (e: any) {
       setGlobalError(
-        e?.message || "Couldn’t finalize withdrawal. Please try again."
+        e?.message || "Couldn’t finalize withdrawal. Please try again.",
       );
     } finally {
       setSubmitting(false);
@@ -575,8 +514,8 @@ function FaceCapturePageInner() {
                   Enter OTP code
                 </h2>
                 <p className="mt-1 text-[12px] text-gray-600">
-                  A 4-digit code will be sent to the customer&apos;s phone.
-                  Enter it to confirm this withdrawal.
+                  The customer will receive a 4-digit code via USSD. Enter the
+                  code here to confirm this withdrawal.
                 </p>
               </div>
 
@@ -595,28 +534,11 @@ function FaceCapturePageInner() {
                     onKeyDown={(e) => handleOtpKeyDown(i, e)}
                     onPaste={handleOtpPaste}
                     className={`${baseOtpBox} ${colorForOtpStatus(
-                      !!digit
+                      !!digit,
                     )} focus:ring-2 focus:ring-gray-100 focus:border-black`}
                   />
                 ))}
               </div>
-
-              {/* Request code */}
-              <button
-                type="button"
-                onClick={handleRequestOtp}
-                disabled={requestingOtp}
-                className="text-sm font-medium text-black underline disabled:opacity-60"
-              >
-                {requestingOtp ? "Requesting code…" : "Request code"}
-              </button>
-
-              {otpInfo && (
-                <p className="mt-2 text-[11px] text-emerald-700">{otpInfo}</p>
-              )}
-              {otpError && (
-                <p className="mt-2 text-[11px] text-rose-600">{otpError}</p>
-              )}
             </div>
           </div>
         </div>

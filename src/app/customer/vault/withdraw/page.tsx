@@ -258,40 +258,52 @@ function WithdrawFromVaultPageInner() {
 
         if (!cancelled) setAgentBank(agent || null);
 
-        // customer withdrawal bank – backend (if configured) or per-customer local cache
+        // customer withdrawal bank — NOW FROM CUSTOMER ENDPOINT
         let customer: SavedBank | null = null;
 
         if (customerId && token) {
           try {
-            const r = await fetch(
-              `/api/v1/agent/customers/${customerId}/set-withdrawal-method`,
-              {
-                cache: "no-store",
-                headers: { "x-lw-auth": token },
-                credentials: "include",
-              }
-            );
+            // Backend: GET /v1/agent/customers/{id}
+            const r = await fetch(`/api/v1/agent/customers/${customerId}`, {
+              cache: "no-store",
+              headers: { "x-lw-auth": token },
+              credentials: "include",
+            });
+
             if (r.ok) {
               const j = await r.json().catch(() => ({}));
-              const d3 = j?.data || j?.method || j || {};
+              const root = j?.data || j || {};
+
+              // Try to locate withdrawal method object inside customer
+              const wm =
+                root?.withdrawalMethod ??
+                root?.withdrawal_method ??
+                root?.withdrawalBank ??
+                root?.withdrawal_bank ??
+                root?.withdrawal ??
+                root;
+
               const bankName =
-                d3?.bankName || d3?.bank?.name || d3?.bank || "";
+                wm?.bankName || wm?.bank?.name || wm?.bank || "";
               const bankCode =
-                d3?.bankCode || d3?.bank?.code || d3?.code || "";
-              const logoUrl = d3?.logoUrl || d3?.bank?.logo || "";
-              const accountNumber = d3?.accountNumber || d3?.account || "";
-              const accountName = d3?.accountName || d3?.name || "";
+                wm?.bankCode || wm?.bank?.code || wm?.code || "";
+              const logoUrl = wm?.logoUrl || wm?.bank?.logo || "";
+              const accountNumber =
+                wm?.accountNumber || wm?.account || wm?.account_no || "";
+              const accountName =
+                wm?.accountName || wm?.name || wm?.account_name || "";
+
               if (bankName && accountNumber) {
                 customer = {
                   id:
-                    d3?.id ??
-                    d3?.withdrawalMethodId ??
-                    d3?.data?.id ??
+                    wm?.id ??
+                    wm?.withdrawalMethodId ??
+                    wm?.data?.id ??
                     undefined,
                   withdrawalMethodId:
-                    d3?.withdrawalMethodId ||
-                    d3?.id ||
-                    d3?.data?.id ||
+                    wm?.withdrawalMethodId ??
+                    wm?.id ??
+                    wm?.data?.id ??
                     undefined,
                   bank: {
                     name: bankName,
@@ -304,11 +316,11 @@ function WithdrawFromVaultPageInner() {
               }
             }
           } catch {
-            // ignore – will fall back to local cache
+            // ignore – may fall back to local cache
           }
         }
 
-        // fallback: per-customer localStorage
+        // fallback: per-customer localStorage (only if backend gave nothing)
         if (!customer && customerId) {
           try {
             const raw = localStorage.getItem(
@@ -401,7 +413,7 @@ function WithdrawFromVaultPageInner() {
         amount: amt,
         beneficiary,
       };
-
+      
       const res = await fetch(
         `/api/v1/agent/customers/${customerId}/vaults/${vaultId}/withdraw/initialize`,
         {
@@ -841,14 +853,13 @@ function WithdrawFromVaultPageInner() {
               disabled={submitting}
               className="mt-5 w-full h-12 rounded-2xl bg-black text-white font-semibold active:scale-[0.99] disabled:opacity-60 inline-flex items-center justify-center gap-2"
             >
-              {/* ✅ Spinner removed inside popup */}
               {submitting ? "Processing…" : "Confirm"}
             </button>
           </div>
         </div>
       </div>
 
-      {/* ===== Customer bank bottom sheet (Add only, no edit) ===== */}
+      {/* ===== Customer bank bottom sheet ===== */}
       {customerId && (
         <CustomerBankSheet
           open={customerBankSheetOpen}
@@ -863,7 +874,7 @@ function WithdrawFromVaultPageInner() {
   );
 }
 
-/* ===== 3) Customer bank sheet – ADD only, no backend update ===== */
+/* ===== 3) Customer bank sheet – now SAVES to backend ===== */
 
 function CustomerBankSheet({
   open,
@@ -1004,17 +1015,74 @@ function CustomerBankSheet({
       setSaving(true);
       setError(null);
 
-      const saved: SavedBank = {
-        bank: {
-          name: bank!.name,
-          code: bank!.code,
-          logo: bankLogoUrl(bank!.name, bank?.logo),
-        },
-        accountNumber: acct,
+      const cleanAcct = acct.replace(/\D/g, "");
+
+      // Payload EXACTLY as Swagger shows
+      const payload = {
+        bankName: bank!.name,
+        logoUrl: bankLogoUrl(bank!.name, bank?.logo),
+        bankCode: String(bank!.code),
+        accountNumber: cleanAcct,
         accountName: resolvedName,
       };
 
-      // purely local cache per-customer (no backend update)
+      const res = await fetch(
+        `/api/v1/agent/customers/${customerId}/set-withdrawal-method`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { "x-lw-auth": token } : {}),
+          },
+          body: JSON.stringify(payload),
+          cache: "no-store",
+          credentials: "include",
+        }
+      );
+
+      const ct = res.headers.get("content-type") || "";
+      const data = ct.includes("application/json")
+        ? await res.json().catch(() => ({}))
+        : await res.text().catch(() => "");
+
+      if (!res.ok) {
+        const msg =
+          (typeof data === "object" && (data as any)?.message) ||
+          (typeof data === "object" && (data as any)?.error) ||
+          (typeof data === "string" && data) ||
+          `Failed to save withdrawal method (HTTP ${res.status})`;
+        throw new Error(msg);
+      }
+
+      // Interpret what backend returns (if anything)
+      const root = typeof data === "object" ? (data as any) : {};
+      const src = root?.data || root || {};
+
+      const finalBankName =
+        src.bankName || src.bank?.name || src.bank || payload.bankName;
+      const finalBankCode =
+        src.bankCode || src.bank?.code || src.code || payload.bankCode;
+      const finalLogoUrl =
+        src.logoUrl || src.bank?.logo || payload.logoUrl || "";
+      const finalAcctNumber =
+        src.accountNumber || src.account || cleanAcct || "";
+      const finalAcctName =
+        src.accountName || src.name || payload.accountName || resolvedName;
+
+      const saved: SavedBank = {
+        id: src.id ?? src.withdrawalMethodId ?? existing?.id ?? undefined,
+        withdrawalMethodId:
+          src.withdrawalMethodId ?? src.id ?? existing?.withdrawalMethodId,
+        bank: {
+          name: finalBankName,
+          code: finalBankCode,
+          logo: bankLogoUrl(finalBankName, finalLogoUrl),
+        },
+        accountNumber: String(finalAcctNumber),
+        accountName: String(finalAcctName),
+      };
+
+      // cache per-customer locally as well
       try {
         localStorage.setItem(
           `lw_customer_withdrawal_bank:${customerId}`,
