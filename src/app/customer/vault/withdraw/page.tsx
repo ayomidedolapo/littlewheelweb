@@ -87,6 +87,14 @@ function getAuthToken(): string | null {
   }
 }
 
+/** Format numeric string with commas (display only) */
+function formatWithCommas(value: string): string {
+  if (!value) return "";
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "";
+  return n.toLocaleString("en-NG");
+}
+
 /* ===== 1) Shell with Suspense (no hooks here) ===== */
 export default function WithdrawPageShell() {
   return (
@@ -133,7 +141,10 @@ function WithdrawFromVaultPageInner() {
   /* ---------- state ---------- */
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // store RAW digits only (no commas) in state
   const [amount, setAmount] = useState<string>("");
+
   const [method, setMethod] = useState<"bank" | null>(null);
   const [vault, setVault] = useState<VaultDetail | null>(null);
   const [balance, setBalance] = useState<number>(0);
@@ -369,6 +380,7 @@ function WithdrawFromVaultPageInner() {
   const pickChip = (c: (typeof chips)[number]) => {
     if (c === "All") setAmount(String(balance || 0));
     else setAmount(String(c));
+    if (error) setError(null);
   };
 
   const openSummary = () => {
@@ -413,7 +425,7 @@ function WithdrawFromVaultPageInner() {
         amount: amt,
         beneficiary,
       };
-      
+
       const res = await fetch(
         `/api/v1/agent/customers/${customerId}/vaults/${vaultId}/withdraw/initialize`,
         {
@@ -539,12 +551,16 @@ function WithdrawFromVaultPageInner() {
             <p className="text-[12px] font-semibold text-gray-800 mb-2">
               Amount to withdraw
             </p>
+
             <input
               inputMode="numeric"
               pattern="[0-9]*"
-              value={amount}
+              value={formatWithCommas(amount)}
               onChange={(e) => {
-                setAmount(e.target.value.replace(/[^\d]/g, ""));
+                const raw = e.target.value
+                  .replace(/,/g, "")
+                  .replace(/[^\d]/g, "");
+                setAmount(raw);
                 if (error) setError(null);
               }}
               placeholder="Enter Amount"
@@ -795,9 +811,7 @@ function WithdrawFromVaultPageInner() {
 
       {/* ===== Bottom Sheet: Withdrawal Summary ===== */}
       <div
-        className={`fixed inset-0 z-50 ${
-          sheetOpen ? "" : "pointer-events-none"
-        }`}
+        className={`fixed inset-0 z-50 ${sheetOpen ? "" : "pointer-events-none"}`}
       >
         <div
           className={`absolute inset-0 bg-black/50 transition-opacity ${

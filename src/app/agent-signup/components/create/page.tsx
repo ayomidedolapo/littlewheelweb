@@ -268,12 +268,7 @@ export default function CreateExactDualOTP() {
     )
       return;
 
-    // 🔒 Require reCAPTCHA BEFORE sending OTP or showing boxes
-    if (!captchaToken) { 
-      setPageError("Please confirm you’re not a robot.");
-      return;
-    }
-
+    // ✅ FIX: Do NOT require reCAPTCHA for OTP sending anymore
     setPageError(null);
 
     const e164 = toE164(phone);
@@ -291,7 +286,7 @@ export default function CreateExactDualOTP() {
       mode: "SELF_CREATED",
       deviceToken,
       ...(sessionId ? { sessionId } : {}),
-      ...(captchaToken ? { recaptchaToken: captchaToken } : {}),
+      // ✅ removed recaptchaToken from step 1
     };
 
     setPState("sending");
@@ -372,12 +367,7 @@ export default function CreateExactDualOTP() {
     )
       return;
 
-    // 🔒 Require reCAPTCHA BEFORE sending OTP or showing boxes
-    if (!captchaToken) {
-      setPageError("Please confirm you’re not a robot.");
-      return;
-    }
-
+    // ✅ FIX: Do NOT require reCAPTCHA for OTP sending anymore
     setPageError(null);
 
     const cleanEmail = (email || "").trim().toLowerCase();
@@ -393,7 +383,7 @@ export default function CreateExactDualOTP() {
       step: 3,
       email: cleanEmail,
       ...(sessionId ? { sessionId } : {}),
-      ...(captchaToken ? { recaptchaToken: captchaToken } : {}),
+      // ✅ removed recaptchaToken from step 3
     };
 
     const { r, data } = await callSignupV2(payload);
@@ -552,6 +542,12 @@ export default function CreateExactDualOTP() {
       return;
     }
 
+    // ✅ FIX: Require reCAPTCHA ONLY when proceeding (Continue)
+    if (!captchaToken) {
+      setPageError("Please confirm you’re not a robot.");
+      return;
+    }
+
     setSending(true);
     setPageError(null);
 
@@ -566,6 +562,7 @@ export default function CreateExactDualOTP() {
       ...(e164 ? { phoneNumber: e164 } : {}),
       ...(cleanEmail ? { email: cleanEmail } : {}),
       ...(deviceToken ? { deviceToken } : {}),
+      ...(captchaToken ? { recaptchaToken: captchaToken } : {}), // ✅ send captcha here
     };
 
     const { r, data } = await callSignupV2(payload);
@@ -901,7 +898,7 @@ export default function CreateExactDualOTP() {
             )}
           </div>
 
-          {/* 🔒 Google reCAPTCHA widget */}
+          {/* 🔒 Google reCAPTCHA widget (kept visible exactly like your original) */}
           <div className="mt-4">
             <ReCaptcha onChange={setCaptchaToken} />
           </div>

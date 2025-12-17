@@ -19,6 +19,15 @@ const fmt = (n: number) =>
   `₦${(n || 0).toLocaleString("en-NG", { maximumFractionDigits: 0 })}`;
 const parseNG = (s: string) => Number(String(s).replace(/[^\d]/g, "")) || 0;
 
+/** ✅ Format raw digit string for display with commas */
+const formatWithCommas = (rawDigits: string) => {
+  const clean = String(rawDigits || "").replace(/[^\d]/g, "");
+  if (!clean) return "";
+  const n = Number(clean);
+  if (!Number.isFinite(n)) return "";
+  return n.toLocaleString("en-NG");
+};
+
 type BankAccount = {
   id: string;
   name: string;
@@ -608,11 +617,16 @@ export default function CreditRechargePage() {
               <label className="block text-[12px] font-semibold text-gray-800 mb-2">
                 Amount to recharge
               </label>
+
+              {/* ✅ Comma formatted display, raw digits stored */}
               <input
-                value={amountRaw}
-                onChange={(e) =>
-                  setAmountRaw(e.target.value.replace(/[^\d]/g, ""))
-                }
+                value={formatWithCommas(amountRaw)}
+                onChange={(e) => {
+                  const raw = e.target.value
+                    .replace(/,/g, "")
+                    .replace(/[^\d]/g, "");
+                  setAmountRaw(raw || "0");
+                }}
                 inputMode="numeric"
                 pattern="[0-9]*"
                 className="w-full h-11 rounded-md border border-gray-200 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-black"
@@ -721,14 +735,16 @@ export default function CreditRechargePage() {
                 Transfer the amount below to your Virtual Account.
               </p>
 
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                <PlainDetail
+              {/* ✅ Tier 2 uses same font style as Tier 1 manual (PlainDetail), no logo */}
+              <div className="rounded-xl border border-gray-200 bg-white p-4">
+                <VAPlainDetail
                   label="AMOUNT TO SEND"
                   value={`NGN ${amount.toLocaleString("en-NG")}`}
                   canCopy
                   onCopy={() => copy(String(amount))}
                 />
-                <VAItem
+                <div className="mt-3" />
+                <VAPlainDetail
                   label="ACCOUNT NUMBER"
                   value={virtual?.accountNumber || "—"}
                   canCopy
@@ -736,11 +752,13 @@ export default function CreditRechargePage() {
                     virtual?.accountNumber && copy(virtual.accountNumber)
                   }
                 />
-                <PlainDetail
+                <div className="mt-3" />
+                <VAPlainDetail
                   label="BANK NAME"
                   value={virtual?.bankName || "—"}
                 />
-                <PlainDetail
+                <div className="mt-3" />
+                <VAPlainDetail
                   label="ACCOUNT NAME"
                   value={virtual?.accountName || "—"}
                 />
@@ -920,6 +938,51 @@ function PlainDetail({
           >
             <Copy className="w-3.5 h-3.5" />
             Copy
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * ✅ Tier-2 detail component:
+ * - Same label + value font style as PlainDetail (manual Tier 1)
+ * - Copy button shows "Copied" feedback briefly
+ */
+function VAPlainDetail({
+  label,
+  value,
+  canCopy,
+  onCopy,
+}: {
+  label: string;
+  value: string;
+  canCopy?: boolean;
+  onCopy?: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    if (!onCopy) return;
+    await Promise.resolve(onCopy());
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1200);
+  };
+
+  return (
+    <div className="bg-white">
+      <p className="text-[11px] font-semibold text-gray-500 mb-1">{label}</p>
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-semibold text-gray-900">{value}</span>
+        {canCopy && (
+          <button
+            onClick={handleCopy}
+            className="inline-flex items-center gap-1 text-[11px] font-semibold bg-black text-white px-2.5 py-1 rounded-md active:scale-[0.98]"
+            title="Copy"
+          >
+            <Copy className="w-3.5 h-3.5" />
+            {copied ? "Copied" : "Copy"}
           </button>
         )}
       </div>

@@ -24,6 +24,17 @@ type SavedBank = {
   accountName: string;
 };
 
+/* ---------------- comma helpers ---------------- */
+const parseNG = (s: string) => Number(String(s || "").replace(/[^\d]/g, "")) || 0;
+
+const formatWithCommas = (rawDigits: string) => {
+  const clean = String(rawDigits || "").replace(/[^\d]/g, "");
+  if (!clean) return "";
+  const n = Number(clean);
+  if (!Number.isFinite(n)) return "";
+  return n.toLocaleString("en-NG");
+};
+
 /* ---------------- helpers for bank display ---------------- */
 function bankLogoUrl(name: string, provided?: string) {
   if (provided) return provided;
@@ -104,9 +115,9 @@ export default function CommissionWithdrawalPage() {
   const [loadingBank, setLoadingBank] = useState(true);
 
   // form state
-  const [amount, setAmount] = useState<string>("");
+  const [amountRaw, setAmountRaw] = useState<string>(""); // raw digits only
   const [method, setMethod] = useState<Method>("");
-  const [pin, setPin] = useState(""); // password/PIN required by API
+  const [pin, setPin] = useState(""); // PIN required by API (max 5 digits)
 
   // summary bottom sheet
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -261,10 +272,8 @@ export default function CommissionWithdrawalPage() {
   }, [tokenHeader]);
 
   // derived
-  const parsedAmount = useMemo(
-    () => Number((amount || "").replace(/[^\d.]/g, "")) || 0,
-    [amount]
-  );
+  const parsedAmount = useMemo(() => parseNG(amountRaw), [amountRaw]);
+
   const fee = useMemo(
     () => (parsedAmount > 0 ? (SERVICE_FEE_PERCENT / 100) * parsedAmount : 0),
     [parsedAmount]
@@ -276,7 +285,7 @@ export default function CommissionWithdrawalPage() {
     parsedAmount <= (availableBalance || 0) &&
     Number.isFinite(fee);
 
-  const pinValid = pin.trim().length >= 4; // adjust to your rule
+  const pinValid = pin.trim().length >= 4 && pin.trim().length <= 5; // ✅ max 5 digits
 
   const bankReady = !!savedBank;
   const canProceed =
@@ -288,8 +297,8 @@ export default function CommissionWithdrawalPage() {
   };
 
   const setQuick = (val: number | "ALL") => {
-    if (val === "ALL") setAmount(String(availableBalance || 0));
-    else setAmount(String(val));
+    if (val === "ALL") setAmountRaw(String(availableBalance || 0));
+    else setAmountRaw(String(val));
   };
 
   const openSheet = () => {
@@ -337,10 +346,10 @@ export default function CommissionWithdrawalPage() {
         throw new Error(msg);
       }
 
-      // success → close sheet, reset, and refresh balance live
+      // success → close sheet, reset, and redirect to /dash
       setSheetOpen(false);
       setPin("");
-      setAmount("");
+      setAmountRaw("");
       setMethod("");
 
       try {
@@ -348,7 +357,7 @@ export default function CommissionWithdrawalPage() {
       } catch {}
 
       await loadCommissionBalance();
-      alert("Withdrawal request submitted successfully.");
+      router.push("/dash");
     } catch (e: any) {
       setSubmitErr(e?.message || "Withdrawal failed.");
     } finally {
@@ -398,13 +407,18 @@ export default function CommissionWithdrawalPage() {
             Amount to withdraw
           </label>
           <div className="h-11 rounded-xl ring-1 ring-gray-200 focus-within:ring-black bg-white flex items-center px-3">
+            {/* ✅ comma formatted display, raw digits stored */}
             <input
-              inputMode="decimal"
+              inputMode="numeric"
+              pattern="[0-9]*"
               placeholder="Amount"
-              value={amount}
-              onChange={(e) =>
-                setAmount(e.target.value.replace(/[^\d.]/g, ""))
-              }
+              value={formatWithCommas(amountRaw)}
+              onChange={(e) => {
+                const raw = e.target.value
+                  .replace(/,/g, "")
+                  .replace(/[^\d]/g, "");
+                setAmountRaw(raw);
+              }}
               className="w-full bg-transparent outline-none text-[13px] text-gray-900 placeholder:text-gray-400"
               aria-label="Amount to withdraw"
               disabled={overlayOn}
@@ -423,7 +437,7 @@ export default function CommissionWithdrawalPage() {
             </p>
           )}
 
-          {/* Quick amount buttons (back to original spot) */}
+          {/* Quick amount buttons */}
           <div className="mt-2.5 flex flex-wrap gap-1.5">
             <button
               onClick={() => setQuick("ALL")}
@@ -519,7 +533,7 @@ export default function CommissionWithdrawalPage() {
             />
           </button>
 
-          {/* Black account details card (only when Bank method is selected) */}
+          {/* Black account details card */}
           {method === "BANK" && savedBank && (
             <div className="px-3.5 pb-3">
               <div className="mt-1 w-full rounded-xl bg-black text-white px-4 py-3 flex items-center justify-between">
@@ -550,7 +564,7 @@ export default function CommissionWithdrawalPage() {
           )}
         </div>
 
-        {/* Tiny warning if bank not set and BANK selected */}
+        {/* warning */}
         {method === "BANK" && !savedBank && !loadingBank && (
           <p className="mt-2 text-[11px] text-rose-600">
             You need to set a withdrawal bank first (Settings → Withdrawal
@@ -592,14 +606,12 @@ export default function CommissionWithdrawalPage() {
         }`}
         aria-hidden={!sheetOpen}
       >
-        {/* Backdrop */}
         <div
           onClick={() => setSheetOpen(false)}
           className={`absolute inset-0 bg-black/50 transition-opacity ${
             sheetOpen ? "opacity-100" : "opacity-0"
           }`}
         />
-        {/* Sheet */}
         <div
           className={`absolute inset-x-0 bottom-0 bg-white rounded-t-2xl shadow-2xl
           transition-transform duration-300 ${
@@ -656,10 +668,13 @@ export default function CommissionWithdrawalPage() {
               <input
                 type="password"
                 inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={5} // ✅ hard cap in UI
                 value={pin}
-                onChange={(e) =>
-                  setPin(e.target.value.replace(/[^\d]/g, ""))
-                }
+                onChange={(e) => {
+                  const next = e.target.value.replace(/[^\d]/g, "").slice(0, 5); // ✅ hard cap in state
+                  setPin(next);
+                }}
                 placeholder="Enter your PIN"
                 className="w-full h-11 rounded-xl border border-gray-200 px-3 text-[13px] outline-none focus:ring-2 focus:ring-black"
                 aria-label="Password or PIN"
@@ -667,12 +682,17 @@ export default function CommissionWithdrawalPage() {
               />
               {pin.trim().length > 0 && pin.trim().length < 4 && (
                 <p className="mt-1 text-[11px] text-gray-500">
-                  Enter at least 4 digits.
+                  
+                </p>
+              )}
+              {pin.trim().length === 5 && (
+                <p className="mt-1 text-[11px] text-gray-400">
+                  Maximum: 5 digits.
                 </p>
               )}
             </div>
 
-            {/* Error style (same pattern as other pages) */}
+            {/* Error */}
             {submitErr && (
               <div
                 className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-800 flex items-start gap-2"

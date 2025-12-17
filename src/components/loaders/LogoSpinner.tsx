@@ -31,7 +31,7 @@ type Props = {
 export default function LogoSpinner({
   show,
   src = "./uploads/Layer_x0020_1.png",
-  size = 90,
+  size = 40,
   spinPeriodSec = 0.9,
   backdrop = "rgba(0,0,0,0.24)",
   blurPx = 2,

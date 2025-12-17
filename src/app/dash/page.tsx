@@ -20,11 +20,16 @@ import LoadingDetails from "../../components/loaders/LoadingDetails";
 /* ✅ New logo spinner (centered, no overlay) */
 import LogoSpinner from "../../components/loaders/LogoSpinner";
 
+/* ✅ Web Push helper (Step 3)
+   NOTE: If your project doesn't support "@/..." imports, change this import
+   to the correct relative path where you saved setupPush.ts
+*/
+import { setupWebPush } from "../../lib/push/setupPush";
+
 /* Routes */
 const SETTINGS_ROUTE = "/dash/components/settings";
 const RECHARGE_ROUTE = "/dash/recharge";
 const WITHDRAW_ROUTE = "/dash/withdraw";
-const NOTIFICATIONS_ROUTE = "/dash/notifications";
 const LOGIN_ROUTE = "/agent-login";
 const FULL_TRANSACTIONS_ROUTE = "/dash/fulltransaction";
 
@@ -80,6 +85,10 @@ export default function MobileDashboard() {
   const [user, setUser] = useState<User | null>(null);
   const [showBalance, setShowBalance] = useState(true);
   const [copied, setCopied] = useState(false);
+
+  // ✅ Push notifications UI states
+  const [pushMsg, setPushMsg] = useState<string>("");
+  const [enablingPush, setEnablingPush] = useState(false);
 
   function isBareBase64Jpeg(s?: string) {
     return !!s && /^\/9j\//.test(s);
@@ -332,8 +341,39 @@ export default function MobileDashboard() {
   const openSettings = () => nav(SETTINGS_ROUTE);
   const goRecharge = () => nav(RECHARGE_ROUTE);
   const goWithdraw = () => nav(WITHDRAW_ROUTE);
-  const goNotifications = () => nav(NOTIFICATIONS_ROUTE);
   const goToFullTransactions = () => nav(FULL_TRANSACTIONS_ROUTE);
+
+  // ✅ Bell button now enables push notifications (instead of routing)
+  const enablePushNotifications = useCallback(async () => {
+    if (enablingPush || isPending) return;
+
+    setEnablingPush(true);
+    setPushMsg("Enabling...");
+
+    try {
+      const res = await setupWebPush();
+      if (!res.ok) {
+        // quick friendly messages for common cases
+        const pretty =
+          res.reason === "missing-vapid"
+            ? "Missing VAPID key"
+            : res.reason === "denied"
+            ? "Permission denied"
+            : `Failed: ${res.reason}`;
+        setPushMsg(pretty);
+        return;
+      }
+
+      // NOTE: Step 6/7 will send res.subscription to backend.
+      // For now we only confirm subscription was created.
+      setPushMsg("Push enabled ✅");
+      setTimeout(() => setPushMsg(""), 2500);
+    } catch (e: any) {
+      setPushMsg(e?.message || "Failed to enable push");
+    } finally {
+      setEnablingPush(false);
+    }
+  }, [enablingPush, isPending]);
 
   const txList: Tx[] = useMemo(() => {
     const list = user?.transactions ?? [];
@@ -525,12 +565,13 @@ export default function MobileDashboard() {
                   </div>
                 </button>
 
-                <div className="relative">
+                <div className="relative flex flex-col items-end gap-1">
                   <button
-                    onClick={goNotifications}
+                    onClick={enablePushNotifications}
                     className="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm hover:shadow-md transition-shadow disabled:opacity-60 disabled:cursor-not-allowed"
-                    aria-label="Notifications"
-                    disabled={isPending}
+                    aria-label="Enable push notifications"
+                    title="Enable push notifications"
+                    disabled={isPending || enablingPush}
                   >
                     <Bell className="w-5 h-5 text-gray-700" />
                     {notificationCount > 0 && (
@@ -539,6 +580,12 @@ export default function MobileDashboard() {
                       </span>
                     )}
                   </button>
+
+                  {!!pushMsg && (
+                    <span className="text-[10px] text-white/80 max-w-[180px] text-right">
+                      {pushMsg}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -627,14 +674,13 @@ export default function MobileDashboard() {
                             <div className="flex items-center gap-2">
                               {/* circular bank logo */}
                               <div className="flex items-center gap-2">
-  <Image
-    src="/uploads/paystacks.png"
-    alt="Bank logo"
-    width={26}
-    height={26}
-    className="h-7 w-7 object-contain"
-  />
-
+                                <Image
+                                  src="/uploads/paystacks.png"
+                                  alt="Bank logo"
+                                  width={26}
+                                  height={26}
+                                  className="h-7 w-7 object-contain"
+                                />
                               </div>
 
                               {/* full account number */}

@@ -366,20 +366,27 @@ export default function SetTransactionPinPage() {
               Account Password
             </label>
             <div className="relative">
-              <input
-                type={showPw ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && canConfirmPassword) {
-                    submitPin(pin, password);
-                  }
-                }}
-                className="w-full h-11 rounded-xl border border-gray-200 px-3 pr-10 text-[14px] outline-none disabled:opacity-60"
-                placeholder="•••••"
-                autoFocus
-                disabled={submitting}
-              />
+             <input
+  type={showPw ? "text" : "password"}
+  inputMode="numeric"
+  pattern="[0-9]*"
+  maxLength={5}
+  value={password}
+  onChange={(e) => {
+    const v = e.target.value.replace(/\D/g, "").slice(0, 5);
+    setPassword(v);
+  }}
+  onKeyDown={(e) => {
+    if (e.key === "Enter" && canConfirmPassword) {
+      submitPin(pin, password);
+    }
+  }}
+  className="w-full h-11 rounded-xl border border-gray-200 px-3 pr-10 text-[14px] outline-none disabled:opacity-60"
+  placeholder="•••••"
+  autoFocus
+  disabled={submitting}
+/>
+
               <button
                 type="button"
                 onClick={() => setShowPw((v) => !v)}

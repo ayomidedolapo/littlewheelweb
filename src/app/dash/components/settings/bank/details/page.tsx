@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ChevronLeft, ChevronDown, Copy, Check, AlertCircle } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronDown,
+  Copy,
+  Check,
+  AlertCircle,
+} from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import LogoSpinner from "../../../../../../components/loaders/LogoSpinner"; // ✅ use your spinner
@@ -76,7 +82,7 @@ export default function WithdrawalBank() {
   const [resolving, setResolving] = useState(false);
   const resolveAbort = useRef<AbortController | null>(null);
 
-  // saved card
+  // saved card (BACKEND is source of truth)
   const [saved, setSaved] = useState<SavedBank | null>(null);
 
   // ui
@@ -93,11 +99,22 @@ export default function WithdrawalBank() {
         ""
       : "";
 
+  /**
+   * ✅ IMPORTANT FIX:
+   * - Do NOT read any saved card from localStorage.
+   * - Do NOT write any saved card to localStorage.
+   * This guarantees a new account on the same device will NOT see old bank cards.
+   */
+
   /* Load saved display from backend (backend is source of truth) */
   useEffect(() => {
     let cancelled = false;
+
     async function loadSaved() {
+      // always reset UI state before fetching (prevents stale card flashes)
+      setSaved(null);
       setInitialLoading(true);
+
       try {
         const r = await fetch("/api/v1/settings/withdrawal-method", {
           cache: "no-store",
@@ -112,13 +129,8 @@ export default function WithdrawalBank() {
         } catch {}
 
         if (!r.ok) {
-          // if backend says error, clear any stale local cache for this screen
-          if (!cancelled) {
-            setSaved(null);
-            try {
-              localStorage.removeItem("lw_withdrawal_bank");
-            } catch {}
-          }
+          // backend says no/err → show nothing
+          if (!cancelled) setSaved(null);
           return;
         }
 
@@ -135,12 +147,7 @@ export default function WithdrawalBank() {
 
         // ✅ If backend has NO bank for this user, make sure nothing is shown
         if (!bankName || !accountNumber) {
-          if (!cancelled) {
-            setSaved(null);
-            try {
-              localStorage.removeItem("lw_withdrawal_bank");
-            } catch {}
-          }
+          if (!cancelled) setSaved(null);
           return;
         }
 
@@ -154,30 +161,15 @@ export default function WithdrawalBank() {
           accountName: String(accountName || ""),
         };
 
-        if (!cancelled) {
-          setSaved(s);
-          try {
-            localStorage.setItem("lw_withdrawal_bank", JSON.stringify(s));
-          } catch {}
-        }
+        if (!cancelled) setSaved(s);
       } catch {
-        // network error → as a fallback, we can show local cache if any
-        if (!cancelled) {
-          try {
-            const raw = localStorage.getItem("lw_withdrawal_bank");
-            if (raw) {
-              setSaved(JSON.parse(raw));
-            } else {
-              setSaved(null);
-            }
-          } catch {
-            setSaved(null);
-          }
-        }
+        // network error → STILL show nothing (no local cache fallback)
+        if (!cancelled) setSaved(null);
       } finally {
         if (!cancelled) setInitialLoading(false);
       }
     }
+
     loadSaved();
     return () => {
       cancelled = true;
@@ -276,7 +268,7 @@ export default function WithdrawalBank() {
         throw new Error(msg);
       }
 
-      // Refresh saved card from backend
+      // Refresh saved card from backend (source of truth)
       try {
         const g = await fetch("/api/v1/settings/withdrawal-method", {
           cache: "no-store",
@@ -299,11 +291,17 @@ export default function WithdrawalBank() {
             accountName: d?.accountName || resolvedName,
           };
           setSaved(s);
-          try {
-            localStorage.setItem("lw_withdrawal_bank", JSON.stringify(s));
-          } catch {}
+        } else {
+          // if backend didn’t return properly, still rely on current input
+          setSaved({
+            bank: { name: bank!.name, code: bank!.code, logo: logoUrl },
+            accountNumber: acct,
+            accountName: resolvedName,
+          });
         }
-      } catch {}
+      } catch {
+        // ignore
+      }
 
       // Reset edit state
       setBank(null);
@@ -364,7 +362,7 @@ export default function WithdrawalBank() {
           Wheel.
         </p>
 
-        {/* Saved card (if exists) */}
+        {/* Saved card (ONLY if backend confirms it exists) */}
         {hasSaved && (
           <div className="mt-5">
             <div className="w-full rounded-xl bg-black text-white px-4 py-3 flex items-center justify-between">
@@ -389,7 +387,7 @@ export default function WithdrawalBank() {
               </div>
               <button
                 onClick={() => copy(saved!.accountNumber)}
-                className="p-2 rounded-lg hover:bg:white/10 transition"
+                className="p-2 rounded-lg hover:bg-white/10 transition"
                 aria-label="Copy account number"
                 disabled={disableAll}
               >
@@ -498,7 +496,7 @@ export default function WithdrawalBank() {
                 <div className="text-[13px] font-semibold leading-tight">
                   {toTitle(resolvedName)}
                 </div>
-                <div className="text-[12px] text:white/70 mt-0.5">
+                <div className="text-[12px] text-white/70 mt-0.5">
                   {maskAcct(acct)}
                 </div>
               </div>
