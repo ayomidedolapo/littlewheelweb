@@ -17,6 +17,10 @@ type Tx = {
   label: "TOPUP" | "WITHDRAWAL";
   amount: number;
   isCredit: boolean;
+
+  // ✅ NEW: description/note from backend (e.g. "Saved by Tayelolu Olayiwola")
+  note: string;
+
   // optional extras for details page
   customerName?: string;
   agentName?: string;
@@ -162,19 +166,32 @@ function VaultTransactionsPageInner() {
             r.reference ||
             r.txId ||
             `tx:${i}:${r.createdAt || r.date || ""}`;
+
           const amount =
             Number(r.amount ?? r.value ?? r.contribution ?? 0) || 0;
-          const t = String(
-            r.type || r.direction || r.kind || "CREDIT"
-          ).toUpperCase();
+
+          const t = String(r.type || r.direction || r.kind || "CREDIT").toUpperCase();
+
           const isCredit =
             t.includes("CREDIT") ||
             t.includes("DEPOSIT") ||
-            t.includes("TOPUP");
+            t.includes("TOPUP") ||
+            t.includes("TOP_UP") ||
+            t.includes("SAVE") ||
+            t.includes("SAVING") ||
+            t.includes("CONTRIB");
+
           const label: Tx["label"] = isCredit ? "TOPUP" : "WITHDRAWAL";
+
           const at = new Date(
             r.createdAt || r.date || r.at || Date.now()
           ).toISOString();
+
+          // ✅ NOTE from backend (your payload uses "description")
+          const note =
+            r.description ||
+            r.note ||
+            (isCredit ? "Saved" : "Withdrawal");
 
           return {
             id,
@@ -182,6 +199,8 @@ function VaultTransactionsPageInner() {
             amount: Math.abs(amount),
             isCredit,
             label,
+            note,
+
             customerName:
               r.customerName ||
               r.customer?.fullName ||
@@ -234,7 +253,8 @@ function VaultTransactionsPageInner() {
       const amt = fmtNGN(t.amount).toLowerCase();
       const day = dateKey(t.at).toLowerCase();
       const lbl = t.label.toLowerCase();
-      return amt.includes(qs) || day.includes(qs) || lbl.includes(qs);
+      const note = (t.note || "").toLowerCase();
+      return amt.includes(qs) || day.includes(qs) || lbl.includes(qs) || note.includes(qs);
     });
   }, [txs, filter, q]);
 
@@ -391,7 +411,7 @@ function VaultTransactionsPageInner() {
                         key={t.id}
                         onClick={() => openDetails(t)}
                         className="w-full text-left bg-white px-4 py-3 active:bg-gray-50 disabled:opacity-60"
-                        aria-label={`Open ${t.label} of ${fmtNGN(
+                        aria-label={`Open transaction of ${fmtNGN(
                           t.amount
                         )} on ${dateTimePretty(t.at)}`}
                         disabled={isRouting}
@@ -403,8 +423,9 @@ function VaultTransactionsPageInner() {
                           </div>
 
                           <div className="flex-1 min-w-0">
-                            <p className="text-[13px] font-semibold text-gray-900">
-                              {t.label}
+                            {/* ✅ UPDATED: show backend description like "Saved by ..." */}
+                            <p className="text-[13px] font-semibold text-gray-900 truncate">
+                              {t.note}
                             </p>
                             <p className="text-[11px] text-gray-500">
                               {dateTimePretty(t.at)}

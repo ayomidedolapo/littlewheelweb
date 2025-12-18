@@ -23,9 +23,7 @@ import LogoSpinner from "../../../components/loaders/LogoSpinner";
 
 /* ---------- tiny skeleton helper ---------- */
 function Skeleton({ className = "" }: { className?: string }) {
-  return (
-    <div className={`animate-pulse rounded-md bg-gray-200 ${className}`} />
-  );
+  return <div className={`animate-pulse rounded-md bg-gray-200 ${className}`} />;
 }
 
 /* ---------- types ---------- */
@@ -36,6 +34,7 @@ type APIVault = {
   name?: string;
   targetAmount?: number;
   amount?: number;
+  status?: string;
 };
 
 type Vault = {
@@ -44,6 +43,7 @@ type Vault = {
   balance: number;
   target: number;
   daily: number;
+  status?: string; // ✅ to help show completed
 };
 
 type Tx = {
@@ -52,6 +52,10 @@ type Tx = {
   amount: number;
   at: string;
   isCredit: boolean;
+  balance?: number | null;
+
+  vaultId?: string | null;
+  vaultName?: string | null;
 };
 
 /* ---------- utils ---------- */
@@ -62,6 +66,27 @@ const formatNGN = (v: number) =>
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   })}`;
+
+const formatNGNCompact = (v: number) => {
+  const n = Number(v ?? 0);
+  if (!Number.isFinite(n)) return "₦0";
+  const abs = Math.abs(n);
+  if (abs < 1000) return `₦${Math.round(n)}`;
+
+  const compact = new Intl.NumberFormat("en-US", {
+    notation: "compact",
+    maximumFractionDigits: 0,
+  }).format(n);
+
+  return `₦${compact.replace(/K/g, "k").replace(/M/g, "m").replace(/B/g, "b")}`;
+};
+
+const shortVaultTag = (name?: string | null) => {
+  const n = (name || "").trim();
+  if (!n) return "";
+  if (n.length <= 4) return n;
+  return `${n.slice(0, 4)}...`;
+};
 
 const slugify = (s: string) =>
   (s || "")
@@ -151,7 +176,6 @@ function CustomerVaultPageInner() {
   const router = useRouter();
   const sp = useSearchParams();
 
-  // routing spinner
   const [isRouting, startTransition] = useTransition();
   const routePush = (href: string) => startTransition(() => router.push(href));
 
@@ -159,6 +183,7 @@ function CustomerVaultPageInner() {
   const [vaults, setVaults] = useState<Vault[]>([]);
   const [totalBalance, setTotalBalance] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
+  const [showBalance, setShowBalance] = useState(true);
 
   const [txs, setTxs] = useState<Tx[]>([]);
   const [txLoading, setTxLoading] = useState<boolean>(false);
@@ -167,7 +192,6 @@ function CustomerVaultPageInner() {
   const [flow, setFlow] = useState<"deposit" | "withdraw">("deposit");
   const [selectedVaultId, setSelectedVaultId] = useState<string | null>(null);
 
-  // stable token
   const tokenRef = useRef<string>("");
   if (!tokenRef.current && typeof window !== "undefined") {
     tokenRef.current = getAuthToken();
@@ -241,7 +265,7 @@ function CustomerVaultPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* --------- load balance + vault list (parallel) ---------- */
+  /* --------- load balance + vault list (include COMPLETED) ---------- */
   useEffect(() => {
     const customerId = getActiveCustomerId(sp);
     if (!customerId) {
@@ -262,7 +286,10 @@ function CustomerVaultPageInner() {
         const token = tokenRef.current;
 
         const balUrl = `/api/v1/agent/customers/${customerId}/vaults/balance`;
-        const listUrl = `/api/v1/agent/customers/${customerId}/vaults?status=ONGOING`;
+
+        // ✅ was: ?status=ONGOING (which hides completed)
+        // ✅ now: fetch ALL vaults (backend should return ongoing + completed)
+        const listUrl = `/api/v1/agent/customers/${customerId}/vaults`;
 
         const [balRes, listRes] = await Promise.all([
           apiGet(balUrl, token, signal),
@@ -272,17 +299,13 @@ function CustomerVaultPageInner() {
         if (!balRes.ok) throw new Error(`Balance HTTP ${balRes.status}`);
         if (!listRes.ok) throw new Error(`Vaults HTTP ${listRes.status}`);
 
-        const [balJ, listJ] = await Promise.all([
-          balRes.json(),
-          listRes.json(),
-        ]);
+        const [balJ, listJ] = await Promise.all([balRes.json(), listRes.json()]);
 
         const bal = Number(balJ?.data?.balance ?? balJ?.balance ?? 0);
         setTotalBalance(Number.isFinite(bal) ? bal : 0);
 
         const apiVaults = extractArray(listJ);
 
-        // Per-vault detail loads (limited concurrency)
         const toVault = async (v: APIVault): Promise<Vault> => {
           const apiId = v.id || v.vaultId || v._id || "";
           let detail: any = {};
@@ -299,8 +322,12 @@ function CustomerVaultPageInner() {
               }
             } catch {}
           }
+
           const currentBalance =
             Number(detail?.currentAmount ?? detail?.currentBalance ?? 0) || 0;
+
+          const status =
+            String(detail?.status ?? v.status ?? "").toUpperCase() || undefined;
 
           return {
             id: apiId || `${customerId}:${slugify(v.name || "personal-vault")}`,
@@ -308,22 +335,33 @@ function CustomerVaultPageInner() {
             balance: currentBalance,
             target: Number(v.targetAmount ?? detail?.targetAmount ?? 0) || 0,
             daily: Number(v.amount ?? detail?.amount ?? 0) || 0,
+            status,
           };
         };
 
-        // Cap concurrency to avoid flooding (simple chunking)
         const chunkSize = 6;
         const chunks: APIVault[][] = [];
         for (let i = 0; i < apiVaults.length; i += chunkSize) {
           chunks.push(apiVaults.slice(i, i + chunkSize));
         }
+
         const enriched: Vault[] = [];
         for (const chunk of chunks) {
-          const part = await Promise.all(
-            chunk.map((v: APIVault) => toVault(v))
-          );
+          const part = await Promise.all(chunk.map((v: APIVault) => toVault(v)));
           enriched.push(...part);
         }
+
+        // ✅ keep a nice order: ongoing first, completed last
+        const rank = (s?: string) => {
+          const st = (s || "").toUpperCase();
+          if (st.includes("ONGO")) return 0;
+          if (st.includes("ACTIVE")) return 0;
+          if (st.includes("COMP")) return 2;
+          if (st.includes("DONE")) return 2;
+          if (st.includes("CLOSE")) return 2;
+          return 1;
+        };
+        enriched.sort((a, b) => rank(a.status) - rank(b.status));
 
         setVaults(enriched);
       } catch (e: any) {
@@ -332,17 +370,20 @@ function CustomerVaultPageInner() {
       } finally {
         const elapsed = performance.now() - start;
         const remaining = MIN_SKELETON_MS - elapsed;
-        if (remaining > 0) {
-          setTimeout(() => setLoading(false), remaining);
-        } else {
-          setLoading(false);
-        }
+        if (remaining > 0) setTimeout(() => setLoading(false), remaining);
+        else setLoading(false);
       }
     })();
 
     return () => ac.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const vaultNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const v of vaults) map.set(String(v.id), v.name);
+    return map;
+  }, [vaults]);
 
   /* ---- load recent contributions (transactions) ---- */
   useEffect(() => {
@@ -372,30 +413,80 @@ function CustomerVaultPageInner() {
             r.txId ||
             r.reference ||
             `contrib:${idx}:${r.createdAt || r.date || ""}`;
-          const amount =
-            Number(r.amount ?? r.value ?? r.contribution ?? 0) || 0;
-          const created =
-            r.createdAt || r.date || r.at || new Date().toISOString();
-          const type = String(
-            r.type || r.direction || r.kind || "CREDIT"
-          ).toUpperCase();
-          const isCredit = type.includes("CREDIT") || type.includes("DEPOSIT");
-          const note =
-            r.note || r.description || (isCredit ? "Saved" : "Withdrawal");
+
+          const amount = Number(r.amount ?? r.value ?? r.contribution ?? 0) || 0;
+
+          const balCandidate =
+            r.balance ??
+            r.currentBalance ??
+            r.availableBalance ??
+            r.walletBalance ??
+            r.afterBalance ??
+            r.balanceAfter ??
+            r.balance_after ??
+            r.closingBalance ??
+            r.closing_balance ??
+            r?.meta?.balance;
+
+          const balNum = Number(balCandidate);
+          const balance =
+            balCandidate === null || balCandidate === undefined
+              ? null
+              : Number.isFinite(balNum)
+              ? balNum
+              : null;
+
+          const created = r.createdAt || r.date || r.at || new Date().toISOString();
+
+          const typeStr = String(r.type || r.direction || r.kind || "CREDIT").toUpperCase();
+
+          const isCredit =
+            typeStr.includes("CREDIT") ||
+            typeStr.includes("DEPOSIT") ||
+            typeStr.includes("TOPUP") ||
+            typeStr.includes("TOP_UP") ||
+            typeStr.includes("SAVE") ||
+            typeStr.includes("SAVING") ||
+            typeStr.includes("CONTRIB");
+
+          const note = r.note || r.description || (isCredit ? "Saved" : "Withdrawal");
+
+          const vaultIdCandidate =
+            r.vaultId ??
+            r.vault_id ??
+            r.savingsVaultId ??
+            r.savings_vault_id ??
+            r.vault?.id ??
+            r.vault?._id ??
+            r.vault?.vaultId ??
+            r?.meta?.vaultId ??
+            r?.meta?.vault_id ??
+            null;
+
+          const vaultNameCandidate =
+            r.vaultName ??
+            r.vault_name ??
+            r.vault?.name ??
+            r.vault?.title ??
+            r.savingsVaultName ??
+            r.savings_vault_name ??
+            r?.meta?.vaultName ??
+            r?.meta?.vault_name ??
+            null;
 
           return {
-            id,
-            note,
+            id: String(id),
+            note: String(note),
             amount: Math.abs(amount),
             at: new Date(created).toISOString(),
             isCredit,
+            balance,
+            vaultId: vaultIdCandidate ? String(vaultIdCandidate) : null,
+            vaultName: vaultNameCandidate ? String(vaultNameCandidate) : null,
           };
         });
 
-        mapped.sort(
-          (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()
-        );
-
+        mapped.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
         setTxs(mapped);
       } catch (e: any) {
         if (e?.name === "AbortError") return;
@@ -403,11 +494,8 @@ function CustomerVaultPageInner() {
       } finally {
         const elapsed = performance.now() - start;
         const remaining = MIN_SKELETON_MS - elapsed;
-        if (remaining > 0) {
-          setTimeout(() => setTxLoading(false), remaining);
-        } else {
-          setTxLoading(false);
-        }
+        if (remaining > 0) setTimeout(() => setTxLoading(false), remaining);
+        else setTxLoading(false);
       }
     })();
 
@@ -416,12 +504,18 @@ function CustomerVaultPageInner() {
   }, []);
 
   const total = useMemo(() => totalBalance, [totalBalance]);
-
   const navDisabled = isRouting;
+
+  const getTxVaultDisplay = (t: Tx) => {
+    const name =
+      (t.vaultName && t.vaultName.trim()) ||
+      (t.vaultId ? vaultNameById.get(String(t.vaultId)) : "") ||
+      "";
+    return shortVaultTag(name);
+  };
 
   return (
     <>
-      {/* ✅ Global route spinner (same pattern) */}
       <LogoSpinner show={isRouting} />
 
       <div
@@ -459,16 +553,28 @@ function CustomerVaultPageInner() {
               </button>
 
               <div className="flex items-center gap-1 text-[12px] text-white/85 mb-2">
-                <span>Total Balance</span>
-                <Eye className="h-3.5 w-3.5 opacity-80" />
-              </div>
-              <div className="text-[28px] leading-none font-extrabold tracking-tight mb-3">
-                {loading ? (
-                  <Skeleton className="w-40 h-7 bg-white/20 rounded-lg" />
-                ) : (
-                  formatNGN(total)
-                )}
-              </div>
+  <span className="text-[12px] text-white/85">Total Balance</span>
+
+  <button
+    type="button"
+    onClick={() => setShowBalance((s) => !s)}
+    className="p-1 rounded-md hover:bg-white/10"
+    aria-label={showBalance ? "Hide balance" : "Show balance"}
+  >
+    <Eye className="h-3.5 w-3.5 opacity-80" />
+  </button>
+</div>
+
+<div className="text-[28px] leading-none font-extrabold tracking-tight mb-3">
+  {loading ? (
+    <Skeleton className="w-40 h-7 bg-white/20 rounded-lg" />
+  ) : showBalance ? (
+    formatNGN(total)
+  ) : (
+    "••••••"
+  )}
+</div>
+
             </div>
 
             {/* action buttons */}
@@ -507,9 +613,7 @@ function CustomerVaultPageInner() {
                 Personal Vaults
               </h2>
               <button
-                onClick={() =>
-                  pushWithCustomer("/customer/vault/vault-details")
-                }
+                onClick={() => pushWithCustomer("/customer/vault/vault-details")}
                 className="text-[12px] text-gray-600 inline-flex items-center gap-1 disabled:opacity-60"
                 disabled={navDisabled}
               >
@@ -546,6 +650,13 @@ function CustomerVaultPageInner() {
                         Math.max(0, Math.round((v.balance / v.target) * 100))
                       )
                     : 0;
+
+                  const isCompleted =
+                    String(v.status || "").toUpperCase().includes("COMP") ||
+                    String(v.status || "").toUpperCase().includes("DONE") ||
+                    String(v.status || "").toUpperCase().includes("CLOSE") ||
+                    (v.target > 0 && v.balance >= v.target);
+
                   return (
                     <button
                       key={v.id}
@@ -566,17 +677,25 @@ function CustomerVaultPageInner() {
                       </div>
 
                       <div className="flex-1">
-                        <div className="flex items-start justify-between">
-                          <p className="text-[13px] font-semibold text-gray-900 leading-tight">
-                            {v.name}
-                          </p>
-                          <p className="text-[12px] leading-tight">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-[13px] font-semibold text-gray-900 leading-tight truncate">
+                              {v.name}
+                            </p>
+
+                            {/* ✅ small badge when completed */}
+                            {isCompleted && (
+                              <span className="mt-1 inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                                Completed
+                              </span>
+                            )}
+                          </div>
+
+                          <p className="text-[12px] leading-tight shrink-0">
                             <span className="font-bold text-red-600">
                               {formatNGN(v.balance)}
                             </span>
-                            <span className="text-gray-400 font-normal">
-                              /
-                            </span>
+                            <span className="text-gray-400 font-normal">/</span>
                             <span className="text-green-600 font-semibold">
                               {formatNGN(v.target)}
                             </span>
@@ -606,13 +725,13 @@ function CustomerVaultPageInner() {
             )}
           </div>
 
-          {/* Recent Transactions (live from contributions) */}
+          {/* Recent Transactions */}
           <div className="px-4 mt-5 pb-6">
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-[13px] font-semibold text-gray-900">
                 Recent Transactions
               </h2>
-            <button
+              <button
                 onClick={() => pushWithCustomer("/customer/vault/transactions")}
                 className="text-[12px] text-gray-600 inline-flex items-center gap-1 disabled:opacity-60"
                 disabled={navDisabled}
@@ -645,39 +764,61 @@ function CustomerVaultPageInner() {
                   No transactions yet.
                 </div>
               ) : (
-                txs.map((t, i) => (
-                  <button
-                    key={t.id}
-                    onClick={() => pushTransactionDetail(t)}
-                    className={`w-full flex items-center justify-between px-3 py-3 text-left ${
-                      i !== txs.length - 1 ? "border-b border-gray-100" : ""
-                    } hover:bg-gray-50 disabled:opacity-60`}
-                    disabled={navDisabled}
-                  >
-                    <div className="flex items-center gap-3">
-                      {/* Icon */}
-                      <div className="h-8 w-8 rounded-full bg-emerald-50 flex items-center justify-center">
-                        <ArrowUpRight className="w-4 h-4 text-emerald-600" />
-                      </div>
-                      <div>
-                        <p className="text-[13px] font-medium text-gray-900">
-                          {t.note}
-                        </p>
-                        <p className="text-[11px] text-gray-500">
-                          {fmtDateTime(t.at)}
-                        </p>
-                      </div>
-                    </div>
-                    <div
-                      className={`text-[13px] font-semibold ${
-                        t.isCredit ? "text-green-900" : "text-black-600"
-                      }`}
+                txs.map((t, i) => {
+                  const tag = (() => {
+                    const name =
+                      (t.vaultName && t.vaultName.trim()) ||
+                      (t.vaultId ? vaultNameById.get(String(t.vaultId)) : "") ||
+                      "";
+                    return shortVaultTag(name);
+                  })();
+
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => pushTransactionDetail(t)}
+                      className={`w-full flex items-center justify-between px-3 py-3 text-left ${
+                        i !== txs.length - 1 ? "border-b border-gray-100" : ""
+                      } hover:bg-gray-50 disabled:opacity-60`}
+                      disabled={navDisabled}
                     >
-                      {t.isCredit ? "+" : ""}
-                      {formatNGN(t.amount)}
-                    </div>
-                  </button>
-                ))
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-full bg-emerald-50 flex items-center justify-center">
+                          <ArrowUpRight className="w-4 h-4 text-emerald-600" />
+                        </div>
+
+                        <div>
+                          <p className="text-[13px] font-medium text-gray-900">
+                            {t.note}
+                          </p>
+                          <p className="text-[11px] text-gray-500">
+                            {fmtDateTime(t.at)}
+                            {tag ? (
+                              <span className="text-gray-400">{` (${tag})`}</span>
+                            ) : null}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-end gap-1.5">
+                        <div
+                          className={`text-[13px] font-semibold ${
+                            t.isCredit ? "text-emerald-600" : "text-red-500"
+                          }`}
+                        >
+                          {t.isCredit ? "+" : "-"}
+                          {formatNGN(t.amount)}
+                        </div>
+
+                        {t.balance !== null && t.balance !== undefined && (
+                          <div className="rounded-full bg-emerald-50 px-3 py-1 text-[12px] font-medium text-emerald-700">
+                            Balance: {formatNGNCompact(Number(t.balance))}
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })
               )}
             </div>
           </div>
@@ -686,12 +827,10 @@ function CustomerVaultPageInner() {
         {/* ===== Vault Picker Modal (Deposit / Withdraw) ===== */}
         {pickerOpen && (
           <div className="fixed inset-0 z-50">
-            {/* backdrop */}
             <div
               className="absolute inset-0 bg-black/40"
               onClick={() => setPickerOpen(false)}
             />
-            {/* sheet */}
             <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-3xl p-5 shadow-2xl">
               <div className="mx-auto h-1.5 w-16 rounded-full bg-gray-200 mb-3" />
 
@@ -707,7 +846,9 @@ function CustomerVaultPageInner() {
                         Math.max(0, Math.round((v.balance / v.target) * 100))
                       )
                     : 0;
+
                   const isActive = selectedVaultId === v.id;
+
                   return (
                     <button
                       key={v.id}
@@ -765,7 +906,6 @@ function CustomerVaultPageInner() {
                 })}
               </div>
 
-              {/* CTA */}
               <button
                 onClick={proceed}
                 disabled={!selectedVaultId || navDisabled}

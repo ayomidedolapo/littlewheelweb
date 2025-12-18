@@ -611,7 +611,7 @@ function DepositInner() {
               >
                 {submitting ? (
                   <span className="inline-flex items-center gap-2">
-                    <LogoSpinner show={true} /> Processing…
+                    <LogoSpinner show={false} /> Processing…
                   </span>
                 ) : (
                   "Confirm Deposit"

@@ -23,7 +23,7 @@ const NGN = new Intl.NumberFormat("en-NG", {
 
 const ICONS: Record<Txn["icon"], React.ReactNode> = {
   withdraw: <Wallet className="w-4 h-4 text-red-600" />,
-  commission: <Banknote className="w-4 h-4 text-yellow-500" />,
+  commission: <Banknote className="w-4 h-4 text-yellow-600" />,
   recharge: <ArrowDownFromLine className="w-4 h-4 text-emerald-600" />,
 };
 
@@ -41,7 +41,6 @@ function fmtDate(iso: string) {
     return d.toLocaleString(undefined, {
       day: "2-digit",
       month: "short",
-      year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
     });
@@ -92,25 +91,31 @@ function toTxn(p: any): Txn | null {
   const numeric = Number(p.amount ?? p.value ?? p.total ?? 0);
   const amountRaw = Number.isFinite(numeric) ? numeric : 0;
 
-  const flow = (p.type || p.direction || "").toString().toUpperCase();
-  const isOut = flow.includes("OUT") || flow === "OUTFLOW";
+  const flow = (p.type || p.direction || p.flow || "").toString().toUpperCase();
+  const isOut =
+    flow.includes("OUT") || flow === "OUTFLOW" || flow === "DEBIT";
   const signedAmount = isOut ? -Math.abs(amountRaw) : Math.abs(amountRaw);
 
   const label =
-    (p.description || p.title || p.note || "").toString().trim() ||
-    (isOut ? "withdrawal" : "recharge");
+    (p.description || p.title || p.note || p.narration || "")
+      .toString()
+      .trim() || (isOut ? "withdrawal" : "recharge");
 
   const iconHint = (p.icon || p.category || p.tag || "")
     .toString()
     .toLowerCase();
+
   let icon: Txn["icon"] = "recharge";
   if (
     iconHint.includes("commission") ||
     label.toLowerCase().includes("commission")
-  )
+  ) {
     icon = "commission";
-  else if (isOut || iconHint.includes("withdraw")) icon = "withdraw";
-  else icon = "recharge";
+  } else if (isOut || iconHint.includes("withdraw")) {
+    icon = "withdraw";
+  } else {
+    icon = "recharge";
+  }
 
   return {
     id: String(id),
@@ -126,21 +131,26 @@ export default function RecentTransactions({
   items = MOCK_TXNS,
   onSeeAll,
   page = 1,
-  limit = 7, // ← fetch only 5 by default
+  limit = 7,
 }: {
   items?: Txn[];
   onSeeAll?: () => void;
   page?: number;
-  limit?: number; // how many to fetch when this component fetches for itself
+  limit?: number;
 }) {
   const [loading, setLoading] = useState(false);
   const [fetched, setFetched] = useState<Txn[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // show spinner overlay only while navigating to "See all"
   const [isPending, startTransition] = useTransition();
 
-  // If parent didn't pass items, we'll fetch from API
+  const tokenHeader =
+    typeof window !== "undefined"
+      ? localStorage.getItem("authToken") ||
+        localStorage.getItem("lw_token") ||
+        ""
+      : "";
+
   const shouldFetch = !items || items.length === 0;
 
   useEffect(() => {
@@ -162,6 +172,7 @@ export default function RecentTransactions({
           method: "GET",
           cache: "no-store",
           credentials: "include",
+          headers: tokenHeader ? { "x-lw-auth": tokenHeader } : undefined,
         });
 
         const text = await res.text();
@@ -187,30 +198,23 @@ export default function RecentTransactions({
     return () => {
       cancelled = true;
     };
-  }, [shouldFetch, page, limit]);
+  }, [shouldFetch, page, limit, tokenHeader]);
 
-  // Whether we fetched or were given items, only show the first 5
   const data = useMemo(() => {
     const src = shouldFetch ? fetched : items;
     return (src || []).slice(0, 5);
   }, [shouldFetch, fetched, items]);
 
-  const hasTxns = !!data && data.length > 0;
-
   const handleSeeAll = () => {
     if (!onSeeAll) return;
-    startTransition(() => {
-      onSeeAll();
-    });
+    startTransition(() => onSeeAll());
   };
 
   return (
     <>
-      {/* ✅ Centered logo spinner during route transition (See all) */}
       <LogoSpinner show={isPending} invert blurStrength={3} />
 
       <section className="w-full" aria-busy={isPending}>
-        {/* Header */}
         <div className="flex items-center justify-between">
           <h2 className="text-[16px] font-semibold text-gray-900">
             Recent Transactions
@@ -225,7 +229,6 @@ export default function RecentTransactions({
           </button>
         </div>
 
-        {/* States */}
         {loading && (
           <div className="mt-3 space-y-2">
             {[...Array(4)].map((_, i) => (
@@ -246,47 +249,48 @@ export default function RecentTransactions({
           </div>
         )}
 
-        {/* List or Empty */}
-        {!loading && !error && hasTxns ? (
+        {!loading && !error && data.length > 0 ? (
           <ul className="mt-3 divide-y divide-gray-100">
             {data.map((t) => {
               const isCredit = t.amount > 0;
               const sign = isCredit ? "+" : "-";
               const amountAbs = Math.abs(t.amount);
 
+              const title = t.type
+                ? t.type.charAt(0).toUpperCase() + t.type.slice(1)
+                : "Transaction";
+
               return (
-                <li key={t.id} className="py-2">
-                  <div className="flex items-center justify-between gap-2">
-                    {/* Left: Icon + text */}
-                    <div className="flex items-center gap-2 min-w-0">
+                <li key={t.id} className="py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
                       <div
-                        className={`w-8 h-8 ${
-                          ICONS[t.icon] ? ICON_BG[t.icon] : "bg-gray-100"
-                        } rounded-full flex items-center justify-center`}
+                        className={`w-10 h-10 ${
+                          ICON_BG[t.icon] || "bg-gray-100"
+                        } rounded-full flex items-center justify-center shrink-0`}
                         aria-hidden
                       >
                         {ICONS[t.icon] || ICONS.recharge}
                       </div>
 
                       <div className="min-w-0">
-                        <p className="text-[13px] font-medium text-gray-900 truncate">
-                          {t.type
-                            ? t.type.charAt(0).toUpperCase() + t.type.slice(1)
-                            : "Transaction"}
+                        <p className="text-[14px] font-semibold text-gray-900 truncate">
+                          {title}
                         </p>
-                        <p className="text-[11px] text-slate-500">
+                        <p className="text-[12px] text-slate-600 mt-1">
                           {fmtDate(t.createdAt)}
                         </p>
                       </div>
                     </div>
 
-                    {/* Right: Amount */}
-                    <div
-                      className={`text-[13px] font-semibold ${
-                        isCredit ? "text-emerald-600" : "text-red-500"
-                      }`}
-                    >
-                      {`${sign}${NGN.format(amountAbs)}`}
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                      <div
+                        className={`text-[14px] font-semibold ${
+                          isCredit ? "text-emerald-600" : "text-red-500"
+                        }`}
+                      >
+                        {`${sign}${NGN.format(amountAbs)}`}
+                      </div>
                     </div>
                   </div>
                 </li>
@@ -295,7 +299,7 @@ export default function RecentTransactions({
           </ul>
         ) : null}
 
-        {!loading && !error && !hasTxns && (
+        {!loading && !error && data.length === 0 && (
           <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-6 flex items-center justify-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
