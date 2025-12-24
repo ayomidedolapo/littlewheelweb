@@ -40,6 +40,7 @@ export default function MobileSignup() {
 
   // purely visual tick in the “Steps” list
   const isPhoneVerified = isFormValid;
+  const phoneHasError = !isFormValid && phoneNumber.length > 0;
 
   const handleBack = () => router.back();
 
@@ -104,60 +105,127 @@ export default function MobileSignup() {
 
   return (
     <div
-      className="min-h-screen bg-gray-50 flex items-center justify-center p-0 md:p-4"
+      className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-gray-100 flex items-center justify-center px-0 py-0 md:px-6 md:py-8"
       aria-busy={sending}
     >
-      {/* Centered spinner while sending */}
+      {/* Overlay spinner while sending (if LogoSpinner supports `show`) */}
       <LogoSpinner show={sending} />
 
-      <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-2xl md:shadow-xl overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center p-4 pt-8 bg-white">
-          <button
-            onClick={handleBack}
-            className="flex items-center text-gray-600 hover:text-gray-800 transition-colors disabled:opacity-60"
-            disabled={sending}
-          >
-            <ArrowLeft className="w-5 h-5 mr-2" />
-            <span className="text-sm font-medium">Back</span>
-          </button>
+      <div
+        className="
+          w-full 
+          bg-white 
+          min-h-screen 
+          md:min-h-0 
+          md:max-w-5xl 
+          md:rounded-3xl 
+          md:shadow-[0_18px_60px_rgba(15,23,42,0.14)] 
+          md:border md:border-gray-100 
+          overflow-hidden
+          flex flex-col
+        "
+      >
+        {/* Top progress + header */}
+        <div className="border-b border-gray-100 bg-white/90 backdrop-blur-sm">
+          <div className="px-4 md:px-8 pt-4 pb-3 flex items-center justify-between gap-3">
+            <button
+              onClick={handleBack}
+              className="inline-flex items-center gap-2 text-xs font-medium text-gray-600 hover:text-gray-900 transition-colors disabled:opacity-60"
+              disabled={sending}
+            >
+              <ArrowLeft className="w-4 h-4 text-black" />
+              Back
+            </button>
+
+            <div className="hidden md:flex items-center gap-2 text-[11px] font-medium text-gray-500">
+              <span className="h-1.5 w-16 rounded-full bg-black" />
+              <span className="h-1.5 w-16 rounded-full bg-gray-200" />
+              <span className="h-1.5 w-16 rounded-full bg-gray-200" />
+              <span className="ml-3 tracking-wide uppercase">
+                Step 1 of 3 • Phone number
+              </span>
+            </div>
+          </div>
+
+          <div className="h-1 w-full bg-gray-100">
+            <div className="h-full bg-black rounded-r-full w-1/3" />
+          </div>
         </div>
 
-        {/* Main */}
-        <div className="px-4 py-6 bg-white">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Let&apos;s Get Started
-          </h1>
-          <p className="text-gray-600 text-sm mb-8">
-            Enter their phone number to get things rolling
-          </p>
-
-          {/* Phone input */}
-          <div className="mb-8">
-            <label className="text-gray-700 font-bold mb-2 block text-sm">
-              Mobile Number
-            </label>
-
-            <div className="flex gap-2">
-              <div className="flex items-center bg-gray-100 rounded-xl px-3 py-3 min-w-fit">
-                <div className="w-5 h-5 rounded-full overflow-hidden mr-2 flex items-center justify-center bg-white">
-                  <Image
-                    src="https://flagpedia.net/data/flags/w580/ng.png"
-                    alt="Nigeria Flag"
-                    width={24}
-                    height={24}
-                    className="w-full h-full"
-                  />
-                </div>
-                <span className="text-gray-700 font-bold text-sm">+234</span>
+        {/* Main content */}
+        <div className="flex-1 px-4 md:px-8 py-6 md:py-8">
+          <div className="grid grid-cols-1 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-8">
+            {/* Left: content + form */}
+            <div className="space-y-6">
+              {/* Intro */}
+              <div>
+                <p className="inline-flex items-center gap-2 rounded-full border border-gray-100 bg-gray-50 px-3 py-1 text-[11px] font-medium text-gray-600 mb-3">
+                  <span className="inline-flex h-1.5 w-1.5 rounded-full bg-green-500" />
+                  Onboarding • Phone verification
+                </p>
+                <h1 className="text-xl md:text-2xl font-semibold text-gray-900 tracking-tight">
+                  Let&apos;s get started
+                </h1>
+                <p className="text-sm text-gray-600 mt-1.5">
+                  Enter the customer&apos;s mobile number to begin their account
+                  setup.
+                </p>
               </div>
 
-              <div className="flex-1">
-                <div className="flex items-center bg-gray-100 rounded-xl px-3 py-3">
-                  <Phone className="w-4 h-4 text-black mr-2" />
+              {/* Error banner (top level) */}
+              {error && (
+                <div
+                  className="flex items-start gap-2 rounded-2xl border border-red-100 bg-red-50 px-3.5 py-2.5 text-xs text-red-700"
+                  role="alert"
+                >
+                  <span className="mt-0.5 text-sm">⚠️</span>
+                  <p>{error}</p>
+                </div>
+              )}
+
+              {/* Phone input card */}
+              <div className="rounded-2xl border border-gray-100 bg-gray-50/70 px-4 py-4 space-y-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-700 tracking-wide uppercase mb-1.5 block">
+                    Mobile number<span className="text-red-500">*</span>
+                  </label>
+                  <p className="text-[11px] text-gray-500">
+                    Use the phone number the customer has access to right now.
+                  </p>
+                </div>
+
+                {/* Combined input: logo + +234 + phone icon + input */}
+                <div
+                  className={[
+                    "flex items-center rounded-xl px-3 py-3 bg-white border transition-all",
+                    phoneHasError
+                      ? "border-red-500 bg-red-50 focus-within:border-red-500 focus-within:ring-2 focus-within:ring-red-100"
+                      : "border-gray-200 focus-within:border-gray-900 focus-within:ring-2 focus-within:ring-gray-100",
+                  ].join(" ")}
+                >
+                  {/* Flag + code */}
+                  <div className="flex items-center mr-3">
+                    <div className="w-5 h-5 rounded-full overflow-hidden mr-2 flex items-center justify-center bg-white">
+                      <Image
+                        src="https://flagpedia.net/data/flags/w580/ng.png"
+                        alt="Nigeria Flag"
+                        width={24}
+                        height={24}
+                        className="w-full h-full"
+                      />
+                    </div>
+                    <span className="text-gray-900 font-semibold text-sm">
+                      +234
+                    </span>
+                  </div>
+
+                  <span className="h-5 w-px bg-gray-300 mr-3 flex-shrink-0" />
+
+                  {/* Phone icon + input */}
+                  <Phone className="w-4 h-4 text-black mr-2 flex-shrink-0" />
                   <input
                     type="tel"
-                    placeholder="000-0000-000"
+                    placeholder="0000000000"
                     value={phoneNumber}
                     onChange={(e) => {
                       const value = e.target.value.replace(/\D/g, "");
@@ -165,80 +233,85 @@ export default function MobileSignup() {
                     }}
                     inputMode="numeric"
                     pattern="[0-9]*"
-                    className="flex-1 bg-transparent text-gray-700 placeholder-gray-400 outline-none text-sm"
+                    className="flex-1 bg-transparent text-gray-800 placeholder-gray-400 outline-none text-sm"
                   />
                 </div>
+                {phoneHasError && (
+                  <p className="mt-1 text-[11px] text-red-600">
+                    Enter a valid Nigerian mobile number (10–11 digits).
+                  </p>
+                )}
               </div>
             </div>
 
-            {error && (
-              <p className="mt-3 text-xs text-red-600" role="alert">
-                {error}
-              </p>
+            {/* Right: Steps to onboard new users (visible on all screens) */}
+            <aside className="mt-6 md:mt-0 md:border-l md:border-gray-100 md:pl-6">
+              <div className="rounded-2xl border border-gray-100 bg-gray-50/60 px-4 py-5">
+                <h3 className="text-sm font-semibold text-gray-900 mb-4 underline">
+                  Steps to Onboard New Users
+                </h3>
+
+                <div className="space-y-3">
+                  {/* Step 1 */}
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`flex h-5 w-5 items-center justify-center rounded-full ${
+                        isPhoneVerified ? "bg-green-500" : "bg-gray-400"
+                      }`}
+                    >
+                      <Check className="w-3 h-3 text-white" />
+                    </div>
+                    <span className="text-gray-700 text-sm">
+                      Verify Phone Number
+                    </span>
+                  </div>
+
+                  {/* Step 2 */}
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-gray-400">
+                      <Check className="w-3 h-3 text-white" />
+                    </div>
+                    <span className="text-gray-700 text-sm">
+                      Add Personal Details
+                    </span>
+                  </div>
+
+                  {/* Step 3 */}
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-gray-400">
+                      <Check className="w-3 h-3 text-white" />
+                    </div>
+                    <span className="text-gray-700 text-sm">
+                      Add User Address
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+
+        {/* Bottom: Verify button */}
+        <div className="px-4 md:px-8 pb-6 md:pb-8">
+          <button
+            onClick={handleVerify}
+            className={`w-full px-7 py-3.5 rounded-2xl text-sm font-semibold tracking-wide inline-flex items-center justify-center gap-2 transition-all ${
+              isFormValid && !sending
+                ? "bg-black text-white hover:bg-black/90 shadow-[0_14px_30px_rgba(15,23,42,0.25)]"
+                : "bg-gray-100 text-gray-400 cursor-not-allowed"
+            }`}
+            disabled={!isFormValid || sending}
+            aria-busy={sending}
+          >
+            {sending ? (
+              <>
+                <LogoSpinner className="w-4 h-4" />
+                Sending…
+              </>
+            ) : (
+              "Verify"
             )}
-          </div>
-
-          {/* Steps */}
-          <div className="mb-15 mt-20">
-            <h3 className="text-gray-900 font-semibold text-sm mb-4 underline">
-              Steps to Onboard New Users
-            </h3>
-
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div
-                  className={`w-5 h-5 rounded-full flex items-center justify-center ${
-                    isPhoneVerified ? "bg-green-500" : "bg-gray-400"
-                  }`}
-                >
-                  <Check className="w-3 h-3 text-white" />
-                </div>
-                <span className="text-gray-600 text-sm">
-                  Verify Phone Number
-                </span>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="w-5 h-5 bg-gray-400 rounded-full flex items-center justify-center">
-                  <Check className="w-3 h-3 text-white" />
-                </div>
-                <span className="text-gray-600 text-sm">
-                  Add Personal Details
-                </span>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="w-5 h-5 bg-gray-400 rounded-full flex items-center justify-center">
-                  <Check className="w-3 h-3 text-white" />
-                </div>
-                <span className="text-gray-600 text-sm">Add User Address</span>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="w-5 h-5 bg-gray-400 rounded-full flex items-center justify-center">
-                  <Check className="w-3 h-3 text-white" />
-                </div>
-                <span className="text-gray-600 text-sm">Face Capturing</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Verify button */}
-          <div className="flex-1 min-h-[60px]" />
-          <div className="pb-6">
-            <button
-              onClick={handleVerify}
-              className={`w-full font-semibold py-4 px-6 rounded-xl transition-colors duration-200 text-sm ${
-                isFormValid && !sending
-                  ? "bg-black hover:bg-black/90 text-white"
-                  : "bg-gray-300 text-gray-500 cursor-not-allowed"
-              }`}
-              disabled={!isFormValid || sending}
-              aria-busy={sending}
-            >
-              {sending ? "Sending…" : "Verify"}
-            </button>
-          </div>
+          </button>
         </div>
       </div>
     </div>

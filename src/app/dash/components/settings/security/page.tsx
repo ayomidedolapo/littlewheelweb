@@ -1,15 +1,35 @@
 "use client";
 
-import { useEffect, useTransition } from "react";
+import { useEffect, useTransition, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Lock, KeyRound } from "lucide-react";
-import LogoSpinner from "../../../../../components/loaders/LogoSpinner"; // ⬅️ use your shared spinner
+import {
+  ChevronLeft,
+  ChevronRight,
+  Lock,
+  KeyRound,
+  AlertCircle,
+} from "lucide-react";
+import LogoSpinner from "../../../../../components/loaders/LogoSpinner";
+
+/* ---------- Centered full-screen spinner ---------- */
+function GlobalRouteSpinner({ show }: { show: boolean }) {
+  if (!show) return null;
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/10 backdrop-blur-[1px]">
+      <LogoSpinner show={true} />
+    </div>
+  );
+}
 
 export default function SecurityPage() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  // Prefetch targets for snappier transitions
+  /* 🔴 NEW — error message state */
+  const [routeError, setRouteError] = useState<string | null>(null);
+
+  /* Prefetch pages */
   useEffect(() => {
     try {
       router.prefetch("/dash/components/settings/security/change-password");
@@ -17,20 +37,30 @@ export default function SecurityPage() {
     } catch {}
   }, [router]);
 
-  const goBack = () => startTransition(() => router.back());
+  /* Helper to safely navigate with error handling */
+  function safeNav(action: () => void) {
+    try {
+      setRouteError(null);
+      startTransition(action);
+    } catch (e: any) {
+      setRouteError("Navigation failed. Please try again.");
+    }
+  }
+
+  const goBack = () => safeNav(() => router.back());
   const goChangePassword = () =>
-    startTransition(() =>
+    safeNav(() =>
       router.push("/dash/components/settings/security/change-password")
     );
   const goPin = () =>
-    startTransition(() =>
+    safeNav(() =>
       router.push("/dash/components/settings/security/transaction-pin")
     );
 
   return (
     <div className="min-h-screen bg-gray-50" aria-busy={isPending}>
-      {/* global spinner while routing */}
-      <LogoSpinner show={isPending} />
+      {/* Global spinner */}
+      <GlobalRouteSpinner show={isPending} />
 
       {/* Header */}
       <div className="bg-white">
@@ -47,11 +77,19 @@ export default function SecurityPage() {
         </div>
       </div>
 
-      {/* Content */}
+      {/* Body */}
       <div className="max-w-sm mx-auto px-4 pt-4 pb-10">
         <h1 className="text-xl font-semibold text-black mb-4">Security</h1>
 
-        {/* ---- Card: Change Password ---- */}
+        {/* 🔴 Error style (Modern Little Wheel UI) */}
+        {routeError && (
+          <div className="mb-4 flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[12px] text-red-700">
+            <AlertCircle className="w-4 h-4 mt-[2px]" />
+            <p>{routeError}</p>
+          </div>
+        )}
+
+        {/* Change Password */}
         <button
           onClick={goChangePassword}
           className="w-full bg-white rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.03)] border border-gray-100 px-4 py-4 flex items-center justify-between mb-3 active:scale-[0.995] transition disabled:opacity-60 disabled:cursor-not-allowed"
@@ -73,22 +111,24 @@ export default function SecurityPage() {
           <ChevronRight className="w-4 h-4 text-gray-400" />
         </button>
 
-        {/* ---- Card: Transaction PIN ---- */}
+        {/* Transaction PIN with icon */}
         <button
           onClick={goPin}
           className="w-full bg-white rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.03)] border border-gray-100 px-4 py-4 flex items-center justify-between active:scale-[0.995] transition disabled:opacity-60 disabled:cursor-not-allowed"
           disabled={isPending}
         >
-          <div className="flex items-center gap-3">
-            {/* small circular badge “1” like the mock */}
-            <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center">
-              <span className="text-[12px] font-medium text-gray-600">1</span>
+          <div className="flex items-start gap-3">
+            {/* Icon badge, like Change Password but with Key icon */}
+            <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center">
+              <KeyRound className="w-4 h-4 text-gray-700" />
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[14px] font-semibold text-gray-900">
+            <div className="text-left">
+              <p className="text-[14px] font-semibold text-gray-900">
                 Transaction PIN
-              </span>
-              <KeyRound className="w-4 h-4 text-gray-500 hidden" />
+              </p>
+              <p className="text-[12px] text-gray-500">
+                Set or update the PIN for your withdrawals
+              </p>
             </div>
           </div>
           <ChevronRight className="w-4 h-4 text-gray-400" />

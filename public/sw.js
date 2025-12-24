@@ -3,6 +3,65 @@
 // Bump this to force an update when you deploy
 const SW_VERSION = "lw-v1";
 
+/** -------- PUSH NOTIFICATIONS (Option B) --------
+ * Expected payload (JSON):
+ * {
+ *   "title": "Deposit received",
+ *   "body": "₦2,000 from Aisha",
+ *   "url": "/dash",              // where to open when clicked
+ *   "meta": { ... }              // optional extras
+ * }
+ */
+self.addEventListener("push", (event) => {
+  let data = {};
+
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch {
+      data = { title: event.data.text() };
+    }
+  }
+
+  const title = data.title || "Little Wheel";
+  const options = {
+    body: data.body || "",
+    // ✅ optional icons (change if you have different paths)
+    icon: data.icon || "/icons/icon-192x192.png",
+    badge: data.badge || "/icons/icon-72x72.png",
+    data: {
+      url: data.url || "/dash",
+      meta: data.meta || {},
+    },
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+
+  const url = event.notification?.data?.url || "/dash";
+
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      // If an existing tab is open, focus + navigate
+      for (const client of list) {
+        if ("focus" in client) {
+          client.focus();
+          try {
+            client.navigate(url);
+          } catch {}
+          return;
+        }
+      }
+      // Otherwise open a new tab
+      return clients.openWindow(url);
+    })
+  );
+});
+
+/** -------- PWA LIFECYCLE -------- */
 self.addEventListener("install", (event) => {
   // Precache core files if you want (kept empty for now)
   event.waitUntil(self.skipWaiting()); // activate immediately

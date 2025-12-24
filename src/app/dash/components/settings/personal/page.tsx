@@ -168,8 +168,10 @@ export default function ProfilePage() {
   );
 
   const isTier2 = pickTier2(user);
+  const isHighestTier = isTier2; // ✅ Tier 2 is the highest tier for now
+
   const va = pickVirtual(user);
-  const hasVaNumber = !!va?.accountNumber;
+  const hasVaNumber = !!va?.accountNumber; // (kept for info; no longer controls button label)
 
   // Email edit open
   const openEdit = () => {
@@ -249,17 +251,37 @@ export default function ProfilePage() {
             </div>
           )}
 
-          {/* Tier button always opens modal */}
+          {/* ✅ Tier button: disabled when highest tier */}
           <button
-            onClick={() => setShowUpgrade(true)}
-            className="bg-black text-white px-4 py-1.5 rounded-full flex items-center space-x-1.5 text-xs font-medium mb-2 active:scale-[0.99]"
-            title="Upgrade to Tier 2"
+            type="button"
+            disabled={isHighestTier}
+            onClick={() => {
+              if (isHighestTier) return;
+              setShowUpgrade(true);
+            }}
+            className={`px-4 py-1.5 rounded-full flex items-center space-x-1.5 text-xs font-medium mb-2
+              ${
+                isHighestTier
+                  ? "bg-gray-200 text-gray-700 cursor-not-allowed"
+                  : "bg-black text-white active:scale-[0.99]"
+              }`}
+            title={isHighestTier ? "You are already on Tier 2" : "Upgrade to Tier 2"}
+            aria-disabled={isHighestTier}
           >
-            <Crown className="w-3 h-3 fill-white" />
-            <span>
-              {isTier2 && hasVaNumber ? "Tier 2" : "Proceed to Tier 2"}
-            </span>
+            <Crown
+              className={`w-3 h-3 ${
+                isHighestTier ? "text-gray-700" : "fill-white"
+              }`}
+            />
+            <span>{isHighestTier ? "Tier 2" : "Proceed to Tier 2"}</span>
           </button>
+
+          {/* optional hint (safe; remove if you don’t want it) */}
+          {/* {isTier2 && !hasVaNumber ? (
+            <p className="text-[11px] text-gray-500">
+              Tier 2 active. Virtual account will appear once assigned.
+            </p>
+          ) : null} */}
         </div>
 
         {/* Fields */}
@@ -280,9 +302,7 @@ export default function ProfilePage() {
 
           {/* Email row with edit icon ONLY */}
           <div>
-            <label className="block text-[12px] text-gray-600 mb-1">
-              Email
-            </label>
+            <label className="block text-[12px] text-gray-600 mb-1">Email</label>
             <div className="flex items-center justify-end gap-2">
               <button
                 onClick={openEdit}
@@ -298,10 +318,7 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <RowSmall
-            label="Address"
-            value={loading ? "…" : user?.address || "—"}
-          />
+          <RowSmall label="Address" value={loading ? "…" : user?.address || "—"} />
 
           {/* Referral code just under the list */}
           <RowSmall
@@ -335,9 +352,7 @@ export default function ProfilePage() {
               />
             </div>
 
-            {saveMsg && (
-              <p className="mt-1 text-[12px] text-rose-600">{saveMsg}</p>
-            )}
+            {saveMsg && <p className="mt-1 text-[12px] text-rose-600">{saveMsg}</p>}
 
             <button
               onClick={updateEmail}
@@ -652,6 +667,7 @@ function UpgradeToTier2Modal({
           open ? "opacity-100" : "opacity-0"
         }`}
       />
+
       {/* Sheet */}
       <div
         className={`absolute inset-x-0 bottom-0 bg-white rounded-t-2xl shadow-2xl transition-transform duration-300 ${

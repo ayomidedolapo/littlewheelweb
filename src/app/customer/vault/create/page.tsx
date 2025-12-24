@@ -79,24 +79,36 @@ function getAuthToken(): string {
   }
 }
 
-/** yyyy-mm-dd */
+/** Format a Date as local yyyy-mm-dd (no UTC shift) */
+function toLocalISODate(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/** yyyy-mm-dd based on StartWhen, using LOCAL time */
 function resolveStartDate(when: StartWhen): string {
   const now = new Date();
+
   if (when === "start_current_month") {
     const d = new Date(now.getFullYear(), now.getMonth(), 1);
-    return d.toISOString().slice(0, 10);
+    return toLocalISODate(d);
   }
+
   if (when === "start_next_month") {
     const d = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    return d.toISOString().slice(0, 10);
+    return toLocalISODate(d);
   }
-  return new Date().toISOString().slice(0, 10);
+
+  // start_today (or fallback)
+  return toLocalISODate(now);
 }
 
 /** JS 0..6 -> ISO 1..7 */
 const toIsoDow = (js: number) => (js === 0 ? 7 : js);
 
-/* ---------- Suspense wrapper (✅ fixes the error) ---------- */
+/* ---------- Suspense wrapper ---------- */
 export default function CreateSavingsVaultPage() {
   return (
     <Suspense
@@ -111,7 +123,7 @@ export default function CreateSavingsVaultPage() {
   );
 }
 
-/* ---------- page (unchanged UI/logic) ---------- */
+/* ---------- page ---------- */
 function CreateSavingsVaultPageInner() {
   const router = useRouter();
   const sp = useSearchParams();
@@ -510,7 +522,7 @@ function CreateSavingsVaultPageInner() {
               </div>
             </div>
 
-            {/* CTA (uses LogoSpinner only) */}
+            {/* CTA */}
             <button
               disabled={!valid || submitting}
               onClick={createVault}

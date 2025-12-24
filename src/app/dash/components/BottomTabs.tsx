@@ -11,7 +11,7 @@ const TABS = [
   {
     key: "home",
     label: "Home",
-    iconLight: "/uploads/homeicon.png",
+    iconLight: "/uploads/homeicons.png",
     iconDark: "/uploads/iconhomedark.png",
     route: "./dash",
   },

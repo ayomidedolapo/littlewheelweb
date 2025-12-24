@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ChevronLeft, ChevronDown, Copy, Check } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronDown,
+  Copy,
+  Check,
+  AlertCircle,
+} from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import LogoSpinner from "../../../../../../components/loaders/LogoSpinner"; // ✅ use your spinner
@@ -76,7 +82,7 @@ export default function WithdrawalBank() {
   const [resolving, setResolving] = useState(false);
   const resolveAbort = useRef<AbortController | null>(null);
 
-  // saved card
+  // saved card (BACKEND is source of truth)
   const [saved, setSaved] = useState<SavedBank | null>(null);
 
   // ui
@@ -93,19 +99,23 @@ export default function WithdrawalBank() {
         ""
       : "";
 
-  /* Load saved display from backend (fallback to local cache) */
+  /**
+   * ✅ IMPORTANT FIX:
+   * - Do NOT read any saved card from localStorage.
+   * - Do NOT write any saved card to localStorage.
+   * This guarantees a new account on the same device will NOT see old bank cards.
+   */
+
+  /* Load saved display from backend (backend is source of truth) */
   useEffect(() => {
     let cancelled = false;
-    async function loadSaved() {
-      setInitialLoading(true);
-      try {
-        // optimistic: local cache
-        try {
-          const raw = localStorage.getItem("lw_withdrawal_bank");
-          if (raw && !cancelled) setSaved(JSON.parse(raw));
-        } catch {}
 
-        // authoritative
+    async function loadSaved() {
+      // always reset UI state before fetching (prevents stale card flashes)
+      setSaved(null);
+      setInitialLoading(true);
+
+      try {
         const r = await fetch("/api/v1/settings/withdrawal-method", {
           cache: "no-store",
           headers: tokenHeader ? { "x-lw-auth": tokenHeader } : undefined,
@@ -118,7 +128,11 @@ export default function WithdrawalBank() {
           j = JSON.parse(text || "{}");
         } catch {}
 
-        if (!r.ok) return;
+        if (!r.ok) {
+          // backend says no/err → show nothing
+          if (!cancelled) setSaved(null);
+          return;
+        }
 
         const d = j?.data || j?.method || j;
         const bankName =
@@ -131,27 +145,31 @@ export default function WithdrawalBank() {
           d?.accountNumber || d?.account_number || d?.account || "";
         const accountName = d?.accountName || d?.account_name || d?.name || "";
 
-        if (bankName && accountNumber) {
-          const s: SavedBank = {
-            bank: {
-              name: bankName,
-              code: bankCode,
-              logo: bankLogoUrl(bankName, logoUrl),
-            },
-            accountNumber: String(accountNumber),
-            accountName: String(accountName || ""),
-          };
-          if (!cancelled) {
-            setSaved(s);
-            try {
-              localStorage.setItem("lw_withdrawal_bank", JSON.stringify(s));
-            } catch {}
-          }
+        // ✅ If backend has NO bank for this user, make sure nothing is shown
+        if (!bankName || !accountNumber) {
+          if (!cancelled) setSaved(null);
+          return;
         }
+
+        const s: SavedBank = {
+          bank: {
+            name: bankName,
+            code: bankCode,
+            logo: bankLogoUrl(bankName, logoUrl),
+          },
+          accountNumber: String(accountNumber),
+          accountName: String(accountName || ""),
+        };
+
+        if (!cancelled) setSaved(s);
+      } catch {
+        // network error → STILL show nothing (no local cache fallback)
+        if (!cancelled) setSaved(null);
       } finally {
         if (!cancelled) setInitialLoading(false);
       }
     }
+
     loadSaved();
     return () => {
       cancelled = true;
@@ -250,7 +268,7 @@ export default function WithdrawalBank() {
         throw new Error(msg);
       }
 
-      // Refresh saved card from backend
+      // Refresh saved card from backend (source of truth)
       try {
         const g = await fetch("/api/v1/settings/withdrawal-method", {
           cache: "no-store",
@@ -273,11 +291,17 @@ export default function WithdrawalBank() {
             accountName: d?.accountName || resolvedName,
           };
           setSaved(s);
-          try {
-            localStorage.setItem("lw_withdrawal_bank", JSON.stringify(s));
-          } catch {}
+        } else {
+          // if backend didn’t return properly, still rely on current input
+          setSaved({
+            bank: { name: bank!.name, code: bank!.code, logo: logoUrl },
+            accountNumber: acct,
+            accountName: resolvedName,
+          });
         }
-      } catch {}
+      } catch {
+        // ignore
+      }
 
       // Reset edit state
       setBank(null);
@@ -338,7 +362,7 @@ export default function WithdrawalBank() {
           Wheel.
         </p>
 
-        {/* Saved card (if exists) */}
+        {/* Saved card (ONLY if backend confirms it exists) */}
         {hasSaved && (
           <div className="mt-5">
             <div className="w-full rounded-xl bg-black text-white px-4 py-3 flex items-center justify-between">
@@ -401,35 +425,35 @@ export default function WithdrawalBank() {
           </div>
         )}
 
-        {/* Entry / Edit form */}
+        {/* Entry / Edit form for first-time user */}
         {!hasSaved && (
-          <label className="block mt-5 text-[12px] text-gray-700 mb-1">
-            Bank name
-          </label>
-        )}
+          <>
+            <label className="block mt-5 text-[12px] text-gray-700 mb-1">
+              Bank name
+            </label>
 
-        {!hasSaved && (
-          <button
-            onClick={() => !disableAll && setPickerOpen(true)}
-            className="w-full h-11 px-3 rounded-xl border border-gray-200 text-left text-[13px] flex items-center justify-between disabled:opacity-60"
-            disabled={disableAll}
-          >
-            <div className="flex items-center gap-2">
-              {bank ? (
-                <Image
-                  src={bankLogoUrl(bank.name, bank.logo)}
-                  alt={bank.name}
-                  width={18}
-                  height={18}
-                  className="object-contain"
-                />
-              ) : null}
-              <span className={bank ? "text-gray-900" : "text-gray-400"}>
-                {bank ? bank.name : "Select Bank"}
-              </span>
-            </div>
-            <ChevronDown className="w-4 h-4 text-gray-500" />
-          </button>
+            <button
+              onClick={() => !disableAll && setPickerOpen(true)}
+              className="w-full h-11 px-3 rounded-xl border border-gray-200 text-left text-[13px] flex items-center justify-between disabled:opacity-60"
+              disabled={disableAll}
+            >
+              <div className="flex items-center gap-2">
+                {bank ? (
+                  <Image
+                    src={bankLogoUrl(bank.name, bank.logo)}
+                    alt={bank.name}
+                    width={18}
+                    height={18}
+                    className="object-contain"
+                  />
+                ) : null}
+                <span className={bank ? "text-gray-900" : "text-gray-400"}>
+                  {bank ? bank.name : "Select Bank"}
+                </span>
+              </div>
+              <ChevronDown className="w-4 h-4 text-gray-500" />
+            </button>
+          </>
         )}
 
         {/* Account number input */}
@@ -488,11 +512,15 @@ export default function WithdrawalBank() {
           </div>
         )}
 
-        {/* Error */}
+        {/* Error – styled */}
         {error && (
-          <p className="mt-3 text-[12px] text-red-600" role="alert">
-            {error}
-          </p>
+          <div
+            className="mt-3 flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[12px] text-red-700"
+            role="alert"
+          >
+            <AlertCircle className="w-4 h-4 mt-[2px]" />
+            <p>{error}</p>
+          </div>
         )}
 
         {/* Confirm */}
@@ -618,8 +646,11 @@ function BankPickerSheet({
               Loading banks…
             </div>
           ) : err ? (
-            <div className="px-2 py-6 text-[13px] text-red-600">
-              Error: {err}
+            <div className="px-2 py-4">
+              <div className="flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[12px] text-red-700">
+                <AlertCircle className="w-4 h-4 mt-[2px]" />
+                <p>{err}</p>
+              </div>
             </div>
           ) : (
             <div className="max-h-[50vh] overflow-y-auto -mx-2">

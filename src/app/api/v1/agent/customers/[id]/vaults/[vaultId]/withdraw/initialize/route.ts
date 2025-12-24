@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 const API_BASE = (process.env.BACKEND_API_URL || "").replace(/\/+$/, "");
 const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS ?? 45000);
-const ROUTE_REV = "withdraw-init-R6";
+const ROUTE_REV = "withdraw-init-R7";
 
 /* ---------- Next-safe accessors ---------- */
 async function getCookieStore() {
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest, ctx: { params: ParamsShape }) {
     incoming = {};
   }
 
-  // Backend expects: { "amount": "1000" }
+  // Backend expects: { "amount": "1000", "beneficiary": "self" | "customer" }
   const amountRaw =
     incoming?.amount ?? incoming?.amountNaira ?? incoming?.naira ?? null;
   const amountNaira = int(amountRaw);
@@ -108,7 +108,27 @@ export async function POST(req: NextRequest, ctx: { params: ParamsShape }) {
       {
         success: false,
         message: "Amount required (naira).",
-        hint: 'Send body like { "amount": 2500 }  (₦2,500).',
+        hint:
+          'Send body like { "amount": 2500, "beneficiary": "self" | "customer" }',
+      },
+      422
+    );
+  }
+
+  const beneficiaryRaw =
+    incoming?.beneficiary ?? incoming?.mode ?? incoming?.receiver ?? null;
+  const beneficiary =
+    typeof beneficiaryRaw === "string"
+      ? beneficiaryRaw.toLowerCase()
+      : null;
+
+  if (beneficiary !== "self" && beneficiary !== "customer") {
+    return j(
+      {
+        success: false,
+        message: "Beneficiary required.",
+        hint:
+          'Send body like { "amount": 2500, "beneficiary": "self" } or { "beneficiary": "customer" }',
       },
       422
     );
@@ -117,6 +137,7 @@ export async function POST(req: NextRequest, ctx: { params: ParamsShape }) {
   // Swagger screenshot shows amount as a string, so stringify here
   const upstreamBody = {
     amount: String(amountNaira),
+    beneficiary,
   };
 
   const upstreamUrl = `${API_BASE}/agent/customers/${encodeURIComponent(

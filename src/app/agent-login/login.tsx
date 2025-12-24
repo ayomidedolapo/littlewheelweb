@@ -67,7 +67,8 @@ export default function MobileLogin() {
         const gen =
           typeof crypto !== "undefined" && "randomUUID" in crypto
             ? crypto.randomUUID()
-            : Math.random().toString(36).slice(0, 10) + Date.now().toString(36);
+            : Math.random().toString(36).slice(0, 10) +
+              Date.now().toString(36);
         localStorage.setItem("lw_device_token", gen);
         setDeviceToken(gen);
       }
@@ -274,10 +275,18 @@ export default function MobileLogin() {
             Welcome Back
           </h1>
 
+          {/* 🔴 Styled error card (same pattern as signup pages) */}
           {err && (
-            <p className="mb-3 text-[12px] text-rose-600" role="alert">
-              {err}
-            </p>
+            <div
+              className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-700 flex items-start gap-2"
+              role="alert"
+              aria-live="assertive"
+            >
+              <div className="mt-[px] h-4 w-4 rounded-full bg-rose-100 flex items-center justify-center text-[10px] font-bold">
+                !
+              </div>
+              <p className="flex-1 leading-[1.3]">{err}</p>
+            </div>
           )}
 
           {/* Phone */}

@@ -7,6 +7,13 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, X } from "lucide-react";
 import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 
+/* ---------------- skeleton helper ---------------- */
+function Skeleton({ className = "" }: { className?: string }) {
+  return (
+    <div className={`animate-pulse rounded-md bg-gray-200 ${className}`} />
+  );
+}
+
 /* ---------------- helpers ---------------- */
 const NGN = (v?: number) =>
   `₦${Number(v || 0).toLocaleString("en-NG", {
@@ -422,18 +429,26 @@ export default function VaultDetailPage() {
         <div className="w-full max-w-[480px] min-h-screen bg-[#F4F6FA] md:min-h-0 md:rounded-3xl md:shadow-xl overflow-hidden">
           {/* Top bar */}
           <div className="px-4 pt-4 pb-2 bg-[#F4F6FA]">
-            <button
-              onClick={() => startTransition(() => router.back())}
-              className="inline-flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </button>
+           <button
+  onClick={() =>
+    startTransition(() => {
+      const q = customerId
+        ? `?customerId=${encodeURIComponent(customerId)}`
+        : "";
+      router.push(`/customer/vault${q}`);
+    })
+  }
+  className="inline-flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900"
+>
+  <ArrowLeft className="h-4 w-4" />
+</button>
+
           </div>
 
           {/* Page title */}
           <div className="px-4 pb-2 flex items-center gap-2">
             <h1 className="text-[15px] font-semibold text-gray-900">{name}</h1>
-            {txLoading && (
+            {txLoading && !loading && (
               <span className="inline-flex items-center gap-1 text-[11px] text-gray-500">
                 <LogoSpinner show={true} />
                 syncing…
@@ -442,12 +457,62 @@ export default function VaultDetailPage() {
           </div>
 
           {loading ? (
-            /* ---------- Loading (LogoSpinner only) ---------- */
-            <div className="px-4 py-12 flex items-center justify-center">
-              <span className="inline-flex items-center gap-2 text-sm text-gray-700">
-                <LogoSpinner show={true} />
-                Loading vault…
-              </span>
+            /* ---------- Skeleton loading state ---------- */
+            <div className="px-4 pb-6 space-y-3">
+              {/* Top vault card skeleton */}
+              <div className="rounded-2xl bg-white border border-gray-100 shadow-sm p-3">
+                <div className="flex items-start gap-3">
+                  <Skeleton className="w-12 h-12 rounded-xl" />
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3 w-40" />
+                    <Skeleton className="h-2 w-full rounded-full" />
+                  </div>
+                  <div className="shrink-0 space-y-2">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-3 w-10" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Stats card skeleton */}
+              <div className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4">
+                <div className="grid grid-cols-2 gap-4">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="space-y-2">
+                      <Skeleton className="h-3 w-20" />
+                      <Skeleton className="h-4 w-24" />
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3">
+                  <Skeleton className="h-6 w-20 rounded-full" />
+                </div>
+              </div>
+
+              {/* Transactions card skeleton */}
+              <div className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4">
+                <Skeleton className="h-4 w-32 mb-3" />
+                <div className="space-y-3">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between py-1"
+                    >
+                      <div className="space-y-1">
+                        <Skeleton className="h-3 w-28" />
+                        <Skeleton className="h-2 w-20" />
+                      </div>
+                      <Skeleton className="h-3 w-16" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Close button skeleton */}
+              <div className="py-2">
+                <Skeleton className="h-12 w-full rounded-2xl" />
+              </div>
             </div>
           ) : (
             <>
@@ -587,11 +652,19 @@ export default function VaultDetailPage() {
                   </p>
 
                   {txLoading ? (
-                    <div className="h-28 rounded-xl bg-gray-50 flex items-center justify-center">
-                      <span className="inline-flex items-center gap-2 text-sm text-gray-600">
-                        <LogoSpinner show={true} />
-                        Loading transactions…
-                      </span>
+                    <div className="divide-y divide-gray-100">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <div
+                          key={i}
+                          className="flex items-center justify-between py-3"
+                        >
+                          <div className="space-y-1">
+                            <Skeleton className="h-3 w-28" />
+                            <Skeleton className="h-2 w-20" />
+                          </div>
+                          <Skeleton className="h-3 w-16" />
+                        </div>
+                      ))}
                     </div>
                   ) : txs.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-8">

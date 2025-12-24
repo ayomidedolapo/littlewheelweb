@@ -611,7 +611,7 @@ function DepositInner() {
               >
                 {submitting ? (
                   <span className="inline-flex items-center gap-2">
-                    <LogoSpinner show={true} /> Processing…
+                    <LogoSpinner show={false} /> Processing…
                   </span>
                 ) : (
                   "Confirm Deposit"
@@ -654,7 +654,7 @@ function DepositInner() {
                   const q = new URLSearchParams();
                   if (customerId) q.set("customerId", customerId);
                   startTransition(() =>
-                    router.push(`/customer/vault?${q.toString()}`)
+                    router.push(`/customer/vault/transaction-details?${q.toString()}`)
                   );
                 }}
                 className="w-full h-12 rounded-2xl bg-black text-white font-semibold hover:bg-black/90"

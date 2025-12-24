@@ -22,14 +22,10 @@ function LoadingOverlay({ show }: { show: boolean }) {
     <div
       role="status"
       aria-live="polite"
-      className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-[1px] flex items-center justify-center"
+      className="fixed inset-0 z-[60] bg-black/10 backdrop-blur-[1px] flex items-center justify-center"
     >
-      <div className="rounded-xl bg-white px-4 py-3 shadow-2xl flex items-center gap-3">
-        <LogoSpinner className="w-5 h-5" />
-        <span className="text-[13px] font-semibold text-gray-900">
-          Loading…
-        </span>
-      </div>
+      {/* Centered logo spinner only */}
+      <LogoSpinner show={true} />
     </div>
   );
 }
@@ -44,6 +40,9 @@ export default function SetTransactionPinPage() {
   const [confirmPin, setConfirmPin] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // user confirmation note (to prevent easy change)
+  const [confirmChange, setConfirmChange] = useState(false);
 
   // password sheet
   const [pwOpen, setPwOpen] = useState(false);
@@ -135,11 +134,18 @@ export default function SetTransactionPinPage() {
       return;
     }
 
+    if (!confirmChange) {
+      setErrorMsg(
+        "Confirm that you really want to set this Transaction PIN."
+      );
+      return;
+    }
+
     // open password sheet to collect password before calling API
     setPwOpen(true);
     setPwError(null);
     setPassword("");
-  }, [activeValue, stage, confirmPin, pin]);
+  }, [activeValue, stage, confirmPin, pin, confirmChange]);
 
   /* ---------- submit to backend ---------- */
   async function submitPin(finalPin: string, acctPassword: string) {
@@ -147,7 +153,7 @@ export default function SetTransactionPinPage() {
       setSubmitting(true);
       setPwError(null);
 
-      // Align with your other routes: send 'x-lw-auth' from localStorage('lw_token')
+      // Pull token from localStorage (x-lw-auth)
       const token =
         typeof window !== "undefined" ? localStorage.getItem("lw_token") : null;
 
@@ -260,11 +266,34 @@ export default function SetTransactionPinPage() {
 
       {/* Content */}
       <div className="max-w-sm mx-auto px-5 py-6">
-        <div className="mb-8">
+        <div className="mb-6">
           <h1 className="text-2xl font-semibold text-gray-900 mb-2">
             {displayTitle}
           </h1>
           <p className="text-sm text-gray-600">{displayHint}</p>
+        </div>
+
+        {/* Confirmation note */}
+        <div className="mb-5 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 mt-[2px] text-amber-700" />
+          <div>
+            <p className="text-[12px] font-semibold text-amber-800">
+              Confirm you want to set this Transaction PIN
+            </p>
+            <label className="mt-1 flex items-center gap-2 text-[11px] text-amber-800">
+              <input
+                type="checkbox"
+                checked={confirmChange}
+                onChange={(e) => setConfirmChange(e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-amber-300"
+                disabled={loading}
+              />
+              <span>
+                I understand this PIN will be used to approve future
+                transactions on my account.
+              </span>
+            </label>
+          </div>
         </div>
 
         {/* PIN boxes */}
@@ -277,8 +306,14 @@ export default function SetTransactionPinPage() {
           })}
         </div>
 
+        {/* Error style for PIN-level errors */}
         {errorMsg && (
-          <p className="text-center text-sm text-red-600 mt-2">{errorMsg}</p>
+          <div className="mt-2 flex justify-center">
+            <div className="inline-flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[12px] text-red-700">
+              <AlertCircle className="w-4 h-4 mt-[2px]" />
+              <p>{errorMsg}</p>
+            </div>
+          </div>
         )}
 
         {/* Keypad */}
@@ -331,20 +366,27 @@ export default function SetTransactionPinPage() {
               Account Password
             </label>
             <div className="relative">
-              <input
-                type={showPw ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && canConfirmPassword) {
-                    submitPin(pin, password);
-                  }
-                }}
-                className="w-full h-11 rounded-xl border border-gray-200 px-3 pr-10 text-[14px] outline-none disabled:opacity-60"
-                placeholder="•••••"
-                autoFocus
-                disabled={submitting}
-              />
+             <input
+  type={showPw ? "text" : "password"}
+  inputMode="numeric"
+  pattern="[0-9]*"
+  maxLength={5}
+  value={password}
+  onChange={(e) => {
+    const v = e.target.value.replace(/\D/g, "").slice(0, 5);
+    setPassword(v);
+  }}
+  onKeyDown={(e) => {
+    if (e.key === "Enter" && canConfirmPassword) {
+      submitPin(pin, password);
+    }
+  }}
+  className="w-full h-11 rounded-xl border border-gray-200 px-3 pr-10 text-[14px] outline-none disabled:opacity-60"
+  placeholder="•••••"
+  autoFocus
+  disabled={submitting}
+/>
+
               <button
                 type="button"
                 onClick={() => setShowPw((v) => !v)}

@@ -1,9 +1,22 @@
 /* src/app/customer/vault/withdraw/page.tsx */
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import {
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  TouchEvent,
+} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, HelpCircle, X, AlertCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  HelpCircle,
+  X,
+  AlertCircle,
+  ChevronDown,
+} from "lucide-react";
 import Image from "next/image";
 import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 
@@ -29,13 +42,19 @@ type VaultDetail = {
   availableBalance?: number;
 };
 
-/** quick amount chips */
-const chips = [1000, 2000, 5000, 10000, "All"] as const;
+type Bank = { name: string; code: string | number; logo?: string };
+
+type Beneficiary = "self" | "customer";
+
+/** quick amount chips – All first */
+const chips = ["All", 1000, 2000, 5000, 10000] as const;
+
+/** OTP */
+const OTP_LEN = 4;
 
 /** simple bank logo resolver */
 function bankLogoUrl(bankName: string, fallback?: string): string {
   if (fallback) return fallback;
-  // you can plug your own CDN / mapping here
   return `/bank-logos/${bankName.replace(/\s+/g, "-").toLowerCase()}.png`;
 }
 
@@ -69,6 +88,14 @@ function getAuthToken(): string | null {
   } catch {
     return null;
   }
+}
+
+/** Format numeric string with commas (display only) */
+function formatWithCommas(value: string): string {
+  if (!value) return "";
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "";
+  return n.toLocaleString("en-NG");
 }
 
 /* ===== 1) Shell with Suspense (no hooks here) ===== */
@@ -117,15 +144,205 @@ function WithdrawFromVaultPageInner() {
   /* ---------- state ---------- */
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // store RAW digits only (no commas) in state
   const [amount, setAmount] = useState<string>("");
+
   const [method, setMethod] = useState<"bank" | null>(null);
   const [vault, setVault] = useState<VaultDetail | null>(null);
   const [balance, setBalance] = useState<number>(0);
-  const [savedBank, setSavedBank] = useState<SavedBank | null>(null);
+
+  const [agentBank, setAgentBank] = useState<SavedBank | null>(null);
+  const [customerBank, setCustomerBank] = useState<SavedBank | null>(null);
+
+  // default to Agent
+  const [beneficiary, setBeneficiary] = useState<Beneficiary>("self");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  // bottom sheet for customer bank form
+  const [customerBankSheetOpen, setCustomerBankSheetOpen] = useState(false);
+
   const token = useMemo(() => getAuthToken(), []);
+
+  // ✅ OTP bottom popup (only when beneficiary = customer)
+  const [otpSheetOpen, setOtpSheetOpen] = useState(false);
+  const [otpDigits, setOtpDigits] = useState<string[]>(Array(OTP_LEN).fill(""));
+  const [otpStatus, setOtpStatus] = useState<"idle" | "error" | "success">(
+    "idle"
+  );
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const otpInputsRef = useRef<Array<HTMLInputElement | null>>([]);
+
+  // Store initialize result for finalize
+  const [pendingRef, setPendingRef] = useState<string>("");
+  const [pendingAmt, setPendingAmt] = useState<number>(0);
+
+  const otpValue = useMemo(() => otpDigits.join(""), [otpDigits]);
+
+  const focusOtpIndex = (i: number) => otpInputsRef.current[i]?.focus();
+  const setOtpDigit = (i: number, v: string) => {
+    const next = [...otpDigits];
+    next[i] = v;
+    setOtpDigits(next);
+  };
+
+  const handleOtpChange = (index: number, raw: string) => {
+    setOtpStatus("idle");
+    setOtpError(null);
+
+    const v = raw.replace(/\D/g, "").slice(0, 1);
+    if (!v) {
+      setOtpDigit(index, "");
+      return;
+    }
+    setOtpDigit(index, v);
+    if (index < OTP_LEN - 1) focusOtpIndex(index + 1);
+  };
+
+  const handleOtpKeyDown = (
+    index: number,
+    e: React.KeyboardEvent<HTMLInputElement>
+  ) => {
+    if (e.key === "Backspace" && otpDigits[index] === "" && index > 0) {
+      e.preventDefault();
+      setOtpDigit(index - 1, "");
+      focusOtpIndex(index - 1);
+    }
+    if ((e.key === "ArrowLeft" || e.key === "ArrowUp") && index > 0) {
+      e.preventDefault();
+      focusOtpIndex(index - 1);
+    }
+    if (
+      (e.key === "ArrowRight" || e.key === "ArrowDown") &&
+      index < OTP_LEN - 1
+    ) {
+      e.preventDefault();
+      focusOtpIndex(index + 1);
+    }
+  };
+
+  const handleOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const txt = e.clipboardData
+      .getData("text")
+      .replace(/\D/g, "")
+      .slice(0, OTP_LEN);
+    if (txt.length) {
+      e.preventDefault();
+      const next = txt
+        .padEnd(OTP_LEN, " ")
+        .split("")
+        .slice(0, OTP_LEN)
+        .map((c) => (/\d/.test(c) ? c : ""));
+      setOtpDigits(next);
+      focusOtpIndex(Math.min(txt.length, OTP_LEN - 1));
+    }
+  };
+
+  const baseOtpBox =
+    "w-12 h-12 text-center text-xl font-bold rounded-xl border-2 focus:outline-none transition-all duration-150";
+
+  const colorForOtpStatus = (filled: boolean) => {
+    if (otpStatus === "success")
+      return "border-green-500 bg-green-50 text-green-700";
+    if (otpStatus === "error") return "border-red-500 bg-red-50 text-red-700";
+    return filled
+      ? "border-black text-gray-900 bg-white"
+      : "border-gray-300 text-gray-900 bg-white";
+  };
+
+  const canSubmitOtp = otpValue.length === OTP_LEN && !submitting;
+
+  const closeOtpSheet = () => {
+    setOtpSheetOpen(false);
+    setOtpDigits(Array(OTP_LEN).fill(""));
+    setOtpStatus("idle");
+    setOtpError(null);
+  };
+
+  async function finalizeOtp() {
+    try {
+      setSubmitting(true);
+      setOtpError(null);
+      setOtpStatus("idle");
+
+      const customerId = getActiveCustomerId(sp);
+      const vaultId = sp.get("vaultId") || "";
+
+      if (!customerId || !vaultId) {
+        setOtpStatus("error");
+        setOtpError("Missing customer or vault reference. Go back and try again.");
+        return;
+      }
+
+      if (otpValue.length !== OTP_LEN) {
+        setOtpStatus("error");
+        setOtpError("Enter the 4-digit OTP code.");
+        return;
+      }
+
+      // ✅ Same finalize endpoint used in /withdraw/face/page.tsx
+      const payload: Record<string, any> = {
+        mode: "otp",
+        otp: otpValue,
+        amount: String(pendingAmt || 0),
+      };
+
+      if (pendingRef) {
+        payload.reference = pendingRef;
+        payload.referenceId = pendingRef;
+      }
+
+      const res = await fetch(
+        `/api/v1/agent/customers/${customerId}/vaults/${vaultId}/withdraw/finalize`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { "x-lw-auth": token } : {}),
+          },
+          cache: "no-store",
+          body: JSON.stringify(payload),
+        }
+      );
+
+      const ct = res.headers.get("content-type") || "";
+      const j =
+        ct.includes("application/json") && (await res.json().catch(() => ({})));
+
+      if (!res.ok) {
+        const rawMsg =
+          (j as any)?.message ||
+          (j as any)?.error ||
+          (j as any)?.upstream?.message ||
+          "";
+
+        if (
+          typeof rawMsg === "string" &&
+          rawMsg.toLowerCase().includes("withdrawal is already completed")
+        ) {
+          setOtpStatus("success");
+          closeOtpSheet();
+          router.push("/dash");
+          return;
+        }
+
+        const msg = rawMsg || `Finalize failed (HTTP ${res.status}).`;
+        setOtpStatus("error");
+        setOtpError(msg);
+        return;
+      }
+
+      setOtpStatus("success");
+      closeOtpSheet();
+      router.push("/dash");
+    } catch (e: any) {
+      setOtpStatus("error");
+      setOtpError(e?.message || "Couldn’t finalize withdrawal. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   // persist scoped customerId if present
   useEffect(() => {
@@ -142,7 +359,7 @@ function WithdrawFromVaultPageInner() {
   const customerId = getActiveCustomerId(sp);
   const vaultId = sp.get("vaultId") || "";
 
-  // load vault + saved bank
+  // load vault + agent + customer saved banks
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -152,6 +369,7 @@ function WithdrawFromVaultPageInner() {
         setLoading(true);
         setError(null);
 
+        // vault
         const vRes = await fetch(
           `/api/v1/agent/customers/${customerId}/vaults/${vaultId}`,
           {
@@ -183,7 +401,8 @@ function WithdrawFromVaultPageInner() {
           setBalance(b);
         }
 
-        let saved: SavedBank | null = null;
+        // agent withdrawal bank (settings)
+        let agent: SavedBank | null = null;
         try {
           const r = await fetch("/api/v1/settings/withdrawal-method", {
             cache: "no-store",
@@ -208,7 +427,7 @@ function WithdrawFromVaultPageInner() {
             const accountNumber = d2?.accountNumber || d2?.account || "";
             const accountName = d2?.accountName || d2?.name || "";
             if (bankName && accountNumber) {
-              saved = {
+              agent = {
                 id: wmId || undefined,
                 withdrawalMethodId: wmId || undefined,
                 bank: {
@@ -222,13 +441,86 @@ function WithdrawFromVaultPageInner() {
             }
           }
         } catch {}
-        if (!saved) {
+
+        if (!agent) {
           try {
             const raw = localStorage.getItem("lw_withdrawal_bank");
-            if (raw) saved = JSON.parse(raw);
+            if (raw) agent = JSON.parse(raw);
           } catch {}
         }
-        if (!cancelled) setSavedBank(saved || null);
+
+        if (!cancelled) setAgentBank(agent || null);
+
+        // customer withdrawal bank — NOW FROM CUSTOMER ENDPOINT
+        let customer: SavedBank | null = null;
+
+        if (customerId && token) {
+          try {
+            // Backend: GET /v1/agent/customers/{id}
+            const r = await fetch(`/api/v1/agent/customers/${customerId}`, {
+              cache: "no-store",
+              headers: { "x-lw-auth": token },
+              credentials: "include",
+            });
+
+            if (r.ok) {
+              const j = await r.json().catch(() => ({}));
+              const root = j?.data || j || {};
+
+              const wm =
+                root?.withdrawalMethod ??
+                root?.withdrawal_method ??
+                root?.withdrawalBank ??
+                root?.withdrawal_bank ??
+                root?.withdrawal ??
+                root;
+
+              const bankName =
+                wm?.bankName || wm?.bank?.name || wm?.bank || "";
+              const bankCode =
+                wm?.bankCode || wm?.bank?.code || wm?.code || "";
+              const logoUrl = wm?.logoUrl || wm?.bank?.logo || "";
+              const accountNumber =
+                wm?.accountNumber || wm?.account || wm?.account_no || "";
+              const accountName =
+                wm?.accountName || wm?.name || wm?.account_name || "";
+
+              if (bankName && accountNumber) {
+                customer = {
+                  id:
+                    wm?.id ??
+                    wm?.withdrawalMethodId ??
+                    wm?.data?.id ??
+                    undefined,
+                  withdrawalMethodId:
+                    wm?.withdrawalMethodId ??
+                    wm?.id ??
+                    wm?.data?.id ??
+                    undefined,
+                  bank: {
+                    name: bankName,
+                    code: bankCode,
+                    logo: bankLogoUrl(bankName, logoUrl),
+                  },
+                  accountNumber: String(accountNumber),
+                  accountName: String(accountName || ""),
+                };
+              }
+            }
+          } catch {}
+        }
+
+        // fallback: per-customer localStorage (only if backend gave nothing)
+        if (!customer && customerId) {
+          try {
+            const raw = localStorage.getItem(
+              `lw_customer_withdrawal_bank:${customerId}`
+            );
+            if (raw) customer = JSON.parse(raw);
+          } catch {}
+        }
+
+        if (!cancelled) setCustomerBank(customer || null);
       } catch (e: any) {
         if (!cancelled) setError(e?.message || "Failed to load details.");
       } finally {
@@ -245,18 +537,29 @@ function WithdrawFromVaultPageInner() {
   const willReceive = Math.max(0, numericAmount);
   const serviceFee = 0;
 
+  const activeBank: SavedBank | null =
+    beneficiary === "self" ? agentBank : customerBank;
+
   const canProceed = useMemo(() => {
     if (!numericAmount) return false;
     if (!customerId || !vaultId) return false;
     if (exceedsBalance) return false;
     if (method !== "bank") return false;
-    if (!savedBank) return false;
+    if (!activeBank) return false;
     return true;
-  }, [numericAmount, method, customerId, vaultId, savedBank, exceedsBalance]);
+  }, [
+    numericAmount,
+    method,
+    customerId,
+    vaultId,
+    activeBank,
+    exceedsBalance,
+  ]);
 
   const pickChip = (c: (typeof chips)[number]) => {
     if (c === "All") setAmount(String(balance || 0));
     else setAmount(String(c));
+    if (error) setError(null);
   };
 
   const openSummary = () => {
@@ -279,14 +582,33 @@ function WithdrawFromVaultPageInner() {
         setError("Amount exceeds available balance.");
         return;
       }
+      if (!beneficiary) {
+        setError("Select who should receive the funds.");
+        return;
+      }
+      if (!activeBank) {
+        setError(
+          beneficiary === "self"
+            ? "Set your withdrawal bank in Settings first."
+            : "Set a withdrawal bank for this customer first."
+        );
+        return;
+      }
 
-      const idemKey = `wd-${customerId}-${vaultId}-${amt}-${Date.now()}`;
+      // ✅ IMPORTANT: OTP popup ONLY for customers with withdrawal method
+      if (beneficiary === "customer" && !customerBank) {
+        setError("Customer must set a withdrawal bank before OTP confirmation.");
+        setSheetOpen(false);
+        return;
+      }
+
+      const idemKey = `wd-${customerId}-${vaultId}-${beneficiary}-${amt}-${Date.now()}`;
       const ac = new AbortController();
       const timer = setTimeout(() => ac.abort(), 45_000);
 
-      // 🔑 Backend (via proxy route) only needs { amount }
       const payload = {
         amount: amt,
+        beneficiary,
       };
 
       const res = await fetch(
@@ -328,10 +650,29 @@ function WithdrawFromVaultPageInner() {
 
       setSheetOpen(false);
 
+      // ✅ If Customer -> open OTP bottom popup (no routing to face page)
+      if (beneficiary === "customer") {
+        setPendingRef(String(ref || ""));
+        setPendingAmt(amt);
+
+        setOtpDigits(Array(OTP_LEN).fill(""));
+        setOtpStatus("idle");
+        setOtpError(null);
+
+        setOtpSheetOpen(true);
+
+        // Focus first input after animation
+        setTimeout(() => focusOtpIndex(0), 250);
+        clearTimeout(timer);
+        return;
+      }
+
+      // ✅ Else -> proceed to facial page like before
       const qs = new URLSearchParams({
         customerId: String(customerId),
         vaultId: String(vaultId),
         amount: String(amt),
+        beneficiary,
       });
       if (ref) qs.set("ref", String(ref));
       router.push(`/customer/vault/withdraw/face?${qs.toString()}`);
@@ -348,6 +689,22 @@ function WithdrawFromVaultPageInner() {
       setSubmitting(false);
     }
   }
+
+  /* ----- swipe handling for bank mode ----- */
+  const swipeStartX = useRef<number | null>(null);
+
+  const handleSwipeStart = (e: TouchEvent<HTMLDivElement>) => {
+    swipeStartX.current = e.touches[0]?.clientX ?? null;
+  };
+
+  const handleSwipeEnd = (e: TouchEvent<HTMLDivElement>) => {
+    if (swipeStartX.current == null) return;
+    const dx = e.changedTouches[0]?.clientX - swipeStartX.current;
+    swipeStartX.current = null;
+    if (Math.abs(dx) < 40) return;
+    if (dx < 0) setBeneficiary("customer");
+    else setBeneficiary("self");
+  };
 
   /* ---------- UI ---------- */
   return (
@@ -373,7 +730,6 @@ function WithdrawFromVaultPageInner() {
             Facilitate withdrawal for your customer
           </p>
 
-          {/* subtle inline loader while fetching page data */}
           {loading && (
             <div
               role="status"
@@ -392,12 +748,16 @@ function WithdrawFromVaultPageInner() {
             <p className="text-[12px] font-semibold text-gray-800 mb-2">
               Amount to withdraw
             </p>
+
             <input
               inputMode="numeric"
               pattern="[0-9]*"
-              value={amount}
+              value={formatWithCommas(amount)}
               onChange={(e) => {
-                setAmount(e.target.value.replace(/[^\d]/g, ""));
+                const raw = e.target.value
+                  .replace(/,/g, "")
+                  .replace(/[^\d]/g, "");
+                setAmount(raw);
                 if (error) setError(null);
               }}
               placeholder="Enter Amount"
@@ -449,7 +809,6 @@ function WithdrawFromVaultPageInner() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
-                  {/* bank icon */}
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
                     <path d="M3 10L12 4l9 6" stroke="black" strokeWidth="1.5" />
                     <path
@@ -465,57 +824,159 @@ function WithdrawFromVaultPageInner() {
                     Bank Account
                   </p>
                   <p className="text-[12px] text-gray-600">
-                    Transfer funds directly to your customer account
+                    Transfer funds to your bank or your customer’s bank
                   </p>
                 </div>
               </div>
               <span
                 className={`inline-block h-5 w-5 rounded-full border-2 ${
                   method === "bank"
-                    ? "border-black bg-black"
+                    ? "border-black bg-black ring-2 ring-black"
                     : "border-gray-300"
                 }`}
                 aria-pressed={method === "bank"}
               />
             </div>
 
-            {/* selected & saved bank */}
-            {method === "bank" && savedBank && (
-              <div className="mt-4 w-full rounded-xl bg-black text-white px-4 py-3 flex items-center justify-between">
-                <div className="flex items-start gap-3">
-                  <div className="mt-[2px] w-6 h-6 rounded bg-white overflow-hidden flex items-center justify-center">
-                    <Image
-                      src={bankLogoUrl(
-                        savedBank.bank.name,
-                        savedBank.bank.logo
+            {/* selected & saved bank(s) – swipeable */}
+            {method === "bank" && (
+              <div className="mt-4">
+                <div
+                  className="relative overflow-hidden rounded-2xl"
+                  onTouchStart={handleSwipeStart}
+                  onTouchEnd={handleSwipeEnd}
+                >
+                  <div
+                    className="flex transition-transform duration-300 ease-out"
+                    style={{
+                      transform:
+                        beneficiary === "self"
+                          ? "translateX(0%)"
+                          : "translateX(-100%)",
+                    }}
+                  >
+                    {/* Agent card */}
+                    <div className="w-full flex-shrink-0 pr-2">
+                      {agentBank ? (
+                        <div className="w-full rounded-xl bg-black text-white px-4 py-3 flex items-center justify-between">
+                          <div className="flex items-start gap-3">
+                            <div className="mt-[2px] w-6 h-6 rounded bg-white overflow-hidden flex items-center justify-center">
+                              <Image
+                                src={bankLogoUrl(
+                                  agentBank.bank.name,
+                                  agentBank.bank.logo
+                                )}
+                                alt={agentBank.bank.name}
+                                width={24}
+                                height={24}
+                                className="object-contain"
+                                unoptimized
+                              />
+                            </div>
+                            <div>
+                              <div className="text-[13px] font-semibold leading-tight">
+                                {toTitle(agentBank.accountName || "—")}
+                              </div>
+                              <div className="text-[12px] text-white/70 mt-0.5">
+                                {maskAcct(agentBank.accountNumber)}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-[11px] text-white/70 ml-3">
+                            {agentBank.bank.name}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-dashed border-gray-400 px-4 py-3 text-[12px] text-gray-700 bg-gray-50">
+                          No withdrawal bank set for you yet. Go to{" "}
+                          <strong>Settings → Withdrawal Bank</strong> to add
+                          one.
+                        </div>
                       )}
-                      alt={savedBank.bank.name}
-                      width={24}
-                      height={24}
-                      className="object-contain"
-                      unoptimized
-                    />
-                  </div>
-                  <div>
-                    <div className="text-[13px] font-semibold leading-tight">
-                      {toTitle(savedBank.accountName || "—")}
                     </div>
-                    <div className="text-[12px] text-white/70 mt-0.5">
-                      {maskAcct(savedBank.accountNumber)}
-                    </div>
-                  </div>
-                </div>
-                <div className="text-[11px] text-white/70 ml-3">
-                  {savedBank.bank.name}
-                </div>
-              </div>
-            )}
 
-            {/* If no bank saved, nudge */}
-            {method === "bank" && !savedBank && (
-              <div className="mt-3 text-[12px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                No withdrawal bank set. Go to{" "}
-                <strong>Settings → Withdrawal Bank</strong> to add one.
+                    {/* Customer card */}
+                    <div className="w-full flex-shrink-0 pl-2">
+                      {customerBank ? (
+                        <div className="w-full rounded-xl bg-black text-white px-4 py-3 flex items-center justify-between">
+                          <div className="flex items-start gap-3">
+                            <div className="mt-[2px] w-6 h-6 rounded bg-white overflow-hidden flex items-center justify-center">
+                              <Image
+                                src={bankLogoUrl(
+                                  customerBank.bank.name,
+                                  customerBank.bank.logo
+                                )}
+                                alt={customerBank.bank.name}
+                                width={24}
+                                height={24}
+                                className="object-contain"
+                                unoptimized
+                              />
+                            </div>
+                            <div>
+                              <div className="text-[13px] font-semibold leading-tight">
+                                {toTitle(customerBank.accountName || "—")}
+                              </div>
+                              <div className="text-[12px] text-white/70 mt-0.5">
+                                {maskAcct(customerBank.accountNumber)}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-[12px] text-amber-800">
+                          No withdrawal bank set for this customer yet.
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCustomerBankSheetOpen(true);
+                            }}
+                            className="ml-1 underline font-semibold"
+                          >
+                            Set customer bank
+                          </button>
+                          .
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* mode toggles */}
+                <div className="mt-3 flex justify-center gap-2 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setBeneficiary("self");
+                    }}
+                    className={`px-3 py-1.5 rounded-lg border ${
+                      beneficiary === "self"
+                        ? "bg-black text-white border-black"
+                        : "bg-gray-100 text-gray-700 border-gray-200"
+                    }`}
+                  >
+                    Agent
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setBeneficiary("customer");
+                    }}
+                    className={`px-3 py-1.5 rounded-lg border ${
+                      beneficiary === "customer"
+                        ? "bg-black text-white border-black"
+                        : "bg-gray-100 text-gray-700 border-gray-200"
+                    }`}
+                  >
+                    Customer
+                  </button>
+                </div>
+                <p className="mt-1 text-[11px] text-gray-500 text-center">
+                  Swipe or tap to choose who receives the funds.
+                </p>
               </div>
             )}
           </button>
@@ -545,9 +1006,7 @@ function WithdrawFromVaultPageInner() {
 
       {/* ===== Bottom Sheet: Withdrawal Summary ===== */}
       <div
-        className={`fixed inset-0 z-50 ${
-          sheetOpen ? "" : "pointer-events-none"
-        }`}
+        className={`fixed inset-0 z-50 ${sheetOpen ? "" : "pointer-events-none"}`}
       >
         <div
           className={`absolute inset-0 bg-black/50 transition-opacity ${
@@ -590,6 +1049,12 @@ function WithdrawFromVaultPageInner() {
                   {NGN(willReceive)}
                 </span>
               </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-600">Beneficiary</span>
+                <span className="font-semibold text-gray-900">
+                  {beneficiary === "self" ? "Agent" : "Customer"}
+                </span>
+              </div>
             </div>
 
             <button
@@ -597,10 +1062,510 @@ function WithdrawFromVaultPageInner() {
               disabled={submitting}
               className="mt-5 w-full h-12 rounded-2xl bg-black text-white font-semibold active:scale-[0.99] disabled:opacity-60 inline-flex items-center justify-center gap-2"
             >
-              {submitting && <LogoSpinner show={true} />}{" "}
-              {submitting ? "Processing…" : "Confirm"}
+              {submitting ? (
+                <>
+                  <LogoSpinner className="w-4 h-4" />
+                  Processing…
+                </>
+              ) : (
+                "Confirm"
+              )}
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* ===== OTP Bottom Popup (Customer only) ===== */}
+      <div
+        className={`fixed inset-0 z-[60] ${
+          otpSheetOpen ? "" : "pointer-events-none"
+        }`}
+      >
+        <div
+          className={`absolute inset-0 bg-black/40 transition-opacity ${
+            otpSheetOpen ? "opacity-100" : "opacity-0"
+          }`}
+          onClick={closeOtpSheet}
+        />
+
+        <div
+          className={`absolute left-0 right-0 bottom-0 transition-transform duration-300 ease-out ${
+            otpSheetOpen ? "translate-y-0" : "translate-y-full"
+          }`}
+        >
+          <div className="mx-auto w-full max-w-sm px-4 pb-4">
+            <div className="bg-white rounded-3xl shadow-2xl p-5">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-[15px] font-semibold text-gray-900">
+                    Kindly provide OTP Code
+                  </h3>
+                  <p className="mt-1 text-[12px] text-gray-600">
+                    Enter 4-digits code sent to your number
+                  </p>
+                </div>
+
+                <button
+                  onClick={closeOtpSheet}
+                  className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center"
+                  aria-label="Close"
+                >
+                  <X className="w-4 h-4 text-gray-700" />
+                </button>
+              </div>
+
+              {/* OTP boxes */}
+              <div className="flex justify-center gap-3 mt-4">
+                {otpDigits.map((digit, i) => (
+                  <input
+                    key={i}
+                    ref={(el) => (otpInputsRef.current[i] = el)}
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={1}
+                    value={digit}
+                    onChange={(e) => handleOtpChange(i, e.target.value)}
+                    onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                    onPaste={handleOtpPaste}
+                    className={`${baseOtpBox} ${colorForOtpStatus(
+                      !!digit
+                    )} focus:ring-2 focus:ring-gray-100 focus:border-black`}
+                  />
+                ))}
+              </div>
+
+              {/* Tips */}
+              <div className="mt-4 rounded-2xl bg-gray-50 border border-gray-100 p-4">
+                <p className="text-[12px] font-semibold text-gray-800">Tips</p>
+                <ul className="mt-2 text-[11px] text-gray-600 space-y-2 list-disc pl-4">
+                  <li>Customer can dial USSD code *343*406#</li>
+                  <li>Make sure your network is stable</li>
+                </ul>
+              </div>
+
+              {otpError && (
+                <p className="mt-3 text-[12px] text-rose-600">{otpError}</p>
+              )}
+
+              <button
+                onClick={finalizeOtp}
+                disabled={!canSubmitOtp}
+                className={`mt-4 w-full h-12 rounded-2xl font-semibold ${
+                  canSubmitOtp
+                    ? "bg-black text-white"
+                    : "bg-gray-200 text-gray-500 cursor-not-allowed"
+                } inline-flex items-center justify-center gap-2`}
+              >
+                {submitting ? (
+                  <>
+                    <LogoSpinner className="w-4 h-4" />
+                    Confirming…
+                  </>
+                ) : (
+                  "Confirm"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ===== Customer bank bottom sheet ===== */}
+      {customerId && (
+        <CustomerBankSheet
+          open={customerBankSheetOpen}
+          onClose={() => setCustomerBankSheetOpen(false)}
+          customerId={customerId}
+          token={token}
+          existing={customerBank}
+          onSaved={(b) => setCustomerBank(b)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ===== 3) Customer bank sheet – now SAVES to backend ===== */
+
+function CustomerBankSheet({
+  open,
+  onClose,
+  customerId,
+  token,
+  existing,
+  onSaved,
+}: {
+  open: boolean;
+  onClose: () => void;
+  customerId: string;
+  token: string | null;
+  existing: SavedBank | null;
+  onSaved: (b: SavedBank) => void;
+}) {
+  const [banks, setBanks] = useState<Bank[]>([]);
+  const [banksLoading, setBanksLoading] = useState(false);
+  const [banksError, setBanksError] = useState<string | null>(null);
+  const [q, setQ] = useState("");
+
+  const [bank, setBank] = useState<Bank | null>(null);
+  const [acct, setAcct] = useState("");
+  const [resolvedName, setResolvedName] = useState("");
+  const [resolving, setResolving] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const resolveAbort = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    (async () => {
+      try {
+        setBanksLoading(true);
+        setBanksError(null);
+        const r = await fetch("/api/v1/payments/bank-list", {
+          headers: token ? { "x-lw-auth": token } : undefined,
+          credentials: "include",
+        });
+        const json = await r.json().catch(() => ({}));
+        const raw = json?.data || json;
+        if (Array.isArray(raw)) setBanks(raw as Bank[]);
+        else if (Array.isArray(json)) setBanks(json as Bank[]);
+        else throw new Error("Unexpected bank list response");
+      } catch (e: any) {
+        setBanksError(
+          e instanceof Error ? e.message : "Failed to load bank list"
+        );
+      } finally {
+        setBanksLoading(false);
+      }
+    })();
+  }, [open, token]);
+
+  useEffect(() => {
+    if (open) {
+      setBank(null);
+      setAcct("");
+      setResolvedName("");
+      setError(null);
+      setQ("");
+    }
+  }, [open]);
+
+  useEffect(() => {
+    setError(null);
+  }, [bank, acct]);
+
+  useEffect(() => {
+    const digits = acct.replace(/\D/g, "");
+    if (!bank || digits.length !== 10 || !open) {
+      resolveAbort.current?.abort();
+      return;
+    }
+
+    const t = setTimeout(async () => {
+      try {
+        setResolving(true);
+        resolveAbort.current?.abort();
+        const ac = new AbortController();
+        resolveAbort.current = ac;
+
+        const r = await fetch(
+          `/api/v1/payments/resolve-account-number?accountNumber=${digits}&bankCode=${bank.code}`,
+          {
+            headers: token ? { "x-lw-auth": token } : undefined,
+            credentials: "include",
+            signal: ac.signal,
+          }
+        );
+
+        const json = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          const msg = json?.message || json?.error || `HTTP ${r.status}`;
+          throw new Error(msg);
+        }
+
+        const name =
+          json?.data?.accountName ||
+          json?.data?.account_name ||
+          json?.accountName ||
+          json?.account_name ||
+          "";
+
+        setResolvedName(name || "");
+      } catch (e: any) {
+        if (e?.name !== "AbortError") {
+          setResolvedName("");
+          setError(
+            e instanceof Error ? e.message : "Name resolve failed. Try again."
+          );
+        }
+      } finally {
+        setResolving(false);
+      }
+    }, 350);
+
+    return () => clearTimeout(t);
+  }, [bank, acct, token, open]);
+
+  const filteredBanks = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    if (!t) return banks;
+    return banks.filter((b) => String(b.name).toLowerCase().includes(t));
+  }, [q, banks]);
+
+  const canSubmit =
+    !!bank && acct.replace(/\D/g, "").length === 10 && !!resolvedName && !saving;
+
+  async function onConfirm() {
+    if (!canSubmit) return;
+    try {
+      setSaving(true);
+      setError(null);
+
+      const cleanAcct = acct.replace(/\D/g, "");
+
+      const payload = {
+        bankName: bank!.name,
+        logoUrl: bankLogoUrl(bank!.name, bank?.logo),
+        bankCode: String(bank!.code),
+        accountNumber: cleanAcct,
+        accountName: resolvedName,
+      };
+
+      const res = await fetch(
+        `/api/v1/agent/customers/${customerId}/set-withdrawal-method`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { "x-lw-auth": token } : {}),
+          },
+          body: JSON.stringify(payload),
+          cache: "no-store",
+          credentials: "include",
+        }
+      );
+
+      const ct = res.headers.get("content-type") || "";
+      const data = ct.includes("application/json")
+        ? await res.json().catch(() => ({}))
+        : await res.text().catch(() => "");
+
+      if (!res.ok) {
+        const msg =
+          (typeof data === "object" && (data as any)?.message) ||
+          (typeof data === "object" && (data as any)?.error) ||
+          (typeof data === "string" && data) ||
+          `Failed to save withdrawal method (HTTP ${res.status})`;
+        throw new Error(msg);
+      }
+
+      const root = typeof data === "object" ? (data as any) : {};
+      const src = root?.data || root || {};
+
+      const finalBankName =
+        src.bankName || src.bank?.name || src.bank || payload.bankName;
+      const finalBankCode =
+        src.bankCode || src.bank?.code || src.code || payload.bankCode;
+      const finalLogoUrl = src.logoUrl || src.bank?.logo || payload.logoUrl || "";
+      const finalAcctNumber = src.accountNumber || src.account || cleanAcct || "";
+      const finalAcctName =
+        src.accountName || src.name || payload.accountName || resolvedName;
+
+      const saved: SavedBank = {
+        id: src.id ?? src.withdrawalMethodId ?? existing?.id ?? undefined,
+        withdrawalMethodId:
+          src.withdrawalMethodId ?? src.id ?? existing?.withdrawalMethodId,
+        bank: {
+          name: finalBankName,
+          code: finalBankCode,
+          logo: bankLogoUrl(finalBankName, finalLogoUrl),
+        },
+        accountNumber: String(finalAcctNumber),
+        accountName: String(finalAcctName),
+      };
+
+      try {
+        localStorage.setItem(
+          `lw_customer_withdrawal_bank:${customerId}`,
+          JSON.stringify(saved)
+        );
+      } catch {}
+
+      onSaved(saved);
+      onClose();
+    } catch (e: any) {
+      setError(
+        e instanceof Error ? e.message : "Failed to save customer withdrawal bank"
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      className={`fixed inset-0 z-50 transition ${
+        open ? "pointer-events-auto" : "pointer-events-none"
+      }`}
+      aria-hidden={!open}
+    >
+      <div
+        className={`absolute inset-0 bg-black/40 transition-opacity ${
+          open ? "opacity-100" : "opacity-0"
+        }`}
+        onClick={onClose}
+      />
+      <div
+        className={`absolute left-0 right-0 bottom-0 bg-white rounded-t-3xl shadow-2xl p-5 transition-transform duration-300 ${
+          open ? "translate-y-0" : "translate-y-full"
+        }`}
+      >
+        <div className="mx-auto max-w-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-base font-semibold text-gray-900">
+              Add customer bank
+            </h3>
+            <button
+              onClick={onClose}
+              className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center"
+            >
+              <X className="w-4 h-4 text-gray-700" />
+            </button>
+          </div>
+
+          <label className="block text-[12px] text-gray-700 mb-1">
+            Bank name
+          </label>
+          <button
+            type="button"
+            className="w-full h-11 px-3 rounded-xl border border-gray-200 text-left text-[13px] flex items-center justify-between"
+          >
+            <div className="flex items-center gap-2">
+              {bank ? (
+                <Image
+                  src={bankLogoUrl(bank.name, bank.logo)}
+                  alt={bank.name}
+                  width={18}
+                  height={18}
+                  className="object-contain"
+                />
+              ) : null}
+              <span className={bank ? "text-gray-900" : "text-gray-400"}>
+                {bank ? bank.name : "Select Bank"}
+              </span>
+            </div>
+            <ChevronDown className="w-4 h-4 text-gray-500" />
+          </button>
+
+          <div className="mt-3 rounded-2xl border border-gray-100">
+            <div className="px-3 pt-2 pb-2 border-b border-gray-100">
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search bank"
+                className="w-full h-9 px-3 rounded-xl border border-gray-200 text-[13px] outline-none"
+              />
+            </div>
+            <div className="max-h-40 overflow-y-auto">
+              {banksLoading ? (
+                <div className="px-3 py-3 text-[13px] text-gray-500">
+                  Loading banks…
+                </div>
+              ) : banksError ? (
+                <div className="px-3 py-3 text-[12px] text-rose-600 flex gap-2 items-start">
+                  <AlertCircle className="w-4 h-4 mt-[2px]" />
+                  <span>{banksError}</span>
+                </div>
+              ) : (
+                filteredBanks.map((b) => (
+                  <button
+                    key={`${b.code}-${b.name}`}
+                    type="button"
+                    onClick={() => setBank(b)}
+                    className="w-full text-left px-3 py-2 border-b last:border-b-0 border-gray-100 hover:bg-gray-50 flex items-center gap-2 text-[13px]"
+                  >
+                    <Image
+                      src={bankLogoUrl(String(b.name), b.logo)}
+                      alt={String(b.name)}
+                      width={18}
+                      height={18}
+                      className="object-contain"
+                    />
+                    <span>{b.name}</span>
+                  </button>
+                ))
+              )}
+              {!banksLoading && !banksError && filteredBanks.length === 0 && (
+                <div className="px-3 py-3 text-[13px] text-gray-500">
+                  No banks found.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <label className="block text-[12px] text-gray-700 mb-1">
+              Account Number
+            </label>
+            <input
+              type="tel"
+              inputMode="numeric"
+              maxLength={10}
+              placeholder="e.g 3120221108"
+              value={acct}
+              onChange={(e) =>
+                setAcct(e.target.value.replace(/\D/g, "").slice(0, 10))
+              }
+              className="w-full h-11 px-3 rounded-xl border border-gray-200 text-[13px] outline-none"
+            />
+          </div>
+
+          {resolvedName && (
+            <div className="mt-3 w-full rounded-xl bg-black text-white px-4 py-3 flex items-center justify-between">
+              <div className="flex items-start gap-3">
+                <div className="mt-[2px] w-6 h-6 rounded bg-white overflow-hidden flex items-center justify-center">
+                  {bank && (
+                    <Image
+                      src={bankLogoUrl(bank.name, bank.logo)}
+                      alt={bank.name}
+                      width={24}
+                      height={24}
+                      className="object-contain"
+                    />
+                  )}
+                </div>
+                <div>
+                  <div className="text-[13px] font-semibold leading-tight">
+                    {toTitle(resolvedName)}
+                  </div>
+                  <div className="text-[12px] text-white/70 mt-0.5">
+                    {maskAcct(acct)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div className="mt-3 flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[12px] text-red-700">
+              <AlertCircle className="w-4 h-4 mt-[2px]" />
+              <p>{error}</p>
+            </div>
+          )}
+
+          <button
+            onClick={onConfirm}
+            disabled={!canSubmit || resolving || saving}
+            className={`mt-5 w-full h-12 rounded-xl font-semibold text-white transition ${
+              canSubmit && !resolving && !saving
+                ? "bg-black hover:bg-black/90"
+                : "bg-black/30 cursor-not-allowed"
+            }`}
+          >
+            {saving ? "Saving…" : resolving ? "Resolving…" : "Confirm Bank"}
+          </button>
         </div>
       </div>
     </div>

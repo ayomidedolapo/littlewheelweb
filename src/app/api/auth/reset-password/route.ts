@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
         "Content-Type": "application/json",
         Accept: "application/json",
       },
+      // ✅ send only password – backend generates token
       body: JSON.stringify({ password }),
       cache: "no-store",
     });
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // return upstream (with new token)
+    // return upstream (which may include new token)
     return NextResponse.json(json, { status: upstream.status });
   } catch (error) {
     console.warn("Reset password upstream error:", error);

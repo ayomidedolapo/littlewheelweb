@@ -7,15 +7,13 @@ import {
   ArrowLeft,
   HelpCircle,
   User,
-  CalendarDays,
-  KeyRound,
   Eye,
   EyeOff,
-  AtSign,
   Camera as CameraIcon,
   X,
   RotateCcw,
 } from "lucide-react";
+import Image from "next/image";
 import LogoSpinner from "../../../../components/loaders/LogoSpinner";
 
 const NEXT_STEP_ROUTE = "/agent-signup/components/address";
@@ -94,7 +92,7 @@ function PersonalDetailsInner() {
   const [showPin, setShowPin] = useState(false);
   const [referralCode, setReferralCode] = useState("");
 
-  // camera/photo (OPTIONAL)
+  // camera/photo (NOW REQUIRED)
   const [avatarDataUrl, setAvatarDataUrl] = useState("");
   const [avatarPreview, setAvatarPreview] = useState("");
   const [processingPhoto, setProcessingPhoto] = useState(false);
@@ -113,7 +111,9 @@ function PersonalDetailsInner() {
   const lastValid = lastName.trim().length > 0;
   const dobValid = !!dob;
   const usernameValid = isValidUsername(username);
+  const avatarValid = !!avatarDataUrl; // 👈 new: photo must be taken
 
+  // keep button disabled until all text fields are okay & we have token
   const formValid =
     firstValid &&
     middleValid &&
@@ -244,7 +244,20 @@ function PersonalDetailsInner() {
 
   // submit
   const saveAndContinue = async () => {
-    if (!formValid || saving) return;
+    if (saving) return;
+
+    // basic field validation guard
+    if (!formValid) {
+      setError("Please fill all required fields before continuing.");
+      return;
+    }
+
+    // 👀 enforce selfie as mandatory before proceeding
+    if (!avatarValid) {
+      setError("Please take a clear selfie before continuing.");
+      return;
+    }
+
     setSaving(true);
     setError(null);
 
@@ -387,8 +400,10 @@ function PersonalDetailsInner() {
             </div>
           )}
 
-          {/* OPTIONAL avatar */}
-          <label className="block mt-5 text-[13px] font-semibold text-gray-800">Profile Image</label>
+          {/* Profile image (NOW REQUIRED) */}
+          <label className="block mt-5 text-[13px] font-semibold text-gray-800">
+            Profile Image<span className="text-red-500">*</span>
+          </label>
           <div className="mt-2">
             <button
               type="button"
@@ -398,7 +413,11 @@ function PersonalDetailsInner() {
               <div className="w-12 h-12 rounded-full bg-white border border-gray-200 overflow-hidden flex items-center justify-center">
                 {avatarPreview ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={avatarPreview} alt="avatar preview" className="w-full h-full object-cover" />
+                  <img
+                    src={avatarPreview}
+                    alt="avatar preview"
+                    className="w-full h-full object-cover"
+                  />
                 ) : (
                   <CameraIcon className="w-5 h-5 text-gray-700" />
                 )}
@@ -406,9 +425,15 @@ function PersonalDetailsInner() {
               <div className="text-left">
                 <div className="text-sm text-gray-900 font-medium inline-flex items-center gap-2">
                   {processingPhoto && <LogoSpinner show={true} />}
-                  {processingPhoto ? "Processing…" : avatarPreview ? "Retake photo" : "Take a photo"}
+                  {processingPhoto
+                    ? "Processing…"
+                    : avatarPreview
+                    ? "Retake photo"
+                    : "Take a photo"}
                 </div>
-                <div className="text-[12px] text-gray-600">Front camera will open</div>
+                <div className="text-[12px] text-gray-600">
+                  Front camera will open. A clear selfie is required.
+                </div>
               </div>
               {avatarPreview && (
                 <span className="ml-auto text-gray-700">
@@ -419,7 +444,9 @@ function PersonalDetailsInner() {
           </div>
 
           {/* First / Middle / Last */}
-          <label className="block mt-5 text-[13px] font-semibold text-gray-800">First Name*</label>
+          <label className="block mt-5 text-[13px] font-semibold text-gray-800">
+            First Name<span className="text-red-500">*</span>
+          </label>
           <div className="mt-2 flex items-center gap-2 rounded-xl bg-gray-100 px-3 py-3">
             <User className="w-4 h-4 text-gray-900" />
             <input
@@ -430,7 +457,9 @@ function PersonalDetailsInner() {
             />
           </div>
 
-          <label className="block mt-4 text-[13px] font-semibold text-gray-800">Middle Name*</label>
+          <label className="block mt-4 text-[13px] font-semibold text-gray-800">
+            Middle Name<span className="text-red-500">*</span>
+          </label>
           <div className="mt-2 flex items-center gap-2 rounded-xl bg-gray-100 px-3 py-3">
             <User className="w-4 h-4 text-gray-900" />
             <input
@@ -441,7 +470,9 @@ function PersonalDetailsInner() {
             />
           </div>
 
-          <label className="block mt-4 text-[13px] font-semibold text-gray-800">Last Name*</label>
+          <label className="block mt-4 text-[13px] font-semibold text-gray-800">
+            Last Name<span className="text-red-500">*</span>
+          </label>
           <div className="mt-2 flex items-center gap-2 rounded-xl bg-gray-100 px-3 py-3">
             <User className="w-4 h-4 text-gray-900" />
             <input
@@ -453,22 +484,32 @@ function PersonalDetailsInner() {
           </div>
 
           {/* DOB */}
-          <label className="block mt-4 text-[13px] font-semibold text-gray-800">Date of Birth*</label>
-          <div className="mt-2 flex items-center gap-2 rounded-xl bg-gray-100 px-3 py-3 ring-1 ring-transparent focus-within:ring-black">
-            <CalendarDays className="w-4 h-4 text-gray-900" />
+          <label className="block mt-4 text-[13px] font-semibold text-gray-800">
+            Date of Birth<span className="text-red-500">*</span>
+          </label>
+          <div className="mt-2 relative flex items-center gap-2 rounded-xl bg-gray-100 px-3 py-3 ring-1 ring-transparent focus-within:ring-black">
             <input
               type="date"
               max={todayISO()}
               value={dob}
               onChange={(e) => setDob(e.target.value)}
               className="flex-1 bg-transparent outline-none text-sm text-gray-900
-                         [appearance:none] [&::-webkit-calendar-picker-indicator]:opacity-70
+                         [appearance:none] [&::-webkit-calendar-picker-indicator]:opacity-0
                          [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+            />
+            <Image
+              src="/uploads/calendericon.png"
+              alt="Open calendar"
+              width={16}
+              height={16}
+              className="w-4 h-4 pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"
             />
           </div>
 
           {/* Gender */}
-          <label className="block mt-4 text-[13px] font-semibold text-gray-800">Gender*</label>
+          <label className="block mt-4 text-[13px] font-semibold text-gray-800">
+            Gender<span className="text-red-500">*</span>
+          </label>
           <div className="mt-2 relative rounded-xl bg-gray-100 px-3 py-3 ring-1 ring-transparent focus-within:ring-black">
             <select
               value={gender}
@@ -497,9 +538,10 @@ function PersonalDetailsInner() {
           </div>
 
           {/* Username */}
-          <label className="block mt-4 text-[13px] font-semibold text-gray-800">Username*</label>
+          <label className="block mt-4 text-[13px] font-semibold text-gray-800">
+            Username<span className="text-red-500">*</span>
+          </label>
           <div className="mt-2 flex items-center gap-2 rounded-xl bg-gray-100 px-3 py-3 ring-1 ring-transparent focus-within:ring-black">
-            <AtSign className="w-4 h-4 text-gray-900" />
             <input
               value={username}
               onChange={(e) => setUsername(e.target.value)}
@@ -514,18 +556,10 @@ function PersonalDetailsInner() {
           )}
 
           {/* Referral (optional) */}
-          <label className="block mt-4 text-[13px] font-semibold text-gray-800">Referral Code</label>
+          <label className="block mt-4 text-[13px] font-semibold text-gray-800">
+            Referral Code
+          </label>
           <div className="mt-2 flex items-center gap-2 rounded-xl bg-gray-100 px-3 py-3">
-            <svg width="16" height="16" viewBox="0 0 24 24" className="text-gray-900 rotate-180" aria-hidden>
-              <path
-                d="M15 6l-6 6 6 6"
-                stroke="currentColor"
-                strokeWidth="2"
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
             <input
               value={referralCode}
               onChange={(e) => setReferralCode(e.target.value.trim().toUpperCase())}
@@ -535,9 +569,10 @@ function PersonalDetailsInner() {
           </div>
 
           {/* 5-digit PIN (password) */}
-          <label className="block mt-4 text-[13px] font-semibold text-gray-800">Password*</label>
+          <label className="block mt-4 text-[13px] font-semibold text-gray-800">
+            Password<span className="text-red-500">*</span>
+          </label>
           <div className="mt-2 flex items-center gap-2 rounded-xl bg-gray-100 px-3 py-3 ring-1 ring-transparent focus-within:ring-black">
-            <KeyRound className="w-4 h-4 text-gray-900" />
             <input
               type={showPin ? "text" : "password"}
               inputMode="numeric"
@@ -561,10 +596,18 @@ function PersonalDetailsInner() {
             Password must be <span className="font-semibold">five numbers</span>
           </p>
 
+          {/* Error banner with new styling */}
           {error && (
-            <p className="text-[12px] text-rose-600 mt-3" role="alert" aria-live="assertive">
-              {error}
-            </p>
+            <div
+              className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-800 flex items-start gap-2"
+              role="alert"
+              aria-live="assertive"
+            >
+              <span className="mt-[px] inline-flex h-4 w-4 items-center justify-center rounded-full bg-rose-100 text-rose-700 text-[10px] font-bold">
+                !
+              </span>
+              <p className="flex-1">{error}</p>
+            </div>
           )}
         </div>
 
@@ -575,8 +618,11 @@ function PersonalDetailsInner() {
               <span className="text-gray-800">Personal Details</span>
               <span className="text-gray-600">4/5</span>
             </div>
-            <div className="h-1.5 w-full rounded-full bg-gray-200 overflow-hidden">
-              <div className="h-full bg-green-600 rounded-full" style={{ width: "70%" }} />
+          <div className="h-1.5 w-full rounded-full bg-gray-200 overflow-hidden">
+              <div
+                className="h-full bg-emerald-500 rounded-full"
+                style={{ width: "70%" }}
+              />
             </div>
           </div>
 
@@ -584,7 +630,9 @@ function PersonalDetailsInner() {
             onClick={saveAndContinue}
             disabled={!formValid || saving}
             className={`mb-5 w-full h-12 rounded-xl font-semibold text-white transition inline-flex items-center justify-center gap-2 ${
-              !formValid || saving ? "bg-gray-300 text-gray-600 cursor-not-allowed" : "bg-black hover:bg-black/90"
+              !formValid || saving
+                ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                : "bg-black hover:bg-black/90"
             }`}
           >
             {saving ? (
@@ -630,7 +678,9 @@ function PersonalDetailsInner() {
                 onClick={capturePhoto}
                 disabled={!videoReady || processingPhoto}
                 className={`flex-1 h-11 rounded-xl text-white font-semibold inline-flex items-center justify-center gap-2 ${
-                  !videoReady || processingPhoto ? "bg-black/50 cursor-not-allowed" : "bg-black hover:bg-black/90"
+                  !videoReady || processingPhoto
+                    ? "bg-black/50 cursor-not-allowed"
+                    : "bg-black hover:bg-black/90"
                 }`}
               >
                 {processingPhoto ? (

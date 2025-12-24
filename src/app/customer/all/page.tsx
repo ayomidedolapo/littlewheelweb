@@ -821,7 +821,7 @@ export default function AllBeneficiariesPage() {
                 {Array.from({ length: 4 }).map((_, i) => (
                   <div
                     key={i}
-                    className="h-24 bg-gray-50 rounded-xl animate-pulse"
+                    className="h-20 rounded-xl bg-gray-100 border border-gray-100 shadow-xs animate-pulse"
                   />
                 ))}
               </div>
@@ -1003,16 +1003,16 @@ export default function AllBeneficiariesPage() {
                 <p className="text-[12px] text-rose-600 mb-3">{vaultsErr}</p>
               )}
 
-              {vaultsLoading ? (
-                <div className="space-y-3">
-                  {Array.from({ length: 3 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="h-20 rounded-xl bg-gray-50 animate-pulse"
-                    />
-                  ))}
-                </div>
-              ) : vaults.length === 0 ? (
+{vaultsLoading ? (
+  <div className="space-y-3">
+    {Array.from({ length: 3 }).map((_, i) => (
+      <div
+        key={i}
+        className="h-20 rounded-xl bg-gray-100 border border-gray-100 shadow-xs animate-pulse" 
+      />
+    ))}
+  </div>
+) : vaults.length === 0 ? (
                 <p className="text-sm text-gray-500">No vaults yet.</p>
               ) : (
                 <div className="space-y-3 max-h-[55vh] overflow-auto pr-1">

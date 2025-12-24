@@ -5,7 +5,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, UserRound, Landmark, X } from "lucide-react";
-import LogoSpinner from "../../../components/loaders/LogoSpinner"; // ← ✅ import your logo loader
+import LogoSpinner from "../../../components/loaders/LogoSpinner"; // ← ✅ logo loader
 
 /* ---------------- money helpers ---------------- */
 const fmt = (v: number) =>
@@ -22,6 +22,17 @@ type SavedBank = {
   bank: { name: string; code?: string | number; logo?: string };
   accountNumber: string;
   accountName: string;
+};
+
+/* ---------------- comma helpers ---------------- */
+const parseNG = (s: string) => Number(String(s || "").replace(/[^\d]/g, "")) || 0;
+
+const formatWithCommas = (rawDigits: string) => {
+  const clean = String(rawDigits || "").replace(/[^\d]/g, "");
+  if (!clean) return "";
+  const n = Number(clean);
+  if (!Number.isFinite(n)) return "";
+  return n.toLocaleString("en-NG");
 };
 
 /* ---------------- helpers for bank display ---------------- */
@@ -104,9 +115,9 @@ export default function CommissionWithdrawalPage() {
   const [loadingBank, setLoadingBank] = useState(true);
 
   // form state
-  const [amount, setAmount] = useState<string>("");
+  const [amountRaw, setAmountRaw] = useState<string>(""); // raw digits only
   const [method, setMethod] = useState<Method>("");
-  const [pin, setPin] = useState(""); // password/PIN required by API
+  const [pin, setPin] = useState(""); // PIN required by API (max 5 digits)
 
   // summary bottom sheet
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -261,10 +272,8 @@ export default function CommissionWithdrawalPage() {
   }, [tokenHeader]);
 
   // derived
-  const parsedAmount = useMemo(
-    () => Number((amount || "").replace(/[^\d.]/g, "")) || 0,
-    [amount]
-  );
+  const parsedAmount = useMemo(() => parseNG(amountRaw), [amountRaw]);
+
   const fee = useMemo(
     () => (parsedAmount > 0 ? (SERVICE_FEE_PERCENT / 100) * parsedAmount : 0),
     [parsedAmount]
@@ -276,15 +285,20 @@ export default function CommissionWithdrawalPage() {
     parsedAmount <= (availableBalance || 0) &&
     Number.isFinite(fee);
 
-  const pinValid = pin.trim().length >= 4; // adjust to your rule
+  const pinValid = pin.trim().length >= 4 && pin.trim().length <= 5; // ✅ max 5 digits
 
   const bankReady = !!savedBank;
   const canProceed =
     amountValid && !!method && (method === "BANK" ? bankReady : true);
 
+  // 🔁 Toggle method (click again to deselect)
+  const toggleMethod = (next: Method) => {
+    setMethod((current) => (current === next ? "" : next));
+  };
+
   const setQuick = (val: number | "ALL") => {
-    if (val === "ALL") setAmount(String(availableBalance || 0));
-    else setAmount(String(val));
+    if (val === "ALL") setAmountRaw(String(availableBalance || 0));
+    else setAmountRaw(String(val));
   };
 
   const openSheet = () => {
@@ -332,10 +346,10 @@ export default function CommissionWithdrawalPage() {
         throw new Error(msg);
       }
 
-      // success → close sheet, reset, and refresh balance live
+      // success → close sheet, reset, and redirect to /dash
       setSheetOpen(false);
       setPin("");
-      setAmount("");
+      setAmountRaw("");
       setMethod("");
 
       try {
@@ -343,7 +357,7 @@ export default function CommissionWithdrawalPage() {
       } catch {}
 
       await loadCommissionBalance();
-      alert("Withdrawal request submitted successfully.");
+      router.push("/dash");
     } catch (e: any) {
       setSubmitErr(e?.message || "Withdrawal failed.");
     } finally {
@@ -352,12 +366,11 @@ export default function CommissionWithdrawalPage() {
   }
 
   const overlayOn = submitting;
-  const overlayLabel = submitting ? "Submitting…" : "Loading…";
 
   /* ---------------- UI ---------------- */
   return (
     <div className="min-h-screen bg-white" aria-busy={overlayOn}>
-      {/* 🔥 Logo spinner replaces the old overlay: shows when submitting or initial data is loading */}
+      {/* 🔥 Logo spinner overlay for submitting / loading */}
       <LogoSpinner
         show={overlayOn || loadingBalance || loadingBank}
         invert
@@ -394,11 +407,18 @@ export default function CommissionWithdrawalPage() {
             Amount to withdraw
           </label>
           <div className="h-11 rounded-xl ring-1 ring-gray-200 focus-within:ring-black bg-white flex items-center px-3">
+            {/* ✅ comma formatted display, raw digits stored */}
             <input
-              inputMode="decimal"
+              inputMode="numeric"
+              pattern="[0-9]*"
               placeholder="Amount"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))}
+              value={formatWithCommas(amountRaw)}
+              onChange={(e) => {
+                const raw = e.target.value
+                  .replace(/,/g, "")
+                  .replace(/[^\d]/g, "");
+                setAmountRaw(raw);
+              }}
               className="w-full bg-transparent outline-none text-[13px] text-gray-900 placeholder:text-gray-400"
               aria-label="Amount to withdraw"
               disabled={overlayOn}
@@ -417,10 +437,11 @@ export default function CommissionWithdrawalPage() {
             </p>
           )}
 
+          {/* Quick amount buttons */}
           <div className="mt-2.5 flex flex-wrap gap-1.5">
             <button
               onClick={() => setQuick("ALL")}
-              className="h-8 px-3 rounded-full bg-gray-100 text-[11px] font-semibold text-gray-800"
+              className="h-8 px-3 rounded-md bg-gray-100 text-[11px] font-semibold text-gray-800"
               disabled={overlayOn}
             >
               All
@@ -429,7 +450,7 @@ export default function CommissionWithdrawalPage() {
               <button
                 key={v}
                 onClick={() => setQuick(v)}
-                className="h-8 px-3 rounded-full bg-gray-100 text-[11px] font-semibold text-gray-800"
+                className="h-8 px-3 rounded-md bg-gray-100 text-[11px] font-semibold text-gray-800"
                 disabled={overlayOn}
               >
                 {fmt(v).replace(".00", "")}
@@ -442,14 +463,14 @@ export default function CommissionWithdrawalPage() {
       {/* Method Card */}
       <div className="px-4 mt-4">
         <p className="text-[11px] font-semibold text-gray-800 mb-2">
-          Select a withdrawal method
+          Set a withdrawal method
         </p>
 
         <div className="rounded-2xl bg-white shadow-[0_1px_0_0_rgba(0,0,0,0.04)] ring-1 ring-gray-100">
           {/* Recharge Balance */}
           <button
             type="button"
-            onClick={() => setMethod("RECHARGE")}
+            onClick={() => toggleMethod("RECHARGE")}
             className="w-full flex items-center justify-between px-3.5 py-3"
             disabled={overlayOn}
           >
@@ -481,7 +502,7 @@ export default function CommissionWithdrawalPage() {
           {/* Bank Account */}
           <button
             type="button"
-            onClick={() => setMethod("BANK")}
+            onClick={() => toggleMethod("BANK")}
             className="w-full flex items-center justify-between px-3.5 py-3"
             disabled={overlayOn}
           >
@@ -497,9 +518,7 @@ export default function CommissionWithdrawalPage() {
                   {loadingBank
                     ? "Loading your saved bank…"
                     : savedBank
-                    ? `${savedBank.bank.name} · ${maskAcct(
-                        savedBank.accountNumber
-                      )}`
+                    ? "Withdraw to your bank account"
                     : "No bank set. Add one in Settings → Withdrawal Bank."}
                 </p>
               </div>
@@ -514,7 +533,7 @@ export default function CommissionWithdrawalPage() {
             />
           </button>
 
-          {/* Black info chip when Bank is selected */}
+          {/* Black account details card */}
           {method === "BANK" && savedBank && (
             <div className="px-3.5 pb-3">
               <div className="mt-1 w-full rounded-xl bg-black text-white px-4 py-3 flex items-center justify-between">
@@ -545,7 +564,7 @@ export default function CommissionWithdrawalPage() {
           )}
         </div>
 
-        {/* Tiny warning if bank not set and BANK selected */}
+        {/* warning */}
         {method === "BANK" && !savedBank && !loadingBank && (
           <p className="mt-2 text-[11px] text-rose-600">
             You need to set a withdrawal bank first (Settings → Withdrawal
@@ -587,14 +606,12 @@ export default function CommissionWithdrawalPage() {
         }`}
         aria-hidden={!sheetOpen}
       >
-        {/* Backdrop */}
         <div
           onClick={() => setSheetOpen(false)}
           className={`absolute inset-0 bg-black/50 transition-opacity ${
             sheetOpen ? "opacity-100" : "opacity-0"
           }`}
         />
-        {/* Sheet */}
         <div
           className={`absolute inset-x-0 bottom-0 bg-white rounded-t-2xl shadow-2xl
           transition-transform duration-300 ${
@@ -651,8 +668,13 @@ export default function CommissionWithdrawalPage() {
               <input
                 type="password"
                 inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={5} // ✅ hard cap in UI
                 value={pin}
-                onChange={(e) => setPin(e.target.value.replace(/[^\d]/g, ""))}
+                onChange={(e) => {
+                  const next = e.target.value.replace(/[^\d]/g, "").slice(0, 5); // ✅ hard cap in state
+                  setPin(next);
+                }}
                 placeholder="Enter your PIN"
                 className="w-full h-11 rounded-xl border border-gray-200 px-3 text-[13px] outline-none focus:ring-2 focus:ring-black"
                 aria-label="Password or PIN"
@@ -660,15 +682,28 @@ export default function CommissionWithdrawalPage() {
               />
               {pin.trim().length > 0 && pin.trim().length < 4 && (
                 <p className="mt-1 text-[11px] text-gray-500">
-                  Enter at least 4 digits.
+                  
+                </p>
+              )}
+              {pin.trim().length === 5 && (
+                <p className="mt-1 text-[11px] text-gray-400">
+                  Maximum: 5 digits.
                 </p>
               )}
             </div>
 
+            {/* Error */}
             {submitErr && (
-              <p className="mt-2 text-[12px] text-rose-600" role="alert">
-                {submitErr}
-              </p>
+              <div
+                className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-800 flex items-start gap-2"
+                role="alert"
+                aria-live="assertive"
+              >
+                <span className="mt-[2px] inline-flex h-4 w-4 items-center justify-center rounded-full bg-rose-100 text-rose-700 text-[10px] font-bold">
+                  !
+                </span>
+                <p className="flex-1">{submitErr}</p>
+              </div>
             )}
 
             <button
