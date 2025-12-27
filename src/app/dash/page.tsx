@@ -1,7 +1,7 @@
 /* app/dash/page.tsx */
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, useTransition } from "react";
+import { useState, useEffect, useMemo, useCallback, useTransition, useRef } from "react";
 import { Bell, Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -14,11 +14,14 @@ import LoadingDetails from "../../components/loaders/LoadingDetails";
 /* ✅ New logo spinner (centered, no overlay) */
 import LogoSpinner from "../../components/loaders/LogoSpinner";
 
+/* ✅ Web Push helper (from your other code) */
+import { setupWebPush } from "../../lib/push/setupPush";
+
 /* Routes */
 const SETTINGS_ROUTE = "/dash/components/settings";
 const RECHARGE_ROUTE = "/dash/recharge";
 const WITHDRAW_ROUTE = "/dash/withdraw";
-const NOTIFICATIONS_ROUTE = "/dash/notifications";
+const NOTIFICATIONS_ROUTE = "/dash/notifications"; // kept (not used by bell now)
 const LOGIN_ROUTE = "/agent-login";
 const FULL_TRANSACTIONS_ROUTE = "/dash/fulltransaction";
 
@@ -44,6 +47,7 @@ type VirtualAccount = {
   accountNumber?: string;
   accountName?: string;
 };
+
 type User = {
   firstName?: string;
   lastName?: string;
@@ -156,6 +160,10 @@ export default function MobileDashboard() {
   const [showBalance, setShowBalance] = useState(true);
   const [copied, setCopied] = useState(false);
 
+  // ✅ Push notifications UI states (added from your other code)
+  const [pushMsg, setPushMsg] = useState<string>("");
+  const [enablingPush, setEnablingPush] = useState(false);
+
   function isBareBase64Jpeg(s?: string) {
     return !!s && /^\/9j\//.test(s);
   }
@@ -184,10 +192,7 @@ export default function MobileDashboard() {
     if (!obj) return null;
 
     const direct =
-      obj.virtualAccount ||
-      obj.virtual_account ||
-      obj.virtual ||
-      obj.VirtualAccount;
+      obj.virtualAccount || obj.virtual_account || obj.virtual || obj.VirtualAccount;
 
     const normalize = (src: any): VirtualAccount | null => {
       if (!src) return null;
@@ -196,8 +201,7 @@ export default function MobileDashboard() {
       ).trim();
       if (!accountNumber) return null;
       return {
-        bankName:
-          src.bankName || src.bank || src.bank_name || src.provider || "",
+        bankName: src.bankName || src.bank || src.bank_name || src.provider || "",
         accountNumber,
         accountName: src.accountName || src.account_name || src.name || "",
       };
@@ -229,6 +233,7 @@ export default function MobileDashboard() {
       obj.vAccountNumber ||
       obj.accountNumber ||
       obj.number;
+
     if (num) {
       return {
         bankName:
@@ -321,10 +326,7 @@ export default function MobileDashboard() {
           username: userData.username,
           email: userData.email,
           balance: Number(
-            userData.balance ??
-              userData.creditBalance ??
-              userData.walletBalance ??
-              0
+            userData.balance ?? userData.creditBalance ?? userData.walletBalance ?? 0
           ),
           commission: Number(
             userData.commission ??
@@ -332,8 +334,7 @@ export default function MobileDashboard() {
               userData.commissionBalance ??
               0
           ),
-          transactions:
-            userData.transactions || userData.recentTransactions || [],
+          transactions: userData.transactions || userData.recentTransactions || [],
           notifications: userData.notifications || [],
           avatarUrl,
           isTier2,
@@ -357,10 +358,10 @@ export default function MobileDashboard() {
           try {
             j = JSON.parse(t || "{}");
           } catch {}
+
           if (r.ok) {
             const d = j?.data || {};
-            const credit =
-              Number(d.rechargeBalance ?? d.creditBalance ?? 0) || 0;
+            const credit = Number(d.rechargeBalance ?? d.creditBalance ?? 0) || 0;
             const commission = Number(d.commissionBalance ?? 0) || 0;
             if (!cancelled) {
               setCreditBalance(credit);
@@ -379,13 +380,12 @@ export default function MobileDashboard() {
             setCommissionTotal(userInfo.commission!);
         }
       } catch (err: any) {
-        if (!cancelled) {
-          setError(err?.message || "Failed to load dashboard");
-        }
+        if (!cancelled) setError(err?.message || "Failed to load dashboard");
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
+
     return () => {
       cancelled = true;
     };
@@ -408,8 +408,37 @@ export default function MobileDashboard() {
   const openSettings = () => nav(SETTINGS_ROUTE);
   const goRecharge = () => nav(RECHARGE_ROUTE);
   const goWithdraw = () => nav(WITHDRAW_ROUTE);
-  const goNotifications = () => nav(NOTIFICATIONS_ROUTE);
+  const goNotifications = () => nav(NOTIFICATIONS_ROUTE); // kept (not used by bell now)
   const goToFullTransactions = () => nav(FULL_TRANSACTIONS_ROUTE);
+
+  // ✅ Bell button now enables push notifications (copied “as-is” logic)
+  const enablePushNotifications = useCallback(async () => {
+    if (enablingPush || isPending) return;
+
+    setEnablingPush(true);
+    setPushMsg("Enabling...");
+
+    try {
+      const res = await setupWebPush();
+      if (!res.ok) {
+        const pretty =
+          res.reason === "missing-vapid"
+            ? "Missing VAPID key"
+            : res.reason === "denied"
+            ? "Permission denied"
+            : `Failed: ${res.reason}`;
+        setPushMsg(pretty);
+        return;
+      }
+
+      setPushMsg("Push enabled ✅");
+      setTimeout(() => setPushMsg(""), 2500);
+    } catch (e: any) {
+      setPushMsg(e?.message || "Failed to enable push");
+    } finally {
+      setEnablingPush(false);
+    }
+  }, [enablingPush, isPending]);
 
   const txList: Tx[] = useMemo(() => {
     const list = user?.transactions ?? [];
@@ -543,12 +572,14 @@ export default function MobileDashboard() {
                       </div>
                     </button>
 
-                    <div className="relative">
+                    {/* ✅ Bell: enable push + show status text (exact behavior) */}
+                    <div className="relative flex flex-col items-end gap-1">
                       <button
-                        onClick={goNotifications}
+                        onClick={enablePushNotifications}
                         className="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm hover:shadow-md transition-shadow disabled:opacity-60 disabled:cursor-not-allowed"
-                        aria-label="Notifications"
-                        disabled={isPending}
+                        aria-label="Enable push notifications"
+                        title="Enable push notifications"
+                        disabled={isPending || enablingPush}
                       >
                         <Bell className="w-5 h-5 text-gray-700" />
                         {notificationCount > 0 && (
@@ -557,6 +588,12 @@ export default function MobileDashboard() {
                           </span>
                         )}
                       </button>
+
+                      {!!pushMsg && (
+                        <span className="text-[10px] text-white/80 max-w-[180px] text-right">
+                          {pushMsg}
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -590,9 +627,7 @@ export default function MobileDashboard() {
                               }}
                               className="text-[#101828]"
                             >
-                              {showBalance
-                                ? NGN_FULL(creditBalance)
-                                : "₦••••"}
+                              {showBalance ? NGN_FULL(creditBalance) : "₦••••"}
                             </span>
                             <button
                               onClick={() => setShowBalance(!showBalance)}
@@ -631,7 +666,7 @@ export default function MobileDashboard() {
                       {/* Virtual Account box */}
                       <div className="mt-5 rounded-lg bg-[#E4E7EC] px-2 py-2  text-[#101828]">
                         {isTier2 && va?.accountNumber ? (
-                          <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center justify-between gap-2 relative">
                             <div className="flex flex-col gap-1">
                               <span className="text-xs font-semibold text-[#667185]">
                                 Virtual Account
@@ -729,10 +764,7 @@ export default function MobileDashboard() {
 
                   {/* Recent Transactions */}
                   <div className="px-6 py-2">
-                    <RecentTransactions
-                      items={user?.transactions ?? []}
-                      onSeeAll={goToFullTransactions}
-                    />
+                    <RecentTransactions items={txList} onSeeAll={goToFullTransactions} />
                   </div>
 
                   <BottomTabs value="home" onChange={() => {}} className="mt-8" />

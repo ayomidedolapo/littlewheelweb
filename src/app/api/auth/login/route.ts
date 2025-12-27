@@ -177,7 +177,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: "Upstream connection failed",
+          message: "Network error contacting auth server",
           details: e?.message || "fetch failed",
         },
         { status: 502 }
