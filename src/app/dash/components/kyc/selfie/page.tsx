@@ -36,25 +36,21 @@ const isDev = process.env.NODE_ENV !== "production";
 /* ---------- small helpers ---------- */
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function pickVirtualAccountFromMePayload(obj: MePayloadAny): VirtualAccount | null {
+function pickVirtualAccountFromMePayload(
+  obj: MePayloadAny
+): VirtualAccount | null {
   if (!obj) return null;
 
-  // Backend shapes can vary:
-  // - user.VirtualAccount { name, number, provider }
-  // - user.virtualAccount { accountNumber, bankName, accountName }
-  // - nested in data.user / data.data / data
-
   const direct =
-    obj.virtualAccount ||
-    obj.virtual_account ||
-    obj.virtual ||
-    obj.VirtualAccount;
+    obj.virtualAccount || obj.virtual_account || obj.virtual || obj.VirtualAccount;
 
   const normalize = (src: any): VirtualAccount | null => {
     if (!src) return null;
+
     const accountNumber = String(
       src.accountNumber || src.account_number || src.number || ""
     ).trim();
+
     if (!accountNumber) return null;
 
     return {
@@ -79,6 +75,7 @@ function pickVirtualAccountFromMePayload(obj: MePayloadAny): VirtualAccount | nu
             .toLowerCase()
             .includes("virtual") || a.isVirtual === true
       ) || null;
+
     const n = normalize(v);
     if (n) return n;
   }
@@ -141,7 +138,7 @@ async function fetchMe(): Promise<any> {
   try {
     j = JSON.parse(text || "{}");
   } catch {
-    // ignore
+    // ignore parse error
   }
 
   if (!res.ok || j?.success === false) {
@@ -231,18 +228,14 @@ function ResultSheet(props: {
             </p>
             <div className="mt-2 space-y-1">
               <p className="text-[12.5px] text-gray-700">
-                <span className="font-semibold">Bank:</span>{" "}
-                {va.bankName || "—"}
+                <span className="font-semibold">Bank:</span> {va.bankName || "—"}
               </p>
               <p className="text-[12.5px] text-gray-700">
                 <span className="font-semibold">Account No:</span>{" "}
-                <span className="font-mono tracking-wide">
-                  {va.accountNumber}
-                </span>
+                <span className="font-mono tracking-wide">{va.accountNumber}</span>
               </p>
               <p className="text-[12.5px] text-gray-700">
-                <span className="font-semibold">Name:</span>{" "}
-                {va.accountName || "—"}
+                <span className="font-semibold">Name:</span> {va.accountName || "—"}
               </p>
             </div>
           </div>
@@ -378,10 +371,12 @@ export default function TierTwoSelfiePage() {
       (video as any).playsInline = true;
       (video as any).srcObject = stream!;
       video.muted = true;
+
       const ready = () => {
         setVideoReady(true);
         video.play().catch(() => {});
       };
+
       video.onloadedmetadata = ready;
       video.oncanplay = ready;
       if ((video as any).readyState >= 2) ready();
@@ -422,6 +417,7 @@ export default function TierTwoSelfiePage() {
   async function onCapture() {
     const video = videoRef.current;
     if (!video || !videoReady) return;
+
     setProcessing(true);
     try {
       const dataUrl = captureCircleFromVideo(video);
@@ -443,13 +439,7 @@ export default function TierTwoSelfiePage() {
     rawUser?: any;
   }> {
     // A little retry because VA can be created async on backend
-    const tries = [
-      { wait: 0 },
-      { wait: 900 },
-      { wait: 1200 },
-      { wait: 1500 },
-      { wait: 1800 },
-    ];
+    const tries = [{ wait: 0 }, { wait: 900 }, { wait: 1200 }, { wait: 1500 }, { wait: 1800 }];
 
     for (let i = 0; i < tries.length; i++) {
       if (tries[i].wait) await sleep(tries[i].wait);
@@ -474,6 +464,7 @@ export default function TierTwoSelfiePage() {
         pickVirtualAccountFromMePayload(me) ||
         pickVirtualAccountFromMePayload(me?.user) ||
         pickVirtualAccountFromMePayload(me?.data);
+
       return { ok: !!va?.accountNumber, va: va || null, rawUser: me };
     } catch {
       return { ok: false, va: null };
@@ -487,10 +478,7 @@ export default function TierTwoSelfiePage() {
     setSheetDesc("Your account is ready. You can start receiving transfers.");
     setSheetOpen(true);
 
-    // auto redirect (shows sheet first)
-    setTimeout(() => {
-      router.replace("/dash");
-    }, 2200);
+    // ✅ NO auto redirect anymore
   }
 
   function openResultSheetFailed() {
@@ -502,10 +490,7 @@ export default function TierTwoSelfiePage() {
     );
     setSheetOpen(true);
 
-    // auto redirect (shows sheet first)
-    setTimeout(() => {
-      router.replace("/dash");
-    }, 2500);
+    // ✅ NO auto redirect anymore
   }
 
   /* ---------- submit to upgrade-tier ---------- */
@@ -549,14 +534,12 @@ export default function TierTwoSelfiePage() {
       const ct = res.headers.get("content-type") || "";
       const text = await res.text();
 
+      // Guard against HTML 404 page
       if (!ct.includes("application/json")) {
         throw new Error(
           res.status === 404
             ? `API route not found at ${url}. Ensure file exists at src/app/api/v1/upgrade-tier/route.ts and restart dev server.`
-            : `Unexpected non-JSON from API (${res.status}). Body starts: ${text.slice(
-                0,
-                120
-              )}...`
+            : `Unexpected non-JSON from API (${res.status}). Body starts: ${text.slice(0, 120)}...`
         );
       }
 
@@ -600,9 +583,9 @@ export default function TierTwoSelfiePage() {
   /* ---------- sheet actions ---------- */
   const closeSheet = () => setSheetOpen(false);
 
+  // ✅ Primary button now goes to /dash (NO auto redirect anywhere)
   const onSheetPrimary = () => {
-    // continue
-    router.replace("/dash/components/settings/personal");
+    router.replace("/dash");
   };
 
   const onSheetSecondary = async () => {

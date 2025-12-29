@@ -13,6 +13,7 @@ type Txn = {
   createdAt: string; // ISO
   amount: number; // negative = debit, positive = credit
   icon: "withdraw" | "commission" | "recharge";
+  status?: string; // ✅ NEW (PENDING/PROCESSED/FAILED/etc)
 };
 
 const NGN = new Intl.NumberFormat("en-NG", {
@@ -47,6 +48,26 @@ function fmtDate(iso: string) {
   } catch {
     return iso;
   }
+}
+
+/* ------------------------------ Status helpers --------------------------- */
+function normalizeStatus(s: any): string {
+  if (!s) return "";
+  const raw = String(s).trim();
+  if (!raw) return "";
+  // make it "pending", "processed", "failed", etc
+  return raw.toLowerCase().replace(/_/g, " ");
+}
+
+function statusClass(s: string) {
+  const v = (s || "").toLowerCase();
+  if (!v) return "text-slate-500";
+  if (v.includes("pending") || v.includes("processing")) return "text-amber-600";
+  if (v.includes("success") || v.includes("processed") || v.includes("completed"))
+    return "text-emerald-600";
+  if (v.includes("fail") || v.includes("rejected") || v.includes("declined"))
+    return "text-rose-600";
+  return "text-slate-500";
 }
 
 /* ------------------------------ Mappers ---------------------------------- */
@@ -92,8 +113,7 @@ function toTxn(p: any): Txn | null {
   const amountRaw = Number.isFinite(numeric) ? numeric : 0;
 
   const flow = (p.type || p.direction || p.flow || "").toString().toUpperCase();
-  const isOut =
-    flow.includes("OUT") || flow === "OUTFLOW" || flow === "DEBIT";
+  const isOut = flow.includes("OUT") || flow === "OUTFLOW" || flow === "DEBIT";
   const signedAmount = isOut ? -Math.abs(amountRaw) : Math.abs(amountRaw);
 
   const label =
@@ -117,12 +137,18 @@ function toTxn(p: any): Txn | null {
     icon = "recharge";
   }
 
+  // ✅ NEW: status from payload
+  const status = normalizeStatus(
+    p.status ?? p.transactionStatus ?? p.paymentStatus ?? p.state
+  );
+
   return {
     id: String(id),
     createdAt: String(createdAt),
     amount: signedAmount,
     type: label.toLowerCase(),
     icon,
+    status, // ✅
   };
 }
 
@@ -260,6 +286,9 @@ export default function RecentTransactions({
                 ? t.type.charAt(0).toUpperCase() + t.type.slice(1)
                 : "Transaction";
 
+              const statusText = normalizeStatus(t.status);
+              const statusTextPretty = statusText; // already "pending", "processed"...
+
               return (
                 <li key={t.id} className="py-3">
                   <div className="flex items-start justify-between gap-3">
@@ -283,7 +312,8 @@ export default function RecentTransactions({
                       </div>
                     </div>
 
-                    <div className="flex flex-col items-end gap-2 shrink-0">
+                    {/* ✅ Amount + Status (status sits right under amount like your screenshot) */}
+                    <div className="flex flex-col items-end gap-1 shrink-0">
                       <div
                         className={`text-[14px] font-semibold ${
                           isCredit ? "text-emerald-600" : "text-red-500"
@@ -291,6 +321,16 @@ export default function RecentTransactions({
                       >
                         {`${sign}${NGN.format(amountAbs)}`}
                       </div>
+
+                      {!!statusTextPretty && (
+                        <div
+                          className={`text-[12px] font-medium leading-none ${statusClass(
+                            statusTextPretty
+                          )}`}
+                        >
+                          {statusTextPretty}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </li>
