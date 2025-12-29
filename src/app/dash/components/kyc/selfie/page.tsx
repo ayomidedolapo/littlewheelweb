@@ -10,8 +10,11 @@ import {
   ScanFace,
   Smile,
   X,
+  CheckCircle2,
+  XCircle,
+  RefreshCcw,
 } from "lucide-react";
-import LogoSpinner from "../../../../../components/loaders/LogoSpinner"; // ← ✅ add your spinner
+import LogoSpinner from "../../../../../components/loaders/LogoSpinner";
 
 /* ---------- types ---------- */
 type SavedBank = {
@@ -20,7 +23,257 @@ type SavedBank = {
   accountName: string;
 };
 
+type VirtualAccount = {
+  bankName?: string;
+  accountNumber?: string;
+  accountName?: string;
+};
+
+type MePayloadAny = any;
+
 const isDev = process.env.NODE_ENV !== "production";
+
+/* ---------- small helpers ---------- */
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+function pickVirtualAccountFromMePayload(obj: MePayloadAny): VirtualAccount | null {
+  if (!obj) return null;
+
+  // Backend shapes can vary:
+  // - user.VirtualAccount { name, number, provider }
+  // - user.virtualAccount { accountNumber, bankName, accountName }
+  // - nested in data.user / data.data / data
+
+  const direct =
+    obj.virtualAccount ||
+    obj.virtual_account ||
+    obj.virtual ||
+    obj.VirtualAccount;
+
+  const normalize = (src: any): VirtualAccount | null => {
+    if (!src) return null;
+    const accountNumber = String(
+      src.accountNumber || src.account_number || src.number || ""
+    ).trim();
+    if (!accountNumber) return null;
+
+    return {
+      bankName: src.bankName || src.bank || src.bank_name || src.provider || "",
+      accountNumber,
+      accountName: src.accountName || src.account_name || src.name || "",
+    };
+  };
+
+  // 1) direct object
+  const d = normalize(direct);
+  if (d) return d;
+
+  // 2) arrays
+  const arr = obj.accounts || obj.bankAccounts || obj.bank_accounts || [];
+  if (Array.isArray(arr)) {
+    const v =
+      arr.find(
+        (a: any) =>
+          (a.type || a.kind || a.accountType || "")
+            .toString()
+            .toLowerCase()
+            .includes("virtual") || a.isVirtual === true
+      ) || null;
+    const n = normalize(v);
+    if (n) return n;
+  }
+
+  // 3) flat fields
+  const num =
+    obj.virtualAccountNumber ||
+    obj.virtual_account_number ||
+    obj.vAccountNumber ||
+    obj.accountNumber ||
+    obj.number;
+
+  if (num) {
+    return {
+      bankName:
+        obj.virtualBankName ||
+        obj.bankName ||
+        obj.bank ||
+        obj.virtual_bank_name ||
+        obj.provider ||
+        "",
+      accountNumber: String(num).trim(),
+      accountName:
+        obj.virtualAccountName ||
+        obj.accountName ||
+        obj.account_name ||
+        obj.name ||
+        "",
+    };
+  }
+
+  return null;
+}
+
+function unwrapMe(json: any) {
+  // Your examples show: { success: true, data: {...}, user: {...} }
+  // Some apps return: { user: {...} } or { data: {...} }
+  return json?.user || json?.data || json;
+}
+
+async function fetchMe(): Promise<any> {
+  const res = await fetch("/api/user/me", {
+    method: "GET",
+    cache: "no-store",
+    credentials: "include",
+  });
+
+  const ct = res.headers.get("content-type") || "";
+  const text = await res.text();
+
+  if (!ct.includes("application/json")) {
+    throw new Error(
+      res.status === 401
+        ? "Unauthorized. Please login again."
+        : `Unexpected response from /api/user/me (HTTP ${res.status}).`
+    );
+  }
+
+  let j: any = {};
+  try {
+    j = JSON.parse(text || "{}");
+  } catch {
+    // ignore
+  }
+
+  if (!res.ok || j?.success === false) {
+    throw new Error(j?.message || `Failed to fetch profile (HTTP ${res.status})`);
+  }
+
+  return unwrapMe(j);
+}
+
+/* ---------- success / failed sheet ---------- */
+function ResultSheet(props: {
+  open: boolean;
+  type: "success" | "failed";
+  title: string;
+  description?: string;
+  va?: VirtualAccount | null;
+  onClose?: () => void;
+  onPrimary?: () => void;
+  onSecondary?: () => void;
+  primaryText?: string;
+  secondaryText?: string;
+  busy?: boolean;
+}) {
+  const {
+    open,
+    type,
+    title,
+    description,
+    va,
+    onClose,
+    onPrimary,
+    onSecondary,
+    primaryText = "Continue",
+    secondaryText = "Try again",
+    busy,
+  } = props;
+
+  if (!open) return null;
+
+  const Icon = type === "success" ? CheckCircle2 : XCircle;
+
+  return (
+    <div className="fixed inset-0 z-[60]">
+      {/* backdrop */}
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/40"
+        aria-label="Close"
+      />
+      {/* sheet */}
+      <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl p-5">
+        <div className="flex items-start gap-3">
+          <span
+            className={`inline-flex h-10 w-10 items-center justify-center rounded-2xl ${
+              type === "success" ? "bg-emerald-50" : "bg-rose-50"
+            }`}
+          >
+            <Icon
+              className={`h-6 w-6 ${
+                type === "success" ? "text-emerald-600" : "text-rose-600"
+              }`}
+            />
+          </span>
+
+          <div className="flex-1 min-w-0">
+            <p className="text-[16px] font-extrabold text-gray-900">{title}</p>
+            {description && (
+              <p className="mt-1 text-[13px] text-gray-600">{description}</p>
+            )}
+          </div>
+
+          <button
+            onClick={onClose}
+            className="h-9 w-9 rounded-xl bg-gray-100 hover:bg-gray-200 inline-flex items-center justify-center"
+            aria-label="Close sheet"
+          >
+            <X className="h-5 w-5 text-gray-700" />
+          </button>
+        </div>
+
+        {/* VA preview (on success) */}
+        {type === "success" && va?.accountNumber && (
+          <div className="mt-4 rounded-2xl bg-gray-50 p-4 ring-1 ring-gray-100">
+            <p className="text-[12px] font-semibold text-gray-900">
+              Virtual Account
+            </p>
+            <div className="mt-2 space-y-1">
+              <p className="text-[12.5px] text-gray-700">
+                <span className="font-semibold">Bank:</span>{" "}
+                {va.bankName || "—"}
+              </p>
+              <p className="text-[12.5px] text-gray-700">
+                <span className="font-semibold">Account No:</span>{" "}
+                <span className="font-mono tracking-wide">
+                  {va.accountNumber}
+                </span>
+              </p>
+              <p className="text-[12.5px] text-gray-700">
+                <span className="font-semibold">Name:</span>{" "}
+                {va.accountName || "—"}
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="mt-5 grid grid-cols-2 gap-3">
+          {/* Secondary */}
+          <button
+            type="button"
+            onClick={onSecondary}
+            disabled={busy}
+            className="h-12 rounded-2xl bg-gray-100 hover:bg-gray-200 text-gray-900 font-semibold disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+          >
+            <RefreshCcw className="h-4 w-4" />
+            {secondaryText}
+          </button>
+
+          {/* Primary */}
+          <button
+            type="button"
+            onClick={onPrimary}
+            disabled={busy}
+            className="h-12 rounded-2xl bg-black hover:bg-black/90 text-white font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {primaryText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* ---------- page ---------- */
 export default function TierTwoSelfiePage() {
@@ -43,6 +296,14 @@ export default function TierTwoSelfiePage() {
   // submit
   const [submitting, setSubmitting] = useState(false);
   const canProceed = !!photo;
+
+  // result sheet
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetType, setSheetType] = useState<"success" | "failed">("failed");
+  const [sheetTitle, setSheetTitle] = useState("");
+  const [sheetDesc, setSheetDesc] = useState("");
+  const [sheetBusy, setSheetBusy] = useState(false);
+  const [vaFound, setVaFound] = useState<VirtualAccount | null>(null);
 
   // load context from sessionStorage
   useEffect(() => {
@@ -175,12 +436,85 @@ export default function TierTwoSelfiePage() {
     }
   }
 
+  /* ---------- verify VA using /api/user/me ---------- */
+  async function verifyVirtualAccount(): Promise<{
+    ok: boolean;
+    va: VirtualAccount | null;
+    rawUser?: any;
+  }> {
+    // A little retry because VA can be created async on backend
+    const tries = [
+      { wait: 0 },
+      { wait: 900 },
+      { wait: 1200 },
+      { wait: 1500 },
+      { wait: 1800 },
+    ];
+
+    for (let i = 0; i < tries.length; i++) {
+      if (tries[i].wait) await sleep(tries[i].wait);
+
+      const me = await fetchMe();
+
+      // your payload shows "data.VirtualAccount"
+      const va =
+        pickVirtualAccountFromMePayload(me) ||
+        pickVirtualAccountFromMePayload(me?.user) ||
+        pickVirtualAccountFromMePayload(me?.data);
+
+      if (va?.accountNumber) {
+        return { ok: true, va, rawUser: me };
+      }
+    }
+
+    // last read (so we return latest state)
+    try {
+      const me = await fetchMe();
+      const va =
+        pickVirtualAccountFromMePayload(me) ||
+        pickVirtualAccountFromMePayload(me?.user) ||
+        pickVirtualAccountFromMePayload(me?.data);
+      return { ok: !!va?.accountNumber, va: va || null, rawUser: me };
+    } catch {
+      return { ok: false, va: null };
+    }
+  }
+
+  function openResultSheetSuccess(va: VirtualAccount) {
+    setVaFound(va);
+    setSheetType("success");
+    setSheetTitle("Virtual account created ✅");
+    setSheetDesc("Your account is ready. You can start receiving transfers.");
+    setSheetOpen(true);
+
+    // auto redirect (shows sheet first)
+    setTimeout(() => {
+      router.replace("/dash");
+    }, 2200);
+  }
+
+  function openResultSheetFailed() {
+    setVaFound(null);
+    setSheetType("failed");
+    setSheetTitle("Virtual account not created");
+    setSheetDesc(
+      "We couldn’t confirm your virtual account yet from your profile. You can try again or continue."
+    );
+    setSheetOpen(true);
+
+    // auto redirect (shows sheet first)
+    setTimeout(() => {
+      router.replace("/dash");
+    }, 2500);
+  }
+
   /* ---------- submit to upgrade-tier ---------- */
   const onProceed = async () => {
     if (!photo) return;
 
     setSubmitting(true);
     setError(null);
+
     try {
       const payload = {
         selfieImage: photo, // data URL (JPEG)
@@ -193,7 +527,7 @@ export default function TierTwoSelfiePage() {
         accountName: bank?.accountName,
       };
 
-      // Your mounted API route: /api/v1/upgrade-tier (no "user")
+      // Your mounted API route: /api/v1/upgrade-tier
       const url = "/api/v1/upgrade-tier";
 
       if (isDev) {
@@ -215,14 +549,14 @@ export default function TierTwoSelfiePage() {
       const ct = res.headers.get("content-type") || "";
       const text = await res.text();
 
-      // Guard against HTML 404 page
       if (!ct.includes("application/json")) {
         throw new Error(
           res.status === 404
             ? `API route not found at ${url}. Ensure file exists at src/app/api/v1/upgrade-tier/route.ts and restart dev server.`
-            : `Unexpected non-JSON from API (${
-                res.status
-              }). Body starts: ${text.slice(0, 120)}...`
+            : `Unexpected non-JSON from API (${res.status}). Body starts: ${text.slice(
+                0,
+                120
+              )}...`
         );
       }
 
@@ -237,21 +571,75 @@ export default function TierTwoSelfiePage() {
         throw new Error(j?.message || text || `HTTP ${res.status}`);
       }
 
-      // success → back to Personal settings
-      router.push("/dash/components/settings/personal");
+      // ✅ After successful upgrade call, confirm VA exists via /api/user/me
+      setSheetBusy(true);
+
+      const verified = await verifyVirtualAccount();
+
+      if (isDev) {
+        console.info("[selfie] VA verify:", {
+          ok: verified.ok,
+          va: verified.va,
+        });
+      }
+
+      if (verified.ok && verified.va?.accountNumber) {
+        openResultSheetSuccess(verified.va);
+      } else {
+        openResultSheetFailed();
+      }
     } catch (e: any) {
       if (isDev) console.error("[selfie] Submit error:", e);
       setError(e?.message || "Failed to submit selfie.");
     } finally {
+      setSheetBusy(false);
       setSubmitting(false);
+    }
+  };
+
+  /* ---------- sheet actions ---------- */
+  const closeSheet = () => setSheetOpen(false);
+
+  const onSheetPrimary = () => {
+    // continue
+    router.replace("/dash/components/settings/personal");
+  };
+
+  const onSheetSecondary = async () => {
+    // retry verification only
+    try {
+      setSheetBusy(true);
+      const verified = await verifyVirtualAccount();
+      if (verified.ok && verified.va?.accountNumber) {
+        openResultSheetSuccess(verified.va);
+      } else {
+        openResultSheetFailed();
+      }
+    } finally {
+      setSheetBusy(false);
     }
   };
 
   /* ---------- UI ---------- */
   return (
     <div className="min-h-screen bg-white">
-      {/* 🔥 show your centered logo spinner while capturing/submitting */}
-      <LogoSpinner show={processing || submitting} invert />
+      {/* 🔥 show your centered logo spinner while capturing/submitting/verifying */}
+      <LogoSpinner show={processing || submitting || sheetBusy} invert />
+
+      {/* Result sheet */}
+      <ResultSheet
+        open={sheetOpen}
+        type={sheetType}
+        title={sheetTitle}
+        description={sheetDesc}
+        va={vaFound}
+        onClose={closeSheet}
+        onPrimary={onSheetPrimary}
+        onSecondary={onSheetSecondary}
+        primaryText="Continue"
+        secondaryText="Try again"
+        busy={sheetBusy}
+      />
 
       {/* Top bar */}
       <div className="sticky top-0 z-10 bg-white">
@@ -357,14 +745,14 @@ export default function TierTwoSelfiePage() {
 
         <button
           onClick={onProceed}
-          disabled={!canProceed || submitting}
+          disabled={!canProceed || submitting || sheetBusy}
           className={`mt-4 mb-8 w-full h-12 rounded-2xl text-white font-semibold ${
-            !canProceed || submitting
+            !canProceed || submitting || sheetBusy
               ? "bg-gray-300 text-gray-600 cursor-not-allowed"
               : "bg-black active:scale-[0.99]"
           }`}
         >
-          {submitting ? "Submitting…" : "Proceed"}
+          {submitting ? "Submitting…" : sheetBusy ? "Confirming…" : "Proceed"}
         </button>
       </div>
 
@@ -396,6 +784,7 @@ export default function TierTwoSelfiePage() {
                 />
               </div>
             </div>
+
             {!videoReady && (
               <p className="px-4 text-[12px] text-gray-600 mt-2">
                 Initializing camera…
@@ -414,6 +803,7 @@ export default function TierTwoSelfiePage() {
               >
                 {processing ? "Processing…" : "Capture"}
               </button>
+
               <button
                 onClick={closeCamera}
                 className="flex-1 h-11 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-900 font-semibold"

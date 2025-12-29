@@ -77,7 +77,7 @@ export default function WithdrawalSettingsPage() {
           </button>
 
           {/* Card 2: Change Withdrawal PIN */}
-          <button
+          {/* <button
             onClick={goWithdrawalPin}
             className="w-full text-left bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow px-4 py-4 disabled:opacity-60 disabled:cursor-not-allowed"
             disabled={isPending}
@@ -98,7 +98,7 @@ export default function WithdrawalSettingsPage() {
 
               <ChevronRight className="w-5 h-5 text-gray-400 ml-2" />
             </div>
-          </button>
+          </button> */}
         </div>
       </div>
     </div>

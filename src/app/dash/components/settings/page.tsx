@@ -152,7 +152,7 @@ export default function SettingsPage() {
               <RowItem
                 label="Withdrawal Bank"
                 icon={<Building2 className="h-5 w-5" />}
-                href="/dash/components/settings/bank"
+                href="/dash/components/settings/bank/details"
                 onNavigate={navigate}
                 disabled={isPending}
               />
