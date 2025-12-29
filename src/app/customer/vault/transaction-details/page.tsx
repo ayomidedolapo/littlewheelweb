@@ -99,6 +99,73 @@ type Tx = {
   vaultId?: string | null;
 };
 
+/* ---------------- skeleton ---------------- */
+
+function ReceiptSkeleton() {
+  return (
+    <div className="min-h-screen bg-[#F4F6FA] flex items-start justify-center">
+      <div className="w-full max-w-[500px] min-h-screen bg-[#F4F6FA] mt-10 md:min-h-0 md:rounded-3xl md:shadow-xl overflow-hidden">
+        <div className="relative px-2">
+          <div className="relative w-full max-w-[600px] mx-auto rounded-[28px] overflow-hidden min-h-[620px] p-4 md:p-6">
+            {/* card background pulse */}
+            <div className="absolute inset-0 bg-gray-100 animate-pulse" />
+
+            {/* content skeleton */}
+            <div className="relative z-10 px-4 md:px-5 pt-12 pb-24">
+              {/* avatar */}
+              <div className="w-full flex justify-center -mt-10 mb-2">
+                <div className="h-20 w-20 rounded-full bg-gray-200 animate-pulse ring-2 ring-gray-200" />
+              </div>
+
+              {/* title + caption */}
+              <div className="mx-auto h-5 w-56 rounded bg-gray-200 animate-pulse" />
+              <div className="mx-auto mt-2 h-3 w-72 rounded bg-gray-200 animate-pulse" />
+              <div className="mx-auto mt-2 h-4 w-24 rounded bg-gray-200 animate-pulse" />
+
+              <div className="mt-4 border-t border-gray-200" />
+
+              {/* amount chips + values */}
+              <div className="mt-4 grid grid-cols-2 gap-3 items-center">
+                <div className="h-7 w-36 rounded-full bg-gray-200 animate-pulse" />
+                <div className="ml-auto h-6 w-32 rounded bg-gray-200 animate-pulse" />
+
+                <div className="h-7 w-28 rounded-full bg-gray-200 animate-pulse" />
+                <div className="ml-auto h-6 w-32 rounded bg-gray-200 animate-pulse" />
+              </div>
+
+              {/* meta grid */}
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                {[...Array(4)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="rounded-xl border border-gray-200 bg-white/80 p-3"
+                  >
+                    <div className="h-3 w-20 rounded bg-gray-200 animate-pulse" />
+                    <div className="mt-2 h-4 w-full rounded bg-gray-200 animate-pulse" />
+                  </div>
+                ))}
+              </div>
+
+              {/* logo placeholder */}
+              <div className="absolute bottom-16 left-1/2 -translate-x-1/2">
+                <div className="h-6 w-24 rounded bg-gray-200 animate-pulse" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* footer skeleton */}
+        <div className="px-4 mt-4">
+          <div className="mx-auto h-3 w-72 rounded bg-gray-200 animate-pulse mb-2" />
+          <div className="h-12 rounded-2xl bg-gray-200 animate-pulse" />
+        </div>
+
+        <div className="h-8" />
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- component ---------------- */
 
 function TransactionDetailsPageInner() {
@@ -214,9 +281,8 @@ function TransactionDetailsPageInner() {
                 found.createdAt || found.date || found.at || Date.now()
               ).toISOString(),
               amount: Math.abs(
-                Number(
-                  found.amount ?? found.value ?? found.contribution ?? 0
-                ) || 0
+                Number(found.amount ?? found.value ?? found.contribution ?? 0) ||
+                  0
               ),
               isCredit: (() => {
                 const t = String(
@@ -243,9 +309,7 @@ function TransactionDetailsPageInner() {
                 found.customerName ||
                 found.customer?.fullName ||
                 found.customer?.name ||
-                `${customer?.firstName || ""} ${
-                  customer?.lastName || ""
-                }`.trim() ||
+                `${customer?.firstName || ""} ${customer?.lastName || ""}`.trim() ||
                 undefined,
               agentName: found.agentName || found.agent?.name || undefined,
               avatarUrl:
@@ -271,12 +335,10 @@ function TransactionDetailsPageInner() {
               isCredit: qType ? qType === "CREDIT" : true,
               ref: refShort || qRef,
               customerName:
-                `${customer?.firstName || ""} ${
-                  customer?.lastName || ""
-                }`.trim() || undefined,
+                `${customer?.firstName || ""} ${customer?.lastName || ""}`.trim() ||
+                undefined,
               agentName: undefined,
-              avatarUrl:
-                customer?.avatarUrl || customer?.profileImageUrl || null,
+              avatarUrl: customer?.avatarUrl || customer?.profileImageUrl || null,
               newBalance: undefined,
               vaultId: qVaultId,
             };
@@ -326,9 +388,7 @@ function TransactionDetailsPageInner() {
   );
   const caption = useMemo(
     () =>
-      `Your ${
-        tx?.isCredit ? "deposit" : "withdrawal"
-      } has been successfully done.`,
+      `Your ${tx?.isCredit ? "deposit" : "withdrawal"} has been successfully done.`,
     [tx?.isCredit]
   );
 
@@ -336,14 +396,17 @@ function TransactionDetailsPageInner() {
     const cid = customerId || "";
     startTransition(() =>
       router.replace(
-        `/customer/vault${
-          cid ? `?customerId=${encodeURIComponent(cid)}` : ""
-        }`
+        `/customer/vault${cid ? `?customerId=${encodeURIComponent(cid)}` : ""}`
       )
     );
   };
 
   /* ---------------- UI (centered & responsive) ---------------- */
+
+  // ✅ full skeleton loader (no “Loading…” text)
+  if (loading || !tx) {
+    return <ReceiptSkeleton />;
+  }
 
   return (
     <div
@@ -353,167 +416,147 @@ function TransactionDetailsPageInner() {
       <LogoSpinner show={isRouting} />
 
       <div className="w-full max-w-[500px] min-h-screen bg-[#F4F6FA] mt-10 md:min-h-0 md:rounded-3xl md:shadow-xl overflow-hidden">
-        {loading || !tx ? (
-          <div className="px-4">
-            <div className="flex items-center gap-2 text-sm text-gray-700 mb-3">
-              <LogoSpinner className="w-4 h-4" />
-              Loading…
-            </div>
-            <div className="h-[560px] rounded-[28px] bg-gray-100 animate-pulse" />
-            <div className="h-4" />
-            <div className="grid grid-cols-2 gap-3 px-1">
-              <div className="h-12 rounded-xl bg-gray-100 animate-pulse" />
-              <div className="h-12 rounded-xl bg-gray-100 animate-pulse" />
-            </div>
-            <div className="h-12 mt-3 rounded-2xl bg-gray-200 animate-pulse" />
-            {error && (
-              <p className="mt-4 text-center text-sm text-rose-600">{error}</p>
-            )}
-            <div className="h-8" />
-          </div>
-        ) : (
-          <>
-            {/* Receipt area — design unchanged */}
-            <div className="relative px-2">
-              <div
-                id="receipt-capture"
-                ref={receiptRef}
-                className="relative w-full max-w-[600px] mx-auto rounded-[28px] overflow-hidden min-h-[620px] p-4 md:p-6"
-              >
-                {/* Background shape */}
+        {/* Receipt area — design unchanged */}
+        <div className="relative px-2">
+          <div
+            id="receipt-capture"
+            ref={receiptRef}
+            className="relative w-full max-w-[600px] mx-auto rounded-[28px] overflow-hidden min-h-[620px] p-4 md:p-6"
+          >
+            {/* Background shape */}
+            <NextImage
+              src="/uploads/Subtract.png"
+              alt=""
+              width={1600}
+              height={1600}
+              className="absolute inset-0 w-full h-full object-contain object-center select-none pointer-events-none bg-frame"
+              priority
+              unoptimized
+              crossOrigin="anonymous"
+            />
+
+            {/* Foreground content */}
+            <div className="relative z-10 px-4 md:px-5 pt-12 pb-24">
+              {/* Avatar */}
+              <div className="w-full flex justify-center -mt-10 mb-2">
+                <div className="h-20 w-20 rounded-full overflow-hidden ring-2 ring-gray-200 bg-gray-100">
+                  {tx.avatarUrl ? (
+                    <NextImage
+                      src={tx.avatarUrl}
+                      alt="Customer"
+                      width={80}
+                      height={80}
+                      className="h-20 w-20 object-cover"
+                      unoptimized
+                      crossOrigin="anonymous"
+                    />
+                  ) : (
+                    <div className="h-20 w-20 bg-gray-200" />
+                  )}
+                </div>
+              </div>
+
+              {/* Title + caption */}
+              <h2 className="text-[18px] md:text-[20px] font-extrabold text-gray-900 text-center">
+                {title}
+              </h2>
+              <p className="text-[13px] text-gray-600 text-center mt-1">
+                {caption}
+              </p>
+
+              {/* Handle */}
+              <p className="text-base font-semibold text-center mt-2">
+                @ loluss
+              </p>
+
+              <div className="mt-4 border-t border-gray-200" />
+
+              {/* Amount chips + amounts */}
+              <div className="mt-4 grid grid-cols-2 gap-3 items-center">
+                <div>
+                  <span className="inline-flex items-center rounded-full border px-3 py-1 text-[12px] font-semibold text-rose-700 border-rose-300 bg-rose-50">
+                    {tx.isCredit ? "Amount Deposited" : "Amount Withdrawn"}
+                  </span>
+                </div>
+                <div className="text-right text-rose-600 font-bold text-lg">
+                  {tx.isCredit ? "" : "−"}
+                  {NGN(tx.amount)}
+                </div>
+
+                <div>
+                  <span className="inline-flex items-center rounded-full border px-3 py-1 text-[12px] font-semibold text-emerald-700 border-emerald-300 bg-emerald-50">
+                    New Balance
+                  </span>
+                </div>
+                <div className="text-right text-emerald-600 font-bold text-lg">
+                  {NGN(tx.newBalance ?? 0)}
+                </div>
+              </div>
+
+              {/* Meta grid */}
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="rounded-xl border border-gray-200 bg-white/80 p-3">
+                  <p className="text-[11px] text-gray-500">Customer Name</p>
+                  <p className="text-[13px] font-semibold text-gray-900 mt-0.5">
+                    {tx.customerName || "—"}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-gray-200 bg-white/80 p-3">
+                  <p className="text-[11px] text-gray-500">Time &amp; Date</p>
+                  <p className="text-[13px] font-semibold text-gray-900 mt-0.5">
+                    {dtPretty(tx.at)}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-gray-200 bg-white/80 p-3">
+                  <p className="text-[11px] text-gray-500">Ref No,</p>
+                  <p className="text-[13px] font-semibold text-gray-900 mt-0.5 break-all">
+                    {tx.ref || "—"}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-gray-200 bg-white/80 p-3">
+                  <p className="text-[11px] text-gray-500">Agent Name</p>
+                  <p className="text-[13px] font-semibold text-gray-900 mt-0.5">
+                    {tx.agentName || "—"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Logo inside Subtract */}
+              <div className="absolute bottom-16 left-1/2 -translate-x-1/2">
                 <NextImage
-                  src="/uploads/Subtract.png"
-                  alt=""
-                  width={1600}
-                  height={1600}
-                  className="absolute inset-0 w-full h-full object-contain object-center select-none pointer-events-none bg-frame"
+                  src="/uploads/logo.png"
+                  alt="Little Wheel"
+                  width={120}
+                  height={30}
+                  className="h-6 w-auto invert"
                   priority
                   unoptimized
                   crossOrigin="anonymous"
                 />
-
-                {/* Foreground content */}
-                <div className="relative z-10 px-4 md:px-5 pt-12 pb-24">
-                  {/* Avatar */}
-                  <div className="w-full flex justify-center -mt-10 mb-2">
-                    <div className="h-20 w-20 rounded-full overflow-hidden ring-2 ring-gray-200 bg-gray-100">
-                      {tx.avatarUrl ? (
-                        <NextImage
-                          src={tx.avatarUrl}
-                          alt="Customer"
-                          width={80}
-                          height={80}
-                          className="h-20 w-20 object-cover"
-                          unoptimized
-                          crossOrigin="anonymous"
-                        />
-                      ) : (
-                        <div className="h-20 w-20 bg-gray-200" />
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Title + caption */}
-                  <h2 className="text-[18px] md:text-[20px] font-extrabold text-gray-900 text-center">
-                    {title}
-                  </h2>
-                  <p className="text-[13px] text-gray-600 text-center mt-1">
-                    {caption}
-                  </p>
-
-                  {/* Handle */}
-                  <p className="text-base font-semibold text-center mt-2">
-                    @ loluss
-                  </p>
-
-                  <div className="mt-4 border-t border-gray-200" />
-
-                  {/* Amount chips + amounts */}
-                  <div className="mt-4 grid grid-cols-2 gap-3 items-center">
-                    <div>
-                      <span className="inline-flex items-center rounded-full border px-3 py-1 text-[12px] font-semibold text-rose-700 border-rose-300 bg-rose-50">
-                        {tx.isCredit ? "Amount Deposited" : "Amount Withdrawn"}
-                      </span>
-                    </div>
-                    <div className="text-right text-rose-600 font-bold text-lg">
-                      {tx.isCredit ? "" : "−"}
-                      {NGN(tx.amount)}
-                    </div>
-
-                    <div>
-                      <span className="inline-flex items-center rounded-full border px-3 py-1 text-[12px] font-semibold text-emerald-700 border-emerald-300 bg-emerald-50">
-                        New Balance
-                      </span>
-                    </div>
-                    <div className="text-right text-emerald-600 font-bold text-lg">
-                      {NGN(tx.newBalance ?? 0)}
-                    </div>
-                  </div>
-
-                  {/* Meta grid */}
-                  <div className="mt-5 grid grid-cols-2 gap-3">
-                    <div className="rounded-xl border border-gray-200 bg-white/80 p-3">
-                      <p className="text-[11px] text-gray-500">Customer Name</p>
-                      <p className="text-[13px] font-semibold text-gray-900 mt-0.5">
-                        {tx.customerName || "—"}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-gray-200 bg-white/80 p-3">
-                      <p className="text-[11px] text-gray-500">
-                        Time &amp; Date
-                      </p>
-                      <p className="text-[13px] font-semibold text-gray-900 mt-0.5">
-                        {dtPretty(tx.at)}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-gray-200 bg-white/80 p-3">
-                      <p className="text-[11px] text-gray-500">Ref No,</p>
-                      <p className="text-[13px] font-semibold text-gray-900 mt-0.5 break-all">
-                        {tx.ref || "—"}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-gray-200 bg-white/80 p-3">
-                      <p className="text-[11px] text-gray-500">Agent Name</p>
-                      <p className="text-[13px] font-semibold text-gray-900 mt-0.5">
-                        {tx.agentName || "—"}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Logo inside Subtract */}
-                  <div className="absolute bottom-16 left-1/2 -translate-x-1/2">
-                    <NextImage
-                      src="/uploads/logo.png"
-                      alt="Little Wheel"
-                      width={120}
-                      height={30}
-                      className="h-6 w-auto invert"
-                      priority
-                      unoptimized
-                      crossOrigin="anonymous"
-                    />
-                  </div>
-                </div>
               </div>
             </div>
+          </div>
+        </div>
 
-            {/* Screenshot hint + Done */}
-            <div className="px-4 mt-4">
-              <p className="text-[11px] text-gray-500 text-center mb-2">
-                To save this receipt, take a screenshot on your device.
-              </p>
+        {/* Screenshot hint + Done */}
+        <div className="px-4 mt-4">
+          <p className="text-[11px] text-gray-500 text-center mb-2">
+            To save this receipt, take a screenshot on your device.
+          </p>
 
-              <button
-                onClick={goBackToTransactions}
-                className="mt-1 w-full h-12 rounded-2xl bg-black text-white font-semibold"
-              >
-                Done
-              </button>
-            </div>
+          <button
+            onClick={goBackToTransactions}
+            className="mt-1 w-full h-12 rounded-2xl bg-black text-white font-semibold"
+          >
+            Done
+          </button>
 
-            <div className="h-8" />
-          </>
-        )}
+          {error && (
+            <p className="mt-3 text-center text-[12px] text-rose-600">{error}</p>
+          )}
+        </div>
+
+        <div className="h-8" />
       </div>
     </div>
   );
@@ -523,7 +566,7 @@ function TransactionDetailsPageInner() {
 
 export default function TransactionDetailsPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#F4F6FA]" />}>
+    <Suspense fallback={<ReceiptSkeleton />}>
       <TransactionDetailsPageInner />
     </Suspense>
   );
