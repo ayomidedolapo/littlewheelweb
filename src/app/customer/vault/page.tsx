@@ -811,7 +811,7 @@ function CustomerVaultPageInner() {
                         </div>
 
                         {t.balance !== null && t.balance !== undefined && (
-                          <div className="rounded-full bg-emerald-50 px-3 py-1 text-[12px] font-medium text-emerald-700">
+                          <div className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] w-25 font-medium text-emerald-700">
                             Balance: {formatNGNCompact(Number(t.balance))}
                           </div>
                         )}

@@ -577,7 +577,7 @@ function PersonalVaultCustomerPageInner() {
                   const q = customerId
                     ? `?customerId=${encodeURIComponent(customerId)}`
                     : "";
-                  router.push(`/customer/vault${q}`);
+                  router.push(`/customer${q}`);
                 })
               }
               className="inline-flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900 disabled:opacity-60"

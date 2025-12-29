@@ -1,7 +1,7 @@
 /* src/app/customer/vault/withdraw/page.tsx */
 "use client";
 
-import {
+import React, {
   Suspense,
   useEffect,
   useMemo,
@@ -16,6 +16,7 @@ import {
   X,
   AlertCircle,
   ChevronDown,
+  Check,
 } from "lucide-react";
 import Image from "next/image";
 import LogoSpinner from "../../../../components/loaders/LogoSpinner";
@@ -178,6 +179,9 @@ function WithdrawFromVaultPageInner() {
   const [pendingRef, setPendingRef] = useState<string>("");
   const [pendingAmt, setPendingAmt] = useState<number>(0);
 
+  // ✅ Success bottom sheet (customer withdrawal only)
+  const [successOpen, setSuccessOpen] = useState(false);
+
   const otpValue = useMemo(() => otpDigits.join(""), [otpDigits]);
 
   const focusOtpIndex = (i: number) => otpInputsRef.current[i]?.focus();
@@ -321,9 +325,10 @@ function WithdrawFromVaultPageInner() {
           typeof rawMsg === "string" &&
           rawMsg.toLowerCase().includes("withdrawal is already completed")
         ) {
+          // ✅ treat as success too
           setOtpStatus("success");
           closeOtpSheet();
-          router.push("/dash");
+          setSuccessOpen(true);
           return;
         }
 
@@ -333,9 +338,10 @@ function WithdrawFromVaultPageInner() {
         return;
       }
 
+      // ✅ SUCCESS: close OTP sheet and show success bottom sheet (no auto redirect)
       setOtpStatus("success");
       closeOtpSheet();
-      router.push("/dash");
+      setSuccessOpen(true);
     } catch (e: any) {
       setOtpStatus("error");
       setOtpError(e?.message || "Couldn’t finalize withdrawal. Please try again.");
@@ -547,14 +553,7 @@ function WithdrawFromVaultPageInner() {
     if (method !== "bank") return false;
     if (!activeBank) return false;
     return true;
-  }, [
-    numericAmount,
-    method,
-    customerId,
-    vaultId,
-    activeBank,
-    exceedsBalance,
-  ]);
+  }, [numericAmount, method, customerId, vaultId, activeBank, exceedsBalance]);
 
   const pickChip = (c: (typeof chips)[number]) => {
     if (c === "All") setAmount(String(balance || 0));
@@ -889,8 +888,7 @@ function WithdrawFromVaultPageInner() {
                       ) : (
                         <div className="rounded-xl border border-dashed border-gray-400 px-4 py-3 text-[12px] text-gray-700 bg-gray-50">
                           No withdrawal bank set for you yet. Go to{" "}
-                          <strong>Settings → Withdrawal Bank</strong> to add
-                          one.
+                          <strong>Settings → Withdrawal Bank</strong> to add one.
                         </div>
                       )}
                     </div>
@@ -1171,6 +1169,48 @@ function WithdrawFromVaultPageInner() {
         </div>
       </div>
 
+      {/* ===== Success Bottom Sheet (Customer withdrawal only) ===== */}
+      <div
+        className={`fixed inset-0 z-[70] ${
+          successOpen ? "pointer-events-auto" : "pointer-events-none"
+        }`}
+      >
+        <div
+          className={`absolute inset-0 bg-black/60 transition-opacity ${
+            successOpen ? "opacity-100" : "opacity-0"
+          }`}
+          onClick={() => setSuccessOpen(false)}
+        />
+        <div
+          className={`absolute left-0 right-0 bottom-0 transition-transform duration-300 ${
+            successOpen ? "translate-y-0" : "translate-y-full"
+          }`}
+        >
+          <div className="mx-auto w-full max-w-sm bg-white rounded-t-3xl p-8 shadow-2xl">
+            <div className="mx-auto w-16 h-16 rounded-full bg-green-50 flex items-center justify-center mb-6">
+              <Check className="w-8 h-8 text-green-500" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 text-center mb-2">
+              Withdrawal Submitted
+            </h3>
+            <p className="text-sm text-gray-600 text-center mb-6">
+              We’ve received your confirmation.
+            </p>
+            <button
+              onClick={() => {
+                setSuccessOpen(false);
+                const q = new URLSearchParams();
+                if (customerId) q.set("customerId", customerId);
+                router.push(`/customer/vault?${q.toString()}`);
+              }}
+              className="w-full h-12 rounded-2xl bg-black text-white font-semibold hover:bg-black/90"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* ===== Customer bank bottom sheet ===== */}
       {customerId && (
         <CustomerBankSheet
@@ -1438,6 +1478,7 @@ function CustomerBankSheet({
           <label className="block text-[12px] text-gray-700 mb-1">
             Bank name
           </label>
+
           <button
             type="button"
             className="w-full h-11 px-3 rounded-xl border border-gray-200 text-left text-[13px] flex items-center justify-between"
