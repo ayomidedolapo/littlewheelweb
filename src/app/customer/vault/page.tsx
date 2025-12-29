@@ -525,15 +525,16 @@ function CustomerVaultPageInner() {
         <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-3xl md:shadow-xl overflow-hidden">
           {/* Header */}
           <div className="px-4 pt-4 pb-2">
-            <button
-              onClick={() => startTransition(() => router.back())}
-              className="inline-flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900"
-              disabled={navDisabled}
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back
-            </button>
-          </div>
+  <button
+    onClick={() => startTransition(() => router.push("/customer"))}
+    className="inline-flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900"
+    disabled={navDisabled}
+  >
+    <ArrowLeft className="h-4 w-4" />
+    Back
+  </button>
+</div>
+
 
           {/* HERO */}
           <div className="px-4 relative">
