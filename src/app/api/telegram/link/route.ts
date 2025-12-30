@@ -1,6 +1,16 @@
 /* app/api/telegram/link/route.ts */
 import { NextResponse } from "next/server";
 
+function normalizeBackendBase(raw: string) {
+  let b = String(raw || "").trim();
+  b = b.replace(/\/+$/, ""); // remove trailing slashes
+
+  // If env already ends with /v1, strip it to avoid /v1/v1
+  b = b.replace(/\/v1$/i, "");
+
+  return b;
+}
+
 export async function POST(req: Request) {
   try {
     const { token, authToken } = (await req.json()) as {
@@ -21,19 +31,22 @@ export async function POST(req: Request) {
       );
     }
 
-    const base =
+    const baseRaw =
       process.env.BACKEND_API_URL ||
       process.env.BACKEND_URL ||
       process.env.NEXT_PUBLIC_BACKEND_API_URL;
 
-    if (!base) {
+    if (!baseRaw) {
       return NextResponse.json(
         { success: false, message: "Server misconfig: BACKEND_API_URL not set" },
         { status: 500 }
       );
     }
 
-    const url = `${base.replace(/\/$/, "")}/v1/agent/telegram/link`;
+    const base = normalizeBackendBase(baseRaw);
+
+    // ✅ Always append /v1 exactly once here
+    const url = `${base}/v1/agent/telegram/link`;
 
     const upstream = await fetch(url, {
       method: "POST",
@@ -46,7 +59,7 @@ export async function POST(req: Request) {
     });
 
     const text = await upstream.text().catch(() => "");
-    // pass-through response (JSON if possible)
+
     try {
       const json = JSON.parse(text || "{}");
       return NextResponse.json(json, { status: upstream.status });
@@ -58,10 +71,7 @@ export async function POST(req: Request) {
     }
   } catch (e: any) {
     return NextResponse.json(
-      {
-        success: false,
-        message: e?.message || "Failed to link Telegram",
-      },
+      { success: false, message: e?.message || "Failed to link Telegram" },
       { status: 500 }
     );
   }
