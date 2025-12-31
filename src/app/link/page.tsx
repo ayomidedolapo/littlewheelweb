@@ -76,8 +76,7 @@ function TelegramLinkLogin() {
         const gen =
           typeof crypto !== "undefined" && "randomUUID" in crypto
             ? crypto.randomUUID()
-            : Math.random().toString(36).slice(0, 10) +
-              Date.now().toString(36);
+            : Math.random().toString(36).slice(0, 10) + Date.now().toString(36);
         localStorage.setItem("lw_device_token", gen);
         setDeviceToken(gen);
       }
@@ -176,18 +175,18 @@ function TelegramLinkLogin() {
         return;
       }
 
-      // keep existing cookie/session pattern
+      // ✅ Persist token as cookies (server will use it for Bearer)
       await persistAuthCookie(authToken);
       try {
         localStorage.setItem("authToken", authToken);
         localStorage.setItem("lw_token", authToken);
       } catch {}
 
-      // 2) Link
+      // 2) Link (send ONLY the link token; server reads Bearer from cookie)
       const linkRes = await fetch("/api/telegram/link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: tgLinkToken, authToken }),
+        body: JSON.stringify({ token: tgLinkToken }),
       });
 
       const linkRaw = await linkRes.text().catch(() => "");
@@ -217,37 +216,32 @@ function TelegramLinkLogin() {
     }
   };
 
-  // invalid link screen (no button)
   if (!tgLinkToken) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
         <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl p-6">
           <h1 className="text-lg font-bold text-gray-900 mb-2">Invalid link</h1>
           <p className="text-sm text-gray-600">
-            This link is missing a token. Please go back to Telegram and
-            generate a new link.
+            This link is missing a token. Please go back to Telegram and generate a new link.
           </p>
         </div>
       </div>
     );
   }
 
-  // success screen (no button)
   if (linked) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
         <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl p-6">
           <h1 className="text-lg font-bold text-gray-900 mb-2">Linked ✅</h1>
           <p className="text-sm text-gray-600">
-            Your Telegram account has been linked successfully. Please return to
-            Telegram to continue.
+            Your Telegram account has been linked successfully. Please return to Telegram to continue.
           </p>
         </div>
       </div>
     );
   }
 
-  // main login+link UI (unchanged styling)
   return (
     <div
       className="min-h-screen bg-gray-100 flex items-center justify-center p-0 md:p-4"
@@ -286,8 +280,7 @@ function TelegramLinkLogin() {
               )}
             </div>
             <span className="text-md font-bold text-gray-800">
-              Hi{lastName ? `, ${lastName}` : ""}{" "}
-              <span className="text-xl">👋</span>
+              Hi{lastName ? `, ${lastName}` : ""} <span className="text-xl">👋</span>
             </span>
           </div>
 
@@ -297,7 +290,7 @@ function TelegramLinkLogin() {
               role="alert"
               aria-live="assertive"
             >
-              <div className="mt-[px  ] h-4 w-4 rounded-full bg-rose-100 flex items-center justify-center text-[10px] font-bold">
+              <div className="h-4 w-4 rounded-full bg-rose-100 flex items-center justify-center text-[10px] font-bold">
                 !
               </div>
               <p className="flex-1 leading-[1.3]">{err}</p>
@@ -339,9 +332,7 @@ function TelegramLinkLogin() {
                     pattern="[0-9]*"
                     disabled={sending}
                     className="flex-1 bg-transparent text-gray-700 placeholder-gray-400 outline-none text-sm disabled:cursor-not-allowed"
-                    onKeyDown={(e) =>
-                      !sending && e.key === "Enter" && handleLoginAndLink()
-                    }
+                    onKeyDown={(e) => !sending && e.key === "Enter" && handleLoginAndLink()}
                     aria-invalid={!phoneValid}
                   />
                 </div>
@@ -366,9 +357,7 @@ function TelegramLinkLogin() {
                   setPassword(v);
                 }}
                 className="w-full bg-gray-100 rounded-xl px-3 py-3 text-gray-700 placeholder-gray-400 outline-none pr-10 text-sm tracking-widest disabled:cursor-not-allowed"
-                onKeyDown={(e) =>
-                  !sending && e.key === "Enter" && handleLoginAndLink()
-                }
+                onKeyDown={(e) => !sending && e.key === "Enter" && handleLoginAndLink()}
                 aria-invalid={!pinValid}
                 disabled={sending}
               />
@@ -379,11 +368,7 @@ function TelegramLinkLogin() {
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 disabled:text-gray-300"
                 aria-label={showPassword ? "Hide PIN" : "Show PIN"}
               >
-                {showPassword ? (
-                  <EyeOff className="w-4 h-4" />
-                ) : (
-                  <Eye className="w-4 h-4" />
-                )}
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
           </div>

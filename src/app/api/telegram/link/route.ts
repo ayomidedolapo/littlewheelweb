@@ -1,33 +1,31 @@
 /* app/api/telegram/link/route.ts */
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 
 function normalizeBackendBase(raw: string) {
   let b = String(raw || "").trim();
   b = b.replace(/\/+$/, ""); // remove trailing slashes
-
-  // If env already ends with /v1, strip it to avoid /v1/v1
-  b = b.replace(/\/v1$/i, "");
-
+  b = b.replace(/\/v1$/i, ""); // prevent /v1/v1
   return b;
+}
+
+async function readJsonSafe(res: Response) {
+  const text = await res.text().catch(() => "");
+  try {
+    return { ok: true as const, json: JSON.parse(text || "{}"), text };
+  } catch {
+    return { ok: false as const, json: null, text };
+  }
 }
 
 export async function POST(req: Request) {
   try {
-    const { token, authToken } = (await req.json()) as {
-      token?: string;
-      authToken?: string;
-    };
+    const { token } = (await req.json()) as { token?: string };
 
     if (!token || typeof token !== "string") {
       return NextResponse.json(
         { success: false, message: "Missing token" },
         { status: 400 }
-      );
-    }
-    if (!authToken || typeof authToken !== "string") {
-      return NextResponse.json(
-        { success: false, message: "Missing authToken" },
-        { status: 401 }
       );
     }
 
@@ -43,35 +41,55 @@ export async function POST(req: Request) {
       );
     }
 
-    const base = normalizeBackendBase(baseRaw);
+    // ✅ Read bearer from cookies set by /api/auth/persist (preferred)
+    const jar = cookies();
+    const bearer =
+      jar.get("lw_token")?.value || jar.get("lw_auth")?.value || "";
 
-    // ✅ Always append /v1 exactly once here
+    if (!bearer) {
+      return NextResponse.json(
+        { success: false, message: "Not authenticated (missing lw_token cookie)" },
+        { status: 401 }
+      );
+    }
+
+    const base = normalizeBackendBase(baseRaw);
     const url = `${base}/v1/agent/telegram/link`;
+
+    // ✅ Add timeout so you don’t get random long hangs
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
 
     const upstream = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${authToken}`,
+        Authorization: `Bearer ${bearer}`,
       },
       body: JSON.stringify({ token }),
       cache: "no-store",
-    });
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timer));
 
-    const text = await upstream.text().catch(() => "");
+    const parsed = await readJsonSafe(upstream);
 
-    try {
-      const json = JSON.parse(text || "{}");
-      return NextResponse.json(json, { status: upstream.status });
-    } catch {
-      return new NextResponse(text, {
-        status: upstream.status,
-        headers: { "Content-Type": "text/plain" },
-      });
+    if (parsed.ok) {
+      return NextResponse.json(parsed.json, { status: upstream.status });
     }
+
+    return new NextResponse(parsed.text || "", {
+      status: upstream.status,
+      headers: { "Content-Type": "text/plain" },
+    });
   } catch (e: any) {
+    const isAbort = e?.name === "AbortError";
     return NextResponse.json(
-      { success: false, message: e?.message || "Failed to link Telegram" },
+      {
+        success: false,
+        message: isAbort
+          ? "Upstream timeout (15s) while linking Telegram"
+          : e?.message || "Failed to link Telegram",
+      },
       { status: 500 }
     );
   }
