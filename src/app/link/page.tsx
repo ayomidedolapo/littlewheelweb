@@ -235,7 +235,7 @@ function TelegramLinkLogin() {
         <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl p-6">
           <h1 className="text-lg font-bold text-gray-900 mb-2">Linked ✅</h1>
           <p className="text-sm text-gray-600">
-            Your Telegram account has been linked successfully. Please return to Telegram to continue.
+            Your Telegram account has been linked successfully. Please return to Telegram to proceed.
           </p>
         </div>
       </div>
