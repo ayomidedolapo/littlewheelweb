@@ -7,12 +7,37 @@ import Fortress from "../../../public/uploads/fortress";
 import NDIC from "../../../public/uploads/ndic";
 import Image from "next/image";
 import { useState } from "react";
+import Script from "next/script";
 
 export default function HomeScreen() {
   const [showVideo, setShowVideo] = useState(false);
 
   return (
     <div id="home">
+      {/* ✅ Organization Schema (JSON-LD) */}
+      <Script
+        id="littlewheel-org-schema"
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Organization",
+            name: "Little Wheel",
+            legalName: "Little Wheel Tech Ltd",
+            url: "https://littlewheel.app",
+            logo: "https://littlewheel.app/logo.png",
+            description:
+              "Little Wheel is a fintech company that enables daily savings for commercial motorists, traders, and artisans through a secure agent-based network. Agents use the Little Wheel Agent App to digitally manage customer transactions, eliminating paper records and manual calculations.",
+            sameAs: [
+              "https://www.linkedin.com/company/littlewheelhq",
+              "https://twitter.com/littlewheelhq",
+              "https://facebook.com/littlewheelhq",
+              "https://www.instagram.com/little_wheel_hq",
+            ],
+          }),
+        }}
+      />
+
       {/* Background section - stops at logos */}
       <div className="bg-[url('/uploads/vector.jpg')] bg-contain bg-center text-white text-center p-6 md:p-10 space-y-10 md:space-y-26">
         <div className="space-y-8">
@@ -49,9 +74,7 @@ export default function HomeScreen() {
 
         {/* Logos section - Desktop unchanged, mobile hidden */}
         {/* Desktop - original size logos (UNCHANGED) */}
-        <div className="">
-          
-        </div>
+        <div className=""></div>
       </div>
 
       {/* How the Little Wheel Agent App Works Section */}
@@ -73,7 +96,6 @@ export default function HomeScreen() {
             <div className="bg-gray-900 rounded-lg sm:rounded-xl px-4 sm:px-5 md:px-6 lg:px-8 py-4 sm:py-5 lg:py-4">
               <div className="flex items-center">
                 <div className="w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 lg:w-10 lg:h-10 bg-white rounded-full flex items-center justify-center mr-3 sm:mr-4 lg:mr-3 flex-shrink-0">
-                  {/* Replace with your image component */}
                   <Image
                     src="/uploads/Emojis.png"
                     alt="Sign Up"
@@ -98,7 +120,6 @@ export default function HomeScreen() {
             <div className="bg-gray-900 rounded-lg sm:rounded-xl px-4 sm:px-5 md:px-6 lg:px-8 py-4 sm:py-5 lg:py-4">
               <div className="flex items-center">
                 <div className="w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 lg:w-10 lg:h-10 bg-white rounded-full flex items-center justify-center mr-3 sm:mr-4 lg:mr-3 flex-shrink-0">
-                  {/* Replace with your image component */}
                   <Image
                     src="/uploads/Emojis1.png"
                     alt="Make Contributions"
@@ -122,7 +143,6 @@ export default function HomeScreen() {
             <div className="bg-gray-900 rounded-lg sm:rounded-xl px-4 sm:px-5 md:px-6 lg:px-8 py-4 sm:py-5 lg:py-4">
               <div className="flex items-center">
                 <div className="w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 lg:w-10 lg:h-10 bg-white rounded-full flex items-center justify-center mr-3 sm:mr-4 lg:mr-3 flex-shrink-0">
-                  {/* Replace with your image component */}
                   <Image
                     src="/uploads/Confetti Ball.png"
                     alt="Instant Deposit"
@@ -151,23 +171,20 @@ export default function HomeScreen() {
         <div className="relative w-full max-w-4xl aspect-video sm:max-w-2xl md:max-w-3xl lg:max-w-4xl rounded-lg overflow-hidden shadow-lg cursor-pointer group">
           {!showVideo ? (
             <>
-              {/* Thumbnail image */}
               <Image
                 src="/uploads/frame.png"
                 alt="Little Wheel - Build Wealth Little by Little"
-                width={500} // placeholder value, adjust based on actual image
-                height={500} // placeholder value, adjust based on actual image
+                width={500}
+                height={500}
                 className="w-full h-full object-contain"
               />
 
-              {/* Click handler to show video */}
               <div
                 className="absolute inset-0"
                 onClick={() => setShowVideo(true)}
               />
             </>
           ) : (
-            // Embedded video with no controls, title, or YouTube branding
             <iframe
               src="https://www.youtube.com/embed/bznC8lDH3Fs?start=17&autoplay=1&rel=0&modestbranding=1&controls=0&showinfo=0&fs=0&cc_load_policy=0&iv_load_policy=3&disablekb=1"
               title="YouTube video player"
