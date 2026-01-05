@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 const API_BASE = (process.env.BACKEND_API_URL || "").replace(/\/+$/, "");
 const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS ?? 45000);
-const ROUTE_REV = "withdraw-finalize-R4";
+const ROUTE_REV = "withdraw-finalize-R5";
 
 const finalizePath = (id: string, vaultId: string) =>
   `/agent/customers/${encodeURIComponent(id)}/vaults/${encodeURIComponent(
@@ -66,6 +66,37 @@ function j(body: any, status = 200) {
   return r;
 }
 
+/* ========== Mode normalization ========== */
+type Mode = "FACIAL" | "OTP";
+
+function normalizeMode(raw: any): Mode | "" {
+  const v = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+  if (!v) return "";
+  if (["facial", "face", "selfie", "photo", "image"].includes(v)) return "FACIAL";
+  if (["otp", "pin", "code"].includes(v)) return "OTP";
+  // also accept already-uppercased enums
+  if (v === "facial".toLowerCase()) return "FACIAL";
+  if (v === "otp".toLowerCase()) return "OTP";
+  return "";
+}
+
+function pickSelfie(body: any): string {
+  return (
+    body?.selfieImageURL ||
+    body?.selfieImageUrl ||
+    body?.selfieImage ||
+    body?.image ||
+    body?.photo ||
+    body?.faceImage ||
+    ""
+  );
+}
+
+function pickOtp(body: any): string {
+  const v = body?.otp ?? body?.pin ?? body?.code ?? "";
+  return String(v || "");
+}
+
 /* ========== POST ========== */
 export async function POST(
   req: NextRequest,
@@ -97,22 +128,19 @@ export async function POST(
       return j({ ok: false, message: "Invalid JSON body" }, 400);
     }
 
-    /* -------- STRICT MODE VALIDATION -------- */
-    let mode = typeof body.mode === "string" ? body.mode.toLowerCase().trim() : "";
+    /* -------- Determine mode -------- */
+    let mode: Mode | "" =
+      normalizeMode(body?.mode) ||
+      normalizeMode(body?.verificationMode) ||
+      normalizeMode(body?.withdrawalVerificationMode);
 
-    const hasSelfie =
-      body.selfieImageURL ||
-      body.selfieImage ||
-      body.image ||
-      body.photo ||
-      body.faceImage;
+    const selfie = pickSelfie(body);
+    const otp = pickOtp(body);
 
-    const hasOtp = body.otp || body.pin || body.code;
-
-    // Determine correct mode
+    // infer mode if not provided
     if (!mode) {
-      if (hasSelfie && !hasOtp) mode = "facial";
-      else if (hasOtp && !hasSelfie) mode = "otp";
+      if (selfie && !otp) mode = "FACIAL";
+      else if (otp && !selfie) mode = "OTP";
     }
 
     if (!mode) {
@@ -120,27 +148,50 @@ export async function POST(
         {
           ok: false,
           message: "Select a withdrawal verification mode",
-          hint: "Send mode: 'facial' or 'otp'."
+          hint:
+            "Send one of: mode / verificationMode / withdrawalVerificationMode = 'FACIAL'|'OTP', plus selfieImageURL or otp.",
         },
-        401
+        400
       );
     }
 
-    /* -------- Normalize fields for backend -------- */
-    const normalizedBody: any = { mode };
+    /* -------- Build payload (send what backend might expect) -------- */
+    const normalizedBody: any = {
+      // send all likely keys so backend always receives one it understands
+      mode,
+      verificationMode: mode,
+      withdrawalVerificationMode: mode,
+    };
 
-    if (mode === "facial") {
-      normalizedBody.selfieImageURL =
-        body.selfieImageURL ||
-        body.selfieImage ||
-        body.image ||
-        body.photo ||
-        body.faceImage ||
-        "";
+    if (mode === "FACIAL") {
+      const img = selfie;
+      if (!img) {
+        return j(
+          {
+            ok: false,
+            message: "Selfie image is required for facial verification",
+            hint: "Send selfieImageURL (or selfieImage/image/photo/faceImage).",
+          },
+          400
+        );
+      }
+
+      normalizedBody.selfieImageURL = img;
+      normalizedBody.selfieImageUrl = img; // some backends use camelCase Url
     }
 
-    if (mode === "otp") {
-      normalizedBody.otp = String(body.otp || body.pin || body.code || "");
+    if (mode === "OTP") {
+      if (!otp) {
+        return j(
+          {
+            ok: false,
+            message: "OTP is required for OTP verification",
+            hint: "Send otp (or pin/code).",
+          },
+          400
+        );
+      }
+      normalizedBody.otp = otp;
     }
 
     const upstreamUrl = `${API_BASE}${finalizePath(id, vaultId)}`;
@@ -156,41 +207,30 @@ export async function POST(
           Accept: "application/json",
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
-          "x-lw-auth": `Bearer ${token}`
+          "x-lw-auth": `Bearer ${token}`,
         },
         body: JSON.stringify(normalizedBody),
         cache: "no-store",
-        signal: ac.signal
+        signal: ac.signal,
       });
 
       const ct = upstream.headers.get("content-type") || "";
+      const text = await upstream.text().catch(() => "");
 
-      if (!upstream.ok && ct.includes("application/json")) {
-        const payload = await upstream.json().catch(() => ({}));
-
-        return j(
-          {
-            ok: false,
-            message:
-              payload?.message ||
-              payload?.error ||
-              (upstream.status === 422 ? "Validation failed" : `HTTP ${upstream.status}`),
-            upstreamStatus: upstream.status,
-            upstreamErrors: payload?.errors || payload?.details
-          },
-          upstream.status
-        );
-      }
-
+      // always try to return JSON if possible
       if (ct.includes("application/json")) {
-        const json = await upstream.json().catch(() => ({}));
+        let json: any = {};
+        try {
+          json = JSON.parse(text || "{}");
+        } catch {
+          json = { ok: upstream.ok, raw: text };
+        }
         return j(json, upstream.status);
       }
 
-      const text = await upstream.text().catch(() => "");
       return new NextResponse(text, {
         status: upstream.status,
-        headers: { "Content-Type": ct || "text/plain; charset=utf-8" }
+        headers: { "Content-Type": ct || "text/plain; charset=utf-8" },
       });
     } finally {
       clearTimeout(timeout);
@@ -202,7 +242,7 @@ export async function POST(
         ok: false,
         message: aborted
           ? `Upstream timeout after ${TIMEOUT_MS}ms`
-          : err?.message || "Proxy error"
+          : err?.message || "Proxy error",
       },
       aborted ? 504 : 502
     );

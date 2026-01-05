@@ -219,11 +219,14 @@ function FaceCapturePageInner() {
     try {
       setSubmitting(true);
 
+      // ✅ FIX: explicitly send verification mode (backend expects it)
       const payload: Record<string, any> = {
+        mode: "FACIAL",
+        verificationMode: "FACIAL",
+        withdrawalVerificationMode: "FACIAL",
+
         selfieImageURL: img,
-        selfieImage: img,
-        image: img,
-        photo: img,
+
         ...(ref ? { reference: ref, referenceId: ref } : {}),
         ...(amount ? { amount: String(amount) } : {}),
       };

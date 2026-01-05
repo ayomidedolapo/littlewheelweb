@@ -42,7 +42,7 @@ export default function HomeScreen() {
       <div className="bg-[url('/uploads/vector.jpg')] bg-contain bg-center text-white text-center p-6 md:p-10 space-y-10 md:space-y-26">
         <div className="space-y-8">
           <div className="space-y-8 p-8">
-            <h1 className="text-2xl sm:text-4xl md:text-8xl font-calsans">
+            <h1 className="text-2xl sm:text-4xl md:text-8xl font-aeonikbold">
               SAVING SOLUTIONS BUILT FOR NIGERIA&apos;S INFORMAL SECTOR
             </h1>
             <p className="text-[#F7F9FC] text-xs md:text-2xl leading-relaxed">
