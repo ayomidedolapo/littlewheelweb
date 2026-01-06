@@ -13,96 +13,24 @@ import Script from "next/script";
 // Fonts (unchanged)
 const inter18pt = localFont({
   src: [
-    {
-      path: "../fonts/inter/Inter_18pt-Black.ttf",
-      weight: "900",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_18pt-BlackItalic.ttf",
-      weight: "900",
-      style: "italic",
-    },
-    {
-      path: "../fonts/inter/Inter_18pt-Bold.ttf",
-      weight: "700",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_18pt-BoldItalic.ttf",
-      weight: "700",
-      style: "italic",
-    },
-    {
-      path: "../fonts/inter/Inter_18pt-ExtraBold.ttf",
-      weight: "800",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_18pt-ExtraBoldItalic.ttf",
-      weight: "800",
-      style: "italic",
-    },
-    {
-      path: "../fonts/inter/Inter_18pt-ExtraLight.ttf",
-      weight: "200",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_18pt-ExtraLightItalic.ttf",
-      weight: "200",
-      style: "italic",
-    },
-    {
-      path: "../fonts/inter/Inter_18pt-Italic.ttf",
-      weight: "400",
-      style: "italic",
-    },
-    {
-      path: "../fonts/inter/Inter_18pt-Light.ttf",
-      weight: "300",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_18pt-LightItalic.ttf",
-      weight: "300",
-      style: "italic",
-    },
-    {
-      path: "../fonts/inter/Inter_18pt-Medium.ttf",
-      weight: "500",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_18pt-MediumItalic.ttf",
-      weight: "500",
-      style: "italic",
-    },
-    {
-      path: "../fonts/inter/Inter_18pt-Regular.ttf",
-      weight: "400",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_18pt-SemiBold.ttf",
-      weight: "600",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_18pt-SemiBoldItalic.ttf",
-      weight: "600",
-      style: "italic",
-    },
-    {
-      path: "../fonts/inter/Inter_18pt-Thin.ttf",
-      weight: "100",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_18pt-ThinItalic.ttf",
-      weight: "100",
-      style: "italic",
-    },
+    { path: "../fonts/inter/Inter_18pt-Black.ttf", weight: "900", style: "normal" },
+    { path: "../fonts/inter/Inter_18pt-BlackItalic.ttf", weight: "900", style: "italic" },
+    { path: "../fonts/inter/Inter_18pt-Bold.ttf", weight: "700", style: "normal" },
+    { path: "../fonts/inter/Inter_18pt-BoldItalic.ttf", weight: "700", style: "italic" },
+    { path: "../fonts/inter/Inter_18pt-ExtraBold.ttf", weight: "800", style: "normal" },
+    { path: "../fonts/inter/Inter_18pt-ExtraBoldItalic.ttf", weight: "800", style: "italic" },
+    { path: "../fonts/inter/Inter_18pt-ExtraLight.ttf", weight: "200", style: "normal" },
+    { path: "../fonts/inter/Inter_18pt-ExtraLightItalic.ttf", weight: "200", style: "italic" },
+    { path: "../fonts/inter/Inter_18pt-Italic.ttf", weight: "400", style: "italic" },
+    { path: "../fonts/inter/Inter_18pt-Light.ttf", weight: "300", style: "normal" },
+    { path: "../fonts/inter/Inter_18pt-LightItalic.ttf", weight: "300", style: "italic" },
+    { path: "../fonts/inter/Inter_18pt-Medium.ttf", weight: "500", style: "normal" },
+    { path: "../fonts/inter/Inter_18pt-MediumItalic.ttf", weight: "500", style: "italic" },
+    { path: "../fonts/inter/Inter_18pt-Regular.ttf", weight: "400", style: "normal" },
+    { path: "../fonts/inter/Inter_18pt-SemiBold.ttf", weight: "600", style: "normal" },
+    { path: "../fonts/inter/Inter_18pt-SemiBoldItalic.ttf", weight: "600", style: "italic" },
+    { path: "../fonts/inter/Inter_18pt-Thin.ttf", weight: "100", style: "normal" },
+    { path: "../fonts/inter/Inter_18pt-ThinItalic.ttf", weight: "100", style: "italic" },
   ],
   display: "swap",
   variable: "--font-inter-18pt",
@@ -110,96 +38,24 @@ const inter18pt = localFont({
 
 const inter24pt = localFont({
   src: [
-    {
-      path: "../fonts/inter/Inter_24pt-Black.ttf",
-      weight: "900",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_24pt-BlackItalic.ttf",
-      weight: "900",
-      style: "italic",
-    },
-    {
-      path: "../fonts/inter/Inter_24pt-Bold.ttf",
-      weight: "700",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_24pt-BoldItalic.ttf",
-      weight: "700",
-      style: "italic",
-    },
-    {
-      path: "../fonts/inter/Inter_24pt-ExtraBold.ttf",
-      weight: "800",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_24pt-ExtraBoldItalic.ttf",
-      weight: "800",
-      style: "italic",
-    },
-    {
-      path: "../fonts/inter/Inter_24pt-ExtraLight.ttf",
-      weight: "200",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_24pt-ExtraLightItalic.ttf",
-      weight: "200",
-      style: "italic",
-    },
-    {
-      path: "../fonts/inter/Inter_24pt-Italic.ttf",
-      weight: "400",
-      style: "italic",
-    },
-    {
-      path: "../fonts/inter/Inter_24pt-Light.ttf",
-      weight: "300",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_24pt-LightItalic.ttf",
-      weight: "300",
-      style: "italic",
-    },
-    {
-      path: "../fonts/inter/Inter_24pt-Medium.ttf",
-      weight: "500",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_24pt-MediumItalic.ttf",
-      weight: "500",
-      style: "italic",
-    },
-    {
-      path: "../fonts/inter/Inter_24pt-Regular.ttf",
-      weight: "400",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_24pt-SemiBold.ttf",
-      weight: "600",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_24pt-SemiBoldItalic.ttf",
-      weight: "600",
-      style: "italic",
-    },
-    {
-      path: "../fonts/inter/Inter_24pt-Thin.ttf",
-      weight: "100",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_24pt-ThinItalic.ttf",
-      weight: "100",
-      style: "italic",
-    },
+    { path: "../fonts/inter/Inter_24pt-Black.ttf", weight: "900", style: "normal" },
+    { path: "../fonts/inter/Inter_24pt-BlackItalic.ttf", weight: "900", style: "italic" },
+    { path: "../fonts/inter/Inter_24pt-Bold.ttf", weight: "700", style: "normal" },
+    { path: "../fonts/inter/Inter_24pt-BoldItalic.ttf", weight: "700", style: "italic" },
+    { path: "../fonts/inter/Inter_24pt-ExtraBold.ttf", weight: "800", style: "normal" },
+    { path: "../fonts/inter/Inter_24pt-ExtraBoldItalic.ttf", weight: "800", style: "italic" },
+    { path: "../fonts/inter/Inter_24pt-ExtraLight.ttf", weight: "200", style: "normal" },
+    { path: "../fonts/inter/Inter_24pt-ExtraLightItalic.ttf", weight: "200", style: "italic" },
+    { path: "../fonts/inter/Inter_24pt-Italic.ttf", weight: "400", style: "italic" },
+    { path: "../fonts/inter/Inter_24pt-Light.ttf", weight: "300", style: "normal" },
+    { path: "../fonts/inter/Inter_24pt-LightItalic.ttf", weight: "300", style: "italic" },
+    { path: "../fonts/inter/Inter_24pt-Medium.ttf", weight: "500", style: "normal" },
+    { path: "../fonts/inter/Inter_24pt-MediumItalic.ttf", weight: "500", style: "italic" },
+    { path: "../fonts/inter/Inter_24pt-Regular.ttf", weight: "400", style: "normal" },
+    { path: "../fonts/inter/Inter_24pt-SemiBold.ttf", weight: "600", style: "normal" },
+    { path: "../fonts/inter/Inter_24pt-SemiBoldItalic.ttf", weight: "600", style: "italic" },
+    { path: "../fonts/inter/Inter_24pt-Thin.ttf", weight: "100", style: "normal" },
+    { path: "../fonts/inter/Inter_24pt-ThinItalic.ttf", weight: "100", style: "italic" },
   ],
   display: "swap",
   variable: "--font-inter-24pt",
@@ -207,96 +63,24 @@ const inter24pt = localFont({
 
 const inter28pt = localFont({
   src: [
-    {
-      path: "../fonts/inter/Inter_28pt-Black.ttf",
-      weight: "900",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_28pt-BlackItalic.ttf",
-      weight: "900",
-      style: "italic",
-    },
-    {
-      path: "../fonts/inter/Inter_28pt-Bold.ttf",
-      weight: "700",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_28pt-BoldItalic.ttf",
-      weight: "700",
-      style: "italic",
-    },
-    {
-      path: "../fonts/inter/Inter_28pt-ExtraBold.ttf",
-      weight: "800",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_28pt-ExtraBoldItalic.ttf",
-      weight: "800",
-      style: "italic",
-    },
-    {
-      path: "../fonts/inter/Inter_28pt-ExtraLight.ttf",
-      weight: "200",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_28pt-ExtraLightItalic.ttf",
-      weight: "200",
-      style: "italic",
-    },
-    {
-      path: "../fonts/inter/Inter_28pt-Italic.ttf",
-      weight: "400",
-      style: "italic",
-    },
-    {
-      path: "../fonts/inter/Inter_28pt-Light.ttf",
-      weight: "300",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_28pt-LightItalic.ttf",
-      weight: "300",
-      style: "italic",
-    },
-    {
-      path: "../fonts/inter/Inter_28pt-Medium.ttf",
-      weight: "500",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_28pt-MediumItalic.ttf",
-      weight: "500",
-      style: "italic",
-    },
-    {
-      path: "../fonts/inter/Inter_28pt-Regular.ttf",
-      weight: "400",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_28pt-SemiBold.ttf",
-      weight: "600",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_28pt-SemiBoldItalic.ttf",
-      weight: "600",
-      style: "italic",
-    },
-    {
-      path: "../fonts/inter/Inter_28pt-Thin.ttf",
-      weight: "100",
-      style: "normal",
-    },
-    {
-      path: "../fonts/inter/Inter_28pt-ThinItalic.ttf",
-      weight: "100",
-      style: "italic",
-    },
+    { path: "../fonts/inter/Inter_28pt-Black.ttf", weight: "900", style: "normal" },
+    { path: "../fonts/inter/Inter_28pt-BlackItalic.ttf", weight: "900", style: "italic" },
+    { path: "../fonts/inter/Inter_28pt-Bold.ttf", weight: "700", style: "normal" },
+    { path: "../fonts/inter/Inter_28pt-BoldItalic.ttf", weight: "700", style: "italic" },
+    { path: "../fonts/inter/Inter_28pt-ExtraBold.ttf", weight: "800", style: "normal" },
+    { path: "../fonts/inter/Inter_28pt-ExtraBoldItalic.ttf", weight: "800", style: "italic" },
+    { path: "../fonts/inter/Inter_28pt-ExtraLight.ttf", weight: "200", style: "normal" },
+    { path: "../fonts/inter/Inter_28pt-ExtraLightItalic.ttf", weight: "200", style: "italic" },
+    { path: "../fonts/inter/Inter_28pt-Italic.ttf", weight: "400", style: "italic" },
+    { path: "../fonts/inter/Inter_28pt-Light.ttf", weight: "300", style: "normal" },
+    { path: "../fonts/inter/Inter_28pt-LightItalic.ttf", weight: "300", style: "italic" },
+    { path: "../fonts/inter/Inter_28pt-Medium.ttf", weight: "500", style: "normal" },
+    { path: "../fonts/inter/Inter_28pt-MediumItalic.ttf", weight: "500", style: "italic" },
+    { path: "../fonts/inter/Inter_28pt-Regular.ttf", weight: "400", style: "normal" },
+    { path: "../fonts/inter/Inter_28pt-SemiBold.ttf", weight: "600", style: "normal" },
+    { path: "../fonts/inter/Inter_28pt-SemiBoldItalic.ttf", weight: "600", style: "italic" },
+    { path: "../fonts/inter/Inter_28pt-Thin.ttf", weight: "100", style: "normal" },
+    { path: "../fonts/inter/Inter_28pt-ThinItalic.ttf", weight: "100", style: "italic" },
   ],
   display: "swap",
   variable: "--font-inter-28pt",
@@ -310,16 +94,8 @@ const calSans = localFont({
 
 const instrumentSerif = localFont({
   src: [
-    {
-      path: "../fonts/InstrumentSerif-Regular.ttf",
-      weight: "400",
-      style: "regular",
-    },
-    {
-      path: "../fonts/InstrumentSerif-Italic.ttf",
-      weight: "400",
-      style: "italic",
-    },
+    { path: "../fonts/InstrumentSerif-Regular.ttf", weight: "400", style: "normal" },
+    { path: "../fonts/InstrumentSerif-Italic.ttf", weight: "400", style: "italic" },
   ],
   display: "swap",
   variable: "--font-instrument-serif",
@@ -328,6 +104,9 @@ const instrumentSerif = localFont({
 export const metadata: Metadata = {
   title: "littlewheel",
   description: "Build Financial Freedom with the Little Wheel",
+  icons: {
+    apple: "/icons/apple-icon-180.png",
+  },
 };
 
 export default function RootLayout({
@@ -347,38 +126,28 @@ export default function RootLayout({
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-        {/* PWA manifest + helpful meta */}
         <link rel="manifest" href="/manifest.webmanifest?v=20251016" />
         <meta name="application-name" content="Little Wheel" />
         <meta name="theme-color" content="#000000" />
 
-        {/* iOS install appearance */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta
           name="apple-mobile-web-app-status-bar-style"
           content="black-translucent"
         />
-        <link rel="apple-touch-icon" href="/icons/apple-icon-180.png" />
 
-        {/* (Optional) Standard favicons for browser tabs */}
-        <link
-          rel="icon"
-          type="image/png"
-          sizes="32x32"
-          href="/icons/favicon-32x32.png"
-        />
-        <link
-          rel="icon"
-          type="image/png"
-          sizes="16x16"
-          href="/icons/favicon-16x16.png"
-        />
+        <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.png" />
         <link rel="shortcut icon" href="/favicon.ico" />
       </head>
-      <body
-        className="antialiased bg-background text-foreground min-h-screen flex flex-col"
-        style={{ fontFamily: "var(--font-inter-18pt)" }}
-      >
+
+      <link rel="apple-touch-icon" href="/icons/apple-icon-180.png" />
+
+      {/* ✅ IMPORTANT FIX:
+          - removed inline Inter fontFamily override
+          - let globals.css apply Aeonik via --font-sans
+          - also add font-aeonik to guarantee it (utility class from globals.css) */}
+      <body className="font-aeonik antialiased bg-background text-foreground min-h-screen flex flex-col">
         <ThemeProvider
           attribute="class"
           defaultTheme="light"
@@ -396,7 +165,6 @@ export default function RootLayout({
           <ConditionalFooter />
         </ThemeProvider>
 
-        {/* Register the service worker after hydration */}
         <Script id="sw-register" strategy="afterInteractive">
           {`
             (function () {
@@ -406,9 +174,7 @@ export default function RootLayout({
               if (!isSecure) return;
 
               navigator.serviceWorker.register('/sw.js', { scope: '/' })
-                .then(function (reg) {
-                  // console.log('[SW] registered', reg);
-                })
+                .then(function (reg) {})
                 .catch(function (err) {
                   console.warn('[SW] registration failed', err);
                 });

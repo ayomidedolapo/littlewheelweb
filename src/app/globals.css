@@ -4,42 +4,41 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* =========================
-   ✅ Aeonik (Global Font)
-   Put your actual filenames here
-   ========================= */
+/* =========================================================
+   ✅ Aeonik — Works in Next.js + Tailwind v4 (no config)
+   IMPORTANT:
+   Put files here:
+   - public/assets/fonts/Aeonik-Regular.woff2
+   - public/assets/fonts/Aeonik-Bold.woff2
+   ========================================================= */
+
 @font-face {
   font-family: "Aeonik";
-  src: url("/assets/fonts/Aeonik-Regular.woff2") format("woff2"),
-       url("/assets/fonts/Aeonik-Regular.woff") format("woff");
+  src: url("/assets/fonts/Aeonik-Regular.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
+
 @font-face {
   font-family: "Aeonik";
-  src: url("/assets/fonts/Aeonik-Medium.woff2") format("woff2"),
-       url("/assets/fonts/Aeonik-Medium.woff") format("woff");
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Aeonik";
-  src: url("/assets/fonts/Aeonik-Bold.woff2") format("woff2"),
-       url("/assets/fonts/Aeonik-Bold.woff") format("woff");
+  src: url("/assets/fonts/Aeonik-Bold.woff2") format("woff2");
   font-weight: 700;
   font-style: normal;
   font-display: swap;
 }
 
+/* =========================================================
+   ✅ Theme Tokens
+   ========================================================= */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
 
-  /* ✅ Make Aeonik the default sans font everywhere */
+  /* ✅ Make Aeonik your default everywhere */
   --font-sans: "Aeonik", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
     Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+
   --font-mono: var(--font-geist-mono);
 
   --color-sidebar-ring: var(--sidebar-ring);
@@ -146,15 +145,17 @@
   --sidebar-ring: oklch(0.552 0.016 285.938);
 }
 
+/* =========================================================
+   ✅ Base layer — apply Aeonik globally
+   ========================================================= */
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
 
-  /* ✅ Apply Aeonik everywhere (no need to update each page) */
   html,
   body {
-    font-family: var(--font-sans);
+    font-family: var(--font-sans) !important;
   }
 
   body {
@@ -162,34 +163,46 @@
   }
 }
 
+/* =========================================================
+   ✅ Font utility classes (since no tailwind.config.js)
+   Use these in JSX like: className="font-aeonikbold"
+   ========================================================= */
+@layer utilities {
+  .font-aeonik {
+    font-family: "Aeonik", ui-sans-serif, system-ui !important;
+    font-weight: 400;
+  }
+
+  .font-aeonikbold {
+    font-family: "Aeonik", ui-sans-serif, system-ui !important;
+    font-weight: 700;
+  }
+}
+
+/* keep your existing font vars/classes if you still use them */
 .font-inter-18pt {
   font-family: var(--font-inter-18pt);
 }
-
 .font-inter-24pt {
   font-family: var(--font-inter-24pt);
 }
-
 .font-inter-28pt {
   font-family: var(--font-inter-28pt);
 }
-
 .font-calsans {
   font-family: var(--font-calsans);
 }
-
 .font-instrumentSerif {
-  font-family: var(--font-instrumentSerif);
+  font-family: var(--font-instrument-serif);
 }
 
+/* scrollbar rules */
 ::-webkit-scrollbar {
   display: none;
 }
-
 * {
   scrollbar-width: none;
 }
-
 * {
   -ms-overflow-style: none;
 }
