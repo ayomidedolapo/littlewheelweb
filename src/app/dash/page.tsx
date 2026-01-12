@@ -1,7 +1,7 @@
 /* app/dash/page.tsx */
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, useTransition, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback, useTransition } from "react";
 import { Bell, Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -14,7 +14,7 @@ import LoadingDetails from "../../components/loaders/LoadingDetails";
 /* ✅ New logo spinner (centered, no overlay) */
 import LogoSpinner from "../../components/loaders/LogoSpinner";
 
-/* ✅ Web Push helper (from your other code) */
+/* ✅ Web Push helper */
 import { setupWebPush } from "../../lib/push/setupPush";
 
 /* Routes */
@@ -61,6 +61,8 @@ type User = {
   avatarUrl?: string;
   isTier2?: boolean;
   virtual?: VirtualAccount | null;
+  /* ✅ add deviceToken from /me response */
+  deviceToken?: string;
 };
 
 /* ✅ Full page skeleton loader (header + card + buttons + content) */
@@ -160,7 +162,7 @@ export default function MobileDashboard() {
   const [showBalance, setShowBalance] = useState(true);
   const [copied, setCopied] = useState(false);
 
-  // ✅ Push notifications UI states (added from your other code)
+  // ✅ Push notifications UI states
   const [pushMsg, setPushMsg] = useState<string>("");
   const [enablingPush, setEnablingPush] = useState(false);
 
@@ -187,7 +189,7 @@ export default function MobileDashboard() {
     return "User";
   }
 
-  /* ---------- FIX ONLY HERE: widen mapping to support { VirtualAccount: { name, number, provider } } ---------- */
+  /* ---------- Virtual account mapping ---------- */
   function pickVirtualAccount(obj: any): VirtualAccount | null {
     if (!obj) return null;
 
@@ -255,7 +257,7 @@ export default function MobileDashboard() {
 
     return null;
   }
-  /* ---------- END FIX ---------- */
+  /* ---------- END ---------- */
 
   function pickIsTier2(obj: any): boolean {
     if (!obj) return false;
@@ -339,6 +341,8 @@ export default function MobileDashboard() {
           avatarUrl,
           isTier2,
           virtual,
+          /* ✅ grab deviceToken from backend user object */
+          deviceToken: userData.deviceToken,
         };
 
         if (!cancelled) {
@@ -411,15 +415,22 @@ export default function MobileDashboard() {
   const goNotifications = () => nav(NOTIFICATIONS_ROUTE); // kept (not used by bell now)
   const goToFullTransactions = () => nav(FULL_TRANSACTIONS_ROUTE);
 
-  // ✅ Bell button now enables push notifications (copied “as-is” logic)
+  // ✅ Bell button now enables push notifications **with deviceToken**
   const enablePushNotifications = useCallback(async () => {
     if (enablingPush || isPending) return;
+
+    if (!user?.deviceToken) {
+      setPushMsg("No device token found");
+      setTimeout(() => setPushMsg(""), 2500);
+      return;
+    }
 
     setEnablingPush(true);
     setPushMsg("Enabling...");
 
     try {
-      const res = await setupWebPush();
+      const res = await setupWebPush({ deviceToken: user.deviceToken });
+
       if (!res.ok) {
         const pretty =
           res.reason === "missing-vapid"
@@ -438,7 +449,7 @@ export default function MobileDashboard() {
     } finally {
       setEnablingPush(false);
     }
-  }, [enablingPush, isPending]);
+  }, [enablingPush, isPending, user?.deviceToken]);
 
   const txList: Tx[] = useMemo(() => {
     const list = user?.transactions ?? [];
@@ -572,7 +583,7 @@ export default function MobileDashboard() {
                       </div>
                     </button>
 
-                    {/* ✅ Bell: enable push + show status text (exact behavior) */}
+                    {/* ✅ Bell: enable push + show status text */}
                     <div className="relative flex flex-col items-end gap-1">
                       <button
                         onClick={enablePushNotifications}
@@ -597,7 +608,7 @@ export default function MobileDashboard() {
                     </div>
                   </div>
 
-                  {/* === NEW CREDIT CARD + COMMISSION + VA (matches design) === */}
+                  {/* === CREDIT CARD + COMMISSION + VA === */}
                   <div className="bg-white rounded-[10px] p-5 shadow-sm relative overflow-hidden">
                     {/* subtle grid like design */}
                     <div

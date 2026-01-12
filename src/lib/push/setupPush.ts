@@ -1,62 +1,43 @@
-// src/lib/push/setupPush.ts
+import { initializeApp } from "firebase/app";
+import { getMessaging, getToken } from "firebase/messaging";
 
 type SetupResult =
-  | { ok: true; subscription: PushSubscription }
+  | { ok: true; fcmToken: string; deviceToken: string }
   | { ok: false; reason: string };
 
-export async function setupWebPush(): Promise<SetupResult> {
+export async function setupWebPush({ deviceToken }: { deviceToken: string }): Promise<SetupResult> {
   if (typeof window === "undefined") return { ok: false, reason: "server" };
-  if (!("serviceWorker" in navigator)) return { ok: false, reason: "no-sw" };
-  if (!("PushManager" in window)) return { ok: false, reason: "no-push" };
 
-  const vapid = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-  if (!vapid) return { ok: false, reason: "missing-vapid" };
+  const firebaseConfig = {
+    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
+    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
+    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID!,
+    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
+  };
 
-  // 1) Ask permission
-  const perm = await Notification.requestPermission();
-  if (perm !== "granted") return { ok: false, reason: "denied" };
+  const app = initializeApp(firebaseConfig);
+  const messaging = getMessaging(app);
 
-  // 2) Ensure SW is registered
-  const reg = await navigator.serviceWorker.register("/sw.js");
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") return { ok: false, reason: "permission-denied" };
 
-  // 3) Reuse existing subscription if any
-  const existing = await reg.pushManager.getSubscription();
-
-  const subscription =
-    existing ??
-    (await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(vapid),
-    }));
-
-  // 4) Send subscription to backend (your Next.js API route)
   try {
-    const r = await fetch("/api/agent/push/subscribe", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(subscription),
-    });
+    const vapid = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY!;
+    const fcmToken = await getToken(messaging, { vapidKey: vapid });
 
-    if (!r.ok) {
-      return { ok: false, reason: `subscribe-api-${r.status}` };
-    }
-  } catch {
-    return { ok: false, reason: "subscribe-api-failed" };
+    console.log("FCM Web Token:", fcmToken);
+
+    // If you need to send device+fcm to backend for storage uncomment:
+    // await fetch("/api/agent/push/subscribe", {
+    //   method: "POST",
+    //   headers: { "Content-Type": "application/json" },
+    //   body: JSON.stringify({ deviceToken, fcmToken })
+    // });
+
+    return { ok: true, fcmToken, deviceToken };
+  } catch (err) {
+    console.error("FCM token error:", err);
+    return { ok: false, reason: "fcm-failed" };
   }
-
-  return { ok: true, subscription };
-}
-
-function urlBase64ToUint8Array(base64String: string) {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-
-  return outputArray;
 }
