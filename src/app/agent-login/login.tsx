@@ -2,63 +2,24 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
+import { Eye, EyeOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import LogoSpinner from "../../components/loaders/LogoSpinner";
-import { ReCaptcha } from "../../../components/ReCaptcha"; //  our new component
+import { ReCaptcha } from "../../../components/ReCaptcha";
 
-function toNgE164(localish: string) {
-  const d = localish.replace(/\D/g, "");
-  const local = d.startsWith("0") ? d.slice(1) : d;
-  return `+234${local}`;
-}
-
-function isBareBase64Jpeg(s?: string) {
-  return !!s && /^\/9j\//.test(s);
-}
-function looksLikeDataUrl(s?: string) {
-  return !!s && /^data:image\/[a-z]+;base64,/i.test(s || "");
-}
-function normalizeImgSrc(u?: string) {
-  if (!u) return "";
-  if (looksLikeDataUrl(u)) return u;
-  if (isBareBase64Jpeg(u)) return `data:image/jpeg;base64,${u}`;
-  return u;
-}
-
-export default function MobileLogin() {
+export default function LoginPage() {
   const router = useRouter();
 
-  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-
-  const [lastAvatar, setLastAvatar] = useState<string>("");
-  const [lastName, setLastName] = useState<string>("");
-
-  // reCAPTCHA token
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
-  useEffect(() => {
-    try {
-      const a =
-        localStorage.getItem("lw_last_avatar") ||
-        sessionStorage.getItem("lw_last_avatar") ||
-        "";
-      const n =
-        localStorage.getItem("lw_last_name") ||
-        sessionStorage.getItem("lw_last_name") ||
-        "";
-      setLastAvatar(normalizeImgSrc(a || ""));
-      setLastName((n || "").trim());
-    } catch {}
-  }, []);
-
-  // persistent device token
   const [deviceToken, setDeviceToken] = useState("web-client");
+
   useEffect(() => {
     try {
       const existing = localStorage.getItem("lw_device_token");
@@ -67,21 +28,20 @@ export default function MobileLogin() {
         const gen =
           typeof crypto !== "undefined" && "randomUUID" in crypto
             ? crypto.randomUUID()
-            : Math.random().toString(36).slice(0, 10) +
-              Date.now().toString(36);
+            : Math.random().toString(36).slice(0, 10) + Date.now().toString(36);
         localStorage.setItem("lw_device_token", gen);
         setDeviceToken(gen);
       }
     } catch {}
   }, []);
 
-  const phoneValid = useMemo(() => {
-    const d = phone.replace(/\D/g, "");
-    return d.length >= 10 && d.length <= 11;
-  }, [phone]);
+  const emailValid = useMemo(
+    () => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()),
+    [email]
+  );
 
-  const pinValid = useMemo(() => /^\d{5}$/.test(password), [password]);
-  const formValid = phoneValid && pinValid;
+  const pinValid = useMemo(() => /^\d{6}$/.test(password), [password]);
+  const formValid = emailValid && pinValid;
 
   async function persistAuthCookie(token: string) {
     const resp = await fetch("/api/auth/persist", {
@@ -89,10 +49,7 @@ export default function MobileLogin() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token }),
     });
-    if (!resp.ok) {
-      const t = await resp.text().catch(() => "");
-      throw new Error(`Persist cookie failed (${resp.status}): ${t}`);
-    }
+    if (!resp.ok) throw new Error("Persist cookie failed");
   }
 
   const handleLogin = async () => {
@@ -100,63 +57,33 @@ export default function MobileLogin() {
     setSending(true);
     setErr(null);
 
-    const e164 = toNgE164(phone);
-
     try {
-      // 🔴 Enforce captcha in production, optional in dev if you want
       if (process.env.NODE_ENV === "production" && !captchaToken) {
         setErr("Please confirm you’re not a robot.");
         setSending(false);
         return;
       }
 
-      const body: Record<string, any> = {
-        phoneNumber: e164,
-        password,
-        deviceToken,
-      };
-
-      if (captchaToken) {
-        // name it how the backend/login route will expect it
-        body.recaptchaToken = captchaToken;
-      }
-
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          password,
+          deviceToken,
+          recaptchaToken: captchaToken,
+        }),
       });
 
-      const raw = await res.text();
-      let data: any;
-      try {
-        data = JSON.parse(raw);
-      } catch {
-        data = { message: raw };
-      }
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok || data?.success === false) {
-        const msg =
-          data?.message?.message ||
-          data?.message ||
-          data?.error ||
-          (res.status === 403
-            ? `Verification failed${
-                data?.details ? `: ${JSON.stringify(data.details)}` : ""
-              }`
-            : "Login failed");
-        setErr(String(msg));
+        setErr(data?.message || "Login failed");
         setSending(false);
         return;
       }
 
-      const token =
-        data?.token ||
-        data?.access_token ||
-        data?.data?.token ||
-        data?.data?.access_token ||
-        data?.jwt ||
-        null;
+      const token = data?.token || data?.jwt || data?.access_token;
 
       if (!token) {
         setErr("No token returned from backend.");
@@ -165,246 +92,174 @@ export default function MobileLogin() {
       }
 
       await persistAuthCookie(token);
-      try {
-        localStorage.setItem("authToken", token);
-        localStorage.setItem("lw_token", token);
-      } catch {}
 
-      try {
-        const meRes = await fetch("/api/user/me", {
-          method: "GET",
-          cache: "no-store",
-          credentials: "include",
-        });
-        if (meRes.ok) {
-          const meRaw = await meRes.text();
-          let me: any = {};
-          try {
-            me = JSON.parse(meRaw || "{}");
-          } catch {}
-          const userData = me?.user || me?.data || me || {};
-          const avatarUrl = normalizeImgSrc(
-            userData.avatarUrl || userData.avatar_url || userData.avatar || ""
-          );
-          const firstName =
-            userData.firstName ||
-            userData.first_name ||
-            userData.username ||
-            "";
-          try {
-            if (avatarUrl) {
-              localStorage.setItem("lw_last_avatar", avatarUrl);
-              sessionStorage.setItem("lw_last_avatar", avatarUrl);
-            } else {
-              localStorage.removeItem("lw_last_avatar");
-              sessionStorage.removeItem("lw_last_avatar");
-            }
-            if (firstName) {
-              localStorage.setItem("lw_last_name", String(firstName));
-              sessionStorage.setItem("lw_last_name", String(firstName));
-            }
-          } catch {}
-        }
-      } catch {}
+      localStorage.setItem("authToken", token);
+      localStorage.setItem("lw_token", token);
 
       router.replace("/dash");
     } catch (e: any) {
-      setErr(e?.message || "Network error. Please try again.");
+      setErr(e?.message || "Network error.");
       setSending(false);
     }
   };
 
-  const goSignup = async () => {
-    if (sending) return;
-    setSending(true);
-    router.push("/agent-signup");
-  };
-  const goForgotPin = async () => {
-    if (sending) return;
-    setSending(true);
-    router.push("/forgot-pin");
-  };
+  const goSignup = () => !sending && router.push("/agent-signup");
+  const goForgotPassword = () => !sending && router.push("/forgot-pin");
 
   return (
-    <div
-      className="min-h-screen bg-gray-100 flex items-center justify-center p-0 md:p-4"
-      aria-busy={sending}
-    >
+    <div className="min-h-screen bg-white flex flex-col py-10" aria-busy={sending}>
       <LogoSpinner show={sending} />
 
-      <div className="w-full max-w-sm bg-white min-h-screen md:min-h-0 md:rounded-2xl md:shadow-xl overflow-hidden">
-        <div className="flex justify-end items-center p-4 pt-6 bg-white">
-          <button
-            onClick={goSignup}
-            disabled={sending}
-            className="text-gray-600 text-xs font-bold underline hover:text-gray-800 transition-colors disabled:text-gray-400"
-          >
-            Signup account
-          </button>
-        </div>
+      <div className="w-full flex-1 flex justify-center px-2 lg:px-4">
+        <div className="w-full max-w-[1200px]">
 
-        <div className="px-6 py-4 bg-white">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-8 h-8 bg-gray-300 rounded-full overflow-hidden flex items-center justify-center relative">
-              {lastAvatar ? (
-                <Image
-                  src={lastAvatar}
-                  alt="Last user avatar"
-                  width={48}
-                  height={48}
-                  className="w-full h-full object-cover"
-                  unoptimized
-                />
-              ) : (
-                <Image
-                  src="/images/user-avatar.jpg"
-                  alt="User Avatar"
-                  width={48}
-                  height={48}
-                  className="w-full h-full object-cover"
-                />
-              )}
-            </div>
-            <span className="text-md font-bold text-gray-800">
-              Hi{lastName ? `, ${lastName}` : ""}{" "}
-              <span className="text-xl">👋</span>
-            </span>
-          </div>
+          <div className="lg:rounded-2xl lg:border lg:border-gray-100 lg:shadow-sm lg:overflow-hidden bg-white">
 
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Welcome Back
-          </h1>
+            <div className="lg:grid lg:grid-cols-2 lg:min-h-[700px]">
 
-          {/* 🔴 Styled error card (same pattern as signup pages) */}
-          {err && (
-            <div
-              className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-700 flex items-start gap-2"
-              role="alert"
-              aria-live="assertive"
-            >
-              <div className="mt-[px] h-4 w-4 rounded-full bg-rose-100 flex items-center justify-center text-[10px] font-bold">
-                !
-              </div>
-              <p className="flex-1 leading-[1.3]">{err}</p>
-            </div>
-          )}
+              {/* LEFT PANEL */}
+              <div className="flex flex-col h-full">
 
-          {/* Phone */}
-          <div className="mb-5">
-            <label className="text-gray-700 font-bold mb-2 block text-sm">
-              Mobile Number
-            </label>
-
-            <div className="flex gap-2">
-              <div className="flex items-center bg-gray-100 rounded-xl px-3 py-3 min-w-fit">
-                <div className="w-5 h-5 rounded-full overflow-hidden mr-2 flex items-center justify-center bg-white">
+                {/* Logo */}
+                <div className="flex justify-center lg:justify-start pb-4 px-4 lg:px-10 pt-4">
                   <Image
-                    src="https://flagpedia.net/data/flags/w580/ng.png"
-                    alt="Nigeria Flag"
-                    width={24}
-                    height={24}
-                    className="w-full h-full"
+                    src="/uploads/littlewh.png"
+                    alt="Little Wheel"
+                    width={140}
+                    height={36}
+                    priority
                   />
                 </div>
-                <span className="text-gray-700 font-bold text-sm">+234</span>
-              </div>
 
-              <div className="flex-1">
-                <div className="flex items-center bg-gray-100 rounded-xl px-3 py-3">
-                  <input
-                    type="tel"
-                    placeholder="000-0000-000"
-                    value={phone}
-                    onChange={(e) => {
-                      if (sending) return;
-                      const value = e.target.value.replace(/\D/g, "");
-                      if (value.length <= 11) setPhone(value);
-                    }}
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    disabled={sending}
-                    className="flex-1 bg-transparent text-gray-700 placeholder-gray-400 outline-none text-sm disabled:cursor-not-allowed"
-                    onKeyDown={(e) =>
-                      !sending && e.key === "Enter" && handleLogin()
-                    }
-                    aria-invalid={!phoneValid}
+                {/* MOBILE IMAGE */}
+                <div className="block lg:hidden px-4">
+                  <Image
+                    src="/uploads/coinguy.png"
+                    alt="Illustration"
+                    width={900}
+                    height={520}
+                    className="w-full h-auto object-contain"
+                    priority
                   />
                 </div>
+
+                {/* DESKTOP IMAGE */}
+                <div className="hidden lg:flex flex-1 items-center justify-center px-6">
+                  <Image
+                    src="/uploads/Little wheel onboarding 5 bw 1.png"
+                    alt="Onboarding"
+                    width={900}
+                    height={900}
+                    className="max-h-[600px] w-auto object-contain"
+                    priority
+                  />
+                </div>
+
               </div>
-            </div>
-          </div>
 
-          {/* Password */}
-          <div className="mb-5">
-            <label className="text-gray-700 font-bold mb-2 block text-sm">
-              Password (5-digit PIN)
-            </label>
+              {/* RIGHT PANEL */}
+              <div className="px-5 pt-4 lg:px-12 lg:pt-14 pb-10">
 
-            <div className="relative">
-              <input
-                type={showPassword ? "text" : "password"}
-                placeholder="•••••"
-                value={password}
-                onChange={(e) => {
-                  if (sending) return;
-                  const v = e.target.value.replace(/\D/g, "").slice(0, 5);
-                  setPassword(v);
-                }}
-                className="w-full bg-gray-100 rounded-xl px-3 py-3 text-gray-700 placeholder-gray-400 outline-none pr-10 text-sm tracking-widest disabled:cursor-not-allowed"
-                onKeyDown={(e) =>
-                  !sending && e.key === "Enter" && handleLogin()
-                }
-                aria-invalid={!pinValid}
-                disabled={sending}
-              />
-              <button
-                type="button"
-                onClick={() => !sending && setShowPassword((s) => !s)}
-                disabled={sending}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 disabled:text-gray-300"
-                aria-label={showPassword ? "Hide PIN" : "Show PIN"}
-              >
-                {showPassword ? (
-                  <EyeOff className="w-4 h-4" />
-                ) : (
-                  <Eye className="w-4 h-4" />
+                <div className="mb-4 lg:mb-8">
+                  <h1 className="text-[18px] lg:text-[22px] font-extrabold text-gray-900">
+                    Glad to See You Again!
+                  </h1>
+                  <p className="text-[12px] lg:text-[13px] text-gray-500 mt-1">
+                    Enter your phone number to get rolling with Little Wheel
+                  </p>
+                </div>
+
+                {err && (
+                  <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-700">
+                    {err}
+                  </div>
                 )}
-              </button>
+
+                {/* EMAIL */}
+                <div className="mb-4">
+                  <label className="text-[12px] font-bold mb-2 block">
+                    Email <span className="text-red-600">*</span> 
+                  </label>
+                  <div className="flex items-center gap-2 bg-gray-100 rounded-xl px-3 py-3">
+                    <Image
+                      src="/uploads/emailicon.png"
+                      alt="Email"
+                      width={16}
+                      height={16}
+                    />
+                    <input
+                      type="email"
+                      placeholder="test@gmail.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full bg-transparent text-[13px] outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* PASSWORD */}
+                <div className="mb-2">
+                  <label className="text-[12px] font-bold mb-2 block">
+                    Password (6-digits)<span className="text-red-600">*</span> 
+                  </label>
+
+                  <div className="relative bg-gray-100 rounded-xl px-3 py-3 flex items-center">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) =>
+                        setPassword(e.target.value.replace(/\D/g, "").slice(0, 6))
+                      }
+                      className="w-full bg-transparent text-[13px] outline-none pr-10 tracking-[0.25em]"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 text-gray-500"
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+
+                  <div className="text-right mt-2">
+                    <button
+                      onClick={goForgotPassword}
+                      className="text-[12px] underline font-semibold"
+                    >
+                      Forgot Password?
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <ReCaptcha onChange={setCaptchaToken} />
+                </div>
+
+                <div className="mt-5">
+                  <button
+                    onClick={handleLogin}
+                    disabled={!formValid || sending}
+                    className={`w-full h-[46px] rounded-xl text-[14px] font-semibold ${
+                      formValid ? "bg-black text-white" : "bg-gray-200 text-gray-500"
+                    }`}
+                  >
+                    {sending ? "Logging in…" : "Login"}
+                  </button>
+                </div>
+
+                <div className="mt-5 text-center text-[12px] text-gray-600">
+                  Don’t have an account?{" "}
+                  <button onClick={goSignup} className="font-bold underline">
+                    Create account
+                  </button>
+                </div>
+
+              </div>
+
             </div>
           </div>
 
-          {/* reCAPTCHA widget */}
-          <div className="mb-2">
-            <ReCaptcha onChange={setCaptchaToken} />
-          </div>
-
-          {/* Forgot Login Pin right under the widget, right-aligned */}
-          <div className="text-right mt-2 mb-4">
-            <button
-              onClick={goForgotPin}
-              disabled={sending}
-              className="text-gray-600 text-xs font-bold underline hover:text-gray-800 transition-colors disabled:text-gray-400"
-            >
-              Forgot Login Pin
-            </button>
-          </div>
-
-          <div className="flex-1 min-h-[120px]" />
-
-          <div className="pb-4">
-            <button
-              onClick={handleLogin}
-              className={`w-full font-semibold py-3 px-6 rounded-xl transition-colors text-sm ${
-                formValid && !sending
-                  ? "bg-black hover:bg-black/90 text-white"
-                  : "bg-gray-300 text-gray-700 cursor-not-allowed"
-              }`}
-              disabled={!formValid || sending}
-              aria-busy={sending}
-            >
-              {sending ? "Logging in…" : "Login"}
-            </button>
-          </div>
         </div>
       </div>
     </div>

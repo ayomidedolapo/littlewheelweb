@@ -201,22 +201,22 @@ export default function CommissionSummary({
      {
       key: "data",
       label: "DATA",
-      route: "/dash/payments/data",
+      route: "/dash/data",
     },
     {
       key: "airtime",
       label: "AIRTIME",
-      route: "/dash/payments/airtime",
+      route: "/dash/airtime",
     },
     {
       key: "electricity",
       label: "ELECTRICITY",
-      route: "/dash/payments/electricity",
+      route: "/dash/electricity",
     },
     {
       key: "cable",
       label: "CABLE TV",
-      route: "/dash/payments/cable-tv",
+      route: "/dash/cable-tv",
     },
     {
       key: "education",
