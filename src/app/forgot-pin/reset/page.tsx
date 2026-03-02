@@ -1,14 +1,18 @@
 /* app/forgot-pin/reset/page.tsx */
 "use client";
 
-import { useMemo, useState } from "react";
+import React, { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import LogoSpinner from "../../../components/loaders/LogoSpinner";
 
 const onlyDigits = (s: string) => (s || "").replace(/\D/g, "");
 
-export default function ResetPasswordPage() {
+/**
+ * ✅ useSearchParams() must be used inside a component wrapped in <Suspense>.
+ * We keep your full UI intact—only structure changes.
+ */
+function ResetPasswordInner() {
   const router = useRouter();
   const sp = useSearchParams();
 
@@ -109,9 +113,7 @@ export default function ResetPasswordPage() {
               <input
                 type={show1 ? "text" : "password"}
                 value={pin1}
-                onChange={(e) =>
-                  setPin1(onlyDigits(e.target.value).slice(0, 6))
-                }
+                onChange={(e) => setPin1(onlyDigits(e.target.value).slice(0, 6))}
                 inputMode="numeric"
                 pattern="[0-9]*"
                 className="w-full bg-transparent outline-none text-[13px] text-gray-900 tracking-[0.35em] pr-10"
@@ -125,7 +127,11 @@ export default function ResetPasswordPage() {
                 disabled={sending}
                 aria-label={show1 ? "Hide password" : "Show password"}
               >
-                {show1 ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                {show1 ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
               </button>
             </div>
           </div>
@@ -140,9 +146,7 @@ export default function ResetPasswordPage() {
               <input
                 type={show2 ? "text" : "password"}
                 value={pin2}
-                onChange={(e) =>
-                  setPin2(onlyDigits(e.target.value).slice(0, 6))
-                }
+                onChange={(e) => setPin2(onlyDigits(e.target.value).slice(0, 6))}
                 inputMode="numeric"
                 pattern="[0-9]*"
                 className="w-full bg-transparent outline-none text-[13px] text-gray-900 tracking-[0.35em] pr-10"
@@ -156,7 +160,11 @@ export default function ResetPasswordPage() {
                 disabled={sending}
                 aria-label={show2 ? "Hide password" : "Show password"}
               >
-                {show2 ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                {show2 ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
               </button>
             </div>
           </div>
@@ -230,6 +238,23 @@ export default function ResetPasswordPage() {
           </div>
         </div>
       )}
+
+      {/* (optional) if you want to use them later */}
+      {/* <div className="hidden">{email}{otp}</div> */}
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-white flex items-center justify-center">
+          <div className="text-[12px] text-gray-600">Loading...</div>
+        </div>
+      }
+    >
+      <ResetPasswordInner />
+    </Suspense>
   );
 }
