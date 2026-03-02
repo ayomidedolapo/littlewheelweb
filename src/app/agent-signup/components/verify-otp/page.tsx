@@ -1,7 +1,7 @@
 /* app/agent-signup/components/verify-otp/page.tsx */
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import LogoSpinner from "../../../../components/loaders/LogoSpinner";
@@ -20,7 +20,11 @@ function onlyDigits(s: string) {
   return (s || "").replace(/\D/g, "");
 }
 
-export default function VerifyOtpPage() {
+/**
+ * ✅ IMPORTANT:
+ * useSearchParams() must be inside a component wrapped by <Suspense>.
+ */
+function VerifyOtpInner() {
   const router = useRouter();
   const sp = useSearchParams();
 
@@ -65,6 +69,22 @@ export default function VerifyOtpPage() {
     if (d && i < 5) focusIndex(i + 1);
   };
 
+  const handleConfirm = async () => {
+    if (!canConfirm) return;
+    setSending(true);
+    setErr(null);
+
+    try {
+      // Hook your verify endpoint here
+      // await fetch("/api/auth/verify-otp", { method: "POST", body: JSON.stringify({ email, otp: otpValue }) ... })
+
+      router.push("/agent-signup/components/personal-details");
+    } catch (e: any) {
+      setErr(e?.message || "Verification failed. Try again.");
+      setSending(false);
+    }
+  };
+
   const onKeyDown = (i: number, e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Backspace") {
       e.preventDefault();
@@ -76,7 +96,6 @@ export default function VerifyOtpPage() {
         }
         if (i > 0) {
           next[i - 1] = "";
-          // move focus left after state updates
           setTimeout(() => focusIndex(i - 1), 0);
         }
         return next;
@@ -120,28 +139,10 @@ export default function VerifyOtpPage() {
     setErr(null);
     try {
       // Hook your resend endpoint here
-      // await fetch("/api/auth/resend-otp", { method: "POST", body: JSON.stringify({ email }) ... })
       await new Promise((r) => setTimeout(r, 500)); // UI-only placeholder
       setSending(false);
     } catch (e: any) {
       setErr(e?.message || "Failed to resend code.");
-      setSending(false);
-    }
-  };
-
-  const handleConfirm = async () => {
-    if (!canConfirm) return;
-    setSending(true);
-    setErr(null);
-
-    try {
-      // Hook your verify endpoint here
-      // await fetch("/api/auth/verify-otp", { method: "POST", body: JSON.stringify({ email, otp: otpValue }) ... })
-
-      // UI-only: go next
-      router.push("/agent-signup/components/personal-details");
-    } catch (e: any) {
-      setErr(e?.message || "Verification failed. Try again.");
       setSending(false);
     }
   };
@@ -246,14 +247,16 @@ export default function VerifyOtpPage() {
           </div>
         </div>
 
-        {/* Bottom button area (big spacing like design) */}
+        {/* Bottom button area */}
         <div className="mt-auto px-4 pb-8 pt-10">
           <button
             onClick={handleConfirm}
             disabled={!canConfirm}
             className={[
               "w-full h-12 rounded-xl text-[14px] font-semibold transition-colors",
-              canConfirm ? "bg-black text-white hover:bg-black/90" : "bg-gray-200 text-gray-500 cursor-not-allowed",
+              canConfirm
+                ? "bg-black text-white hover:bg-black/90"
+                : "bg-gray-200 text-gray-500 cursor-not-allowed",
             ].join(" ")}
           >
             Confirm
@@ -261,5 +264,20 @@ export default function VerifyOtpPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function VerifyOtpPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-white flex items-center justify-center">
+          {/* Keep fallback simple so build/prerender is happy */}
+          <div className="text-[12px] text-gray-600">Loading...</div>
+        </div>
+      }
+    >
+      <VerifyOtpInner />
+    </Suspense>
   );
 }
