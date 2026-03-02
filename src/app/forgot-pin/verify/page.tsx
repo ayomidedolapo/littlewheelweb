@@ -1,7 +1,7 @@
 /* app/forgot-pin/verify/page.tsx */
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import LogoSpinner from "../../../components/loaders/LogoSpinner";
@@ -20,7 +20,11 @@ function onlyDigits(s: string) {
   return (s || "").replace(/\D/g, "");
 }
 
-export default function ForgotPinVerifyOtpPage() {
+/**
+ * ✅ useSearchParams() must be inside a component wrapped by <Suspense>.
+ * UI is unchanged — only structure.
+ */
+function ForgotPinVerifyOtpInner() {
   const router = useRouter();
   const sp = useSearchParams();
 
@@ -54,6 +58,26 @@ export default function ForgotPinVerifyOtpPage() {
       return next;
     });
     if (d && i < 5) focusIndex(i + 1);
+  };
+
+  const handleConfirm = async () => {
+    if (!canConfirm) return;
+    setSending(true);
+    setErr(null);
+
+    try {
+      // Hook verify endpoint:
+      // await fetch("/api/auth/forgot-pin/verify", { method: "POST", body: JSON.stringify({ email, otp: otpValue }) })
+
+      router.push(
+        `/forgot-pin/reset?email=${encodeURIComponent(
+          email
+        )}&otp=${encodeURIComponent(otpValue)}`
+      );
+    } catch (e: any) {
+      setErr(e?.message || "Verification failed. Try again.");
+      setSending(false);
+    }
   };
 
   const onKeyDown = (i: number, e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -116,23 +140,6 @@ export default function ForgotPinVerifyOtpPage() {
       setSending(false);
     } catch (e: any) {
       setErr(e?.message || "Failed to resend code.");
-      setSending(false);
-    }
-  };
-
-  const handleConfirm = async () => {
-    if (!canConfirm) return;
-    setSending(true);
-    setErr(null);
-
-    try {
-      // Hook verify endpoint:
-      // await fetch("/api/auth/forgot-pin/verify", { method: "POST", body: JSON.stringify({ email, otp: otpValue }) })
-
-      // Next: reset pin page (create it if needed)
-      router.push(`/forgot-pin/reset?email=${encodeURIComponent(email)}&otp=${encodeURIComponent(otpValue)}`);
-    } catch (e: any) {
-      setErr(e?.message || "Verification failed. Try again.");
       setSending(false);
     }
   };
@@ -216,7 +223,7 @@ export default function ForgotPinVerifyOtpPage() {
           </div>
         </div>
 
-        {/* Bottom Confirm button (center-ish like design) */}
+        {/* Bottom Confirm button */}
         <div className="mt-10 px-4">
           <button
             onClick={handleConfirm}
@@ -232,9 +239,22 @@ export default function ForgotPinVerifyOtpPage() {
           </button>
         </div>
 
-        {/* Big white space like the design */}
         <div className="flex-1" />
       </div>
     </div>
+  );
+}
+
+export default function ForgotPinVerifyOtpPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-white flex items-center justify-center">
+          <div className="text-[12px] text-gray-600">Loading...</div>
+        </div>
+      }
+    >
+      <ForgotPinVerifyOtpInner />
+    </Suspense>
   );
 }
