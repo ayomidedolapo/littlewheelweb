@@ -42,7 +42,7 @@ export default function AgentSignupCreatePage() {
     pinValid;
 
   const goBack = () => router.back();
-  const goLogin = () => router.push("/login");
+  const goLogin = () => router.push("/agent-login");
 
   const handleSubmit = async () => {
     if (!formValid || sending) return;

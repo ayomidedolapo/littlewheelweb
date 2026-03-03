@@ -12,7 +12,7 @@ export default function LoginPage() {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [password, setPassword] = useState(""); // 6-digit PIN
   const [showPassword, setShowPassword] = useState(false);
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -49,7 +49,10 @@ export default function LoginPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token }),
     });
-    if (!resp.ok) throw new Error("Persist cookie failed");
+    if (!resp.ok) {
+      const t = await resp.text().catch(() => "");
+      throw new Error(`Persist cookie failed (${resp.status}): ${t}`);
+    }
   }
 
   const handleLogin = async () => {
@@ -58,6 +61,7 @@ export default function LoginPage() {
     setErr(null);
 
     try {
+      // captcha required in production (your route.ts already supports dev-bypass flag)
       if (process.env.NODE_ENV === "production" && !captchaToken) {
         setErr("Please confirm you’re not a robot.");
         setSending(false);
@@ -69,21 +73,33 @@ export default function LoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: email.trim().toLowerCase(),
-          password,
+          password, // 6-digit PIN
           deviceToken,
           recaptchaToken: captchaToken,
         }),
       });
 
-      const data = await res.json().catch(() => ({}));
+      const raw = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        data = { message: raw };
+      }
 
       if (!res.ok || data?.success === false) {
-        setErr(data?.message || "Login failed");
+        setErr(data?.message || data?.error || "Login failed");
         setSending(false);
         return;
       }
 
-      const token = data?.token || data?.jwt || data?.access_token;
+      const token =
+        data?.token ||
+        data?.access_token ||
+        data?.data?.token ||
+        data?.data?.access_token ||
+        data?.jwt ||
+        null;
 
       if (!token) {
         setErr("No token returned from backend.");
@@ -93,8 +109,10 @@ export default function LoginPage() {
 
       await persistAuthCookie(token);
 
-      localStorage.setItem("authToken", token);
-      localStorage.setItem("lw_token", token);
+      try {
+        localStorage.setItem("authToken", token);
+        localStorage.setItem("lw_token", token);
+      } catch {}
 
       router.replace("/dash");
     } catch (e: any) {
@@ -112,14 +130,10 @@ export default function LoginPage() {
 
       <div className="w-full flex-1 flex justify-center px-2 lg:px-4">
         <div className="w-full max-w-[1200px]">
-
           <div className="lg:rounded-2xl lg:border lg:border-gray-100 lg:shadow-sm lg:overflow-hidden bg-white">
-
             <div className="lg:grid lg:grid-cols-2 lg:min-h-[700px]">
-
               {/* LEFT PANEL */}
               <div className="flex flex-col h-full">
-
                 {/* Logo */}
                 <div className="flex justify-center lg:justify-start pb-4 px-4 lg:px-10 pt-4">
                   <Image
@@ -154,18 +168,16 @@ export default function LoginPage() {
                     priority
                   />
                 </div>
-
               </div>
 
               {/* RIGHT PANEL */}
               <div className="px-5 pt-4 lg:px-12 lg:pt-14 pb-10">
-
                 <div className="mb-4 lg:mb-8">
                   <h1 className="text-[18px] lg:text-[22px] font-extrabold text-gray-900">
                     Glad to See You Again!
                   </h1>
                   <p className="text-[12px] lg:text-[13px] text-gray-500 mt-1">
-                    Enter your phone number to get rolling with Little Wheel
+                    Enter your email to get rolling with Little Wheel
                   </p>
                 </div>
 
@@ -178,7 +190,7 @@ export default function LoginPage() {
                 {/* EMAIL */}
                 <div className="mb-4">
                   <label className="text-[12px] font-bold mb-2 block">
-                    Email <span className="text-red-600">*</span> 
+                    Email <span className="text-red-600">*</span>
                   </label>
                   <div className="flex items-center gap-2 bg-gray-100 rounded-xl px-3 py-3">
                     <Image
@@ -193,14 +205,20 @@ export default function LoginPage() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className="w-full bg-transparent text-[13px] outline-none"
+                      onKeyDown={(e) => e.key === "Enter" && handleLogin()}
                     />
                   </div>
+                  {!emailValid && email.length > 0 && (
+                    <p className="mt-1 text-[11px] text-rose-600">
+                      Enter a valid email address.
+                    </p>
+                  )}
                 </div>
 
                 {/* PASSWORD */}
                 <div className="mb-2">
                   <label className="text-[12px] font-bold mb-2 block">
-                    Password (6-digits)<span className="text-red-600">*</span> 
+                    Password (6-digits)<span className="text-red-600">*</span>
                   </label>
 
                   <div className="relative bg-gray-100 rounded-xl px-3 py-3 flex items-center">
@@ -211,12 +229,16 @@ export default function LoginPage() {
                         setPassword(e.target.value.replace(/\D/g, "").slice(0, 6))
                       }
                       className="w-full bg-transparent text-[13px] outline-none pr-10 tracking-[0.25em]"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      onKeyDown={(e) => e.key === "Enter" && handleLogin()}
                     />
 
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 text-gray-500"
+                      aria-label={showPassword ? "Hide PIN" : "Show PIN"}
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
@@ -226,6 +248,7 @@ export default function LoginPage() {
                     <button
                       onClick={goForgotPassword}
                       className="text-[12px] underline font-semibold"
+                      disabled={sending}
                     >
                       Forgot Password?
                     </button>
@@ -250,16 +273,14 @@ export default function LoginPage() {
 
                 <div className="mt-5 text-center text-[12px] text-gray-600">
                   Don’t have an account?{" "}
-                  <button onClick={goSignup} className="font-bold underline">
+                  <button onClick={goSignup} className="font-bold underline" disabled={sending}>
                     Create account
                   </button>
                 </div>
-
               </div>
-
+              {/* END RIGHT */}
             </div>
           </div>
-
         </div>
       </div>
     </div>

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import LogoSpinner from "../../components/loaders/LogoSpinner";
 
 // Routes
-const CREATE_ACCOUNT_ROUTE = "/agent-signup/components/create";
+const CREATE_ACCOUNT_ROUTE = "/agent-signup/components/enroll";
 const LOGIN_ROUTE = "/agent-login";
 // ⬇️ Skip should go to Create
 const AFTER_SKIP_ROUTE = CREATE_ACCOUNT_ROUTE;
